@@ -1,0 +1,36 @@
+# Python / Backend
+Backend/venv/
+Backend/.venv/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+Backend/.pytest_cache/
+.pytest_cache/
+Backend/uploads/*
+!Backend/uploads/.gitkeep
+Backend/uploads/excel_backups/*
+!Backend/uploads/excel_backups/.gitkeep
+Backend/uploads/excel_templates/*
+!Backend/uploads/excel_templates/.gitkeep
+
+# Environment files
+.env
+Backend/.env
+Frontend/.env
+*.env.local
+
+# Node / Frontend
+Frontend/node_modules/
+Frontend/dist/
+Frontend/dist-ssr/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
