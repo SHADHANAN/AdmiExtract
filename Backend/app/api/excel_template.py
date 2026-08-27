@@ -42,19 +42,21 @@ async def _verify_batch_access(batch_id: str, user: User):
 @router.post("/upload/{batchId}", response_model=ExcelTemplateResponse)
 async def upload_excel_template(
     batchId: str,
+    classId: str | None = None,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Upload an Excel template (.xlsx) for an Admission Batch.
+    Upload an Excel template (.xlsx) for an Admission Batch or specific Class.
     """
     await _verify_batch_access(batchId, current_user)
     
-    template = await service.upload_template(batchId, file)
+    template = await service.upload_template(batchId, file, class_id=classId)
     remaining = max(0, template.total_rows - template.updated_count)
     return ExcelTemplateResponse(
         id=str(template.id),
         batch_id=template.batch_id,
+        class_id=template.class_id,
         template_filename=template.template_filename,
         file_path=template.file_path,
         headers=template.headers,
@@ -71,23 +73,25 @@ async def upload_excel_template(
 @router.get("/batch/{batchId}", response_model=ExcelTemplateResponse)
 async def get_excel_template(
     batchId: str,
+    classId: str | None = None,
     current_user: User = Depends(get_current_user),
 ):
     """
-    Retrieve Excel template metadata and headers for an Admission Batch.
+    Retrieve Excel template metadata and headers for an Admission Batch or Class.
     """
     await _verify_batch_access(batchId, current_user)
 
-    template = await service.get_template_by_batch(batchId)
+    template = await service.get_template_by_batch(batchId, class_id=classId)
     if not template:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No Excel template found for batch '{batchId}'.",
+            detail=f"No Excel template found for batch '{batchId}' (Class: '{classId}').",
         )
     remaining = max(0, template.total_rows - template.updated_count)
     return ExcelTemplateResponse(
         id=str(template.id),
         batch_id=template.batch_id,
+        class_id=template.class_id,
         template_filename=template.template_filename,
         file_path=template.file_path,
         headers=template.headers,
@@ -105,6 +109,7 @@ async def get_excel_template(
 async def update_excel_mappings(
     batchId: str,
     data: ExcelMappingUpdate,
+    classId: str | None = None,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -112,11 +117,12 @@ async def update_excel_mappings(
     """
     await _verify_batch_access(batchId, current_user)
 
-    template = await service.update_mappings(batchId, data.field_mappings, data.lookup_column)
+    template = await service.update_mappings(batchId, data.field_mappings, data.lookup_column, class_id=classId)
     remaining = max(0, template.total_rows - template.updated_count)
     return ExcelTemplateResponse(
         id=str(template.id),
         batch_id=template.batch_id,
+        class_id=template.class_id,
         template_filename=template.template_filename,
         file_path=template.file_path,
         headers=template.headers,
@@ -142,7 +148,7 @@ async def update_student_excel_row(
     await _verify_batch_access(batchId, current_user)
 
     success = await service.update_student_row_in_excel(
-        batchId, payload.register_number, payload.extracted_fields
+        batchId, payload.register_number, payload.extracted_fields, class_id=payload.class_id
     )
     return {
         "status": "success",
@@ -154,23 +160,25 @@ async def update_student_excel_row(
 @router.get("/download/{batchId}")
 async def download_excel_workbook(
     batchId: str,
+    classId: str | None = None,
     current_user: User = Depends(get_current_user),
 ):
     """
-    Download the latest updated Excel workbook (.xlsx) for an Admission Batch.
+    Download the latest updated Excel workbook (.xlsx) for an Admission Batch or Class.
     """
     await _verify_batch_access(batchId, current_user)
 
-    template = await service.get_template_by_batch(batchId)
+    template = await service.get_template_by_batch(batchId, class_id=classId)
     if not template or not os.path.exists(template.file_path):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Excel workbook for batch '{batchId}' not found.",
+            detail=f"Excel workbook for batch '{batchId}' (Class: '{classId}') not found.",
         )
 
+    file_prefix = f"{batchId}_{classId}" if classId else batchId
     return FileResponse(
         path=template.file_path,
-        filename=f"{batchId}_updated_{template.template_filename}",
+        filename=f"{file_prefix}_updated_{template.template_filename}",
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 

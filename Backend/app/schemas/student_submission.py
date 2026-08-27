@@ -23,6 +23,8 @@ class StudentDocumentMetaResponse(BaseModel):
 class StudentSubmissionCreate(BaseModel):
     batch_id: str
     batch_name: str | None = None
+    class_id: str | None = None
+    class_name: str | None = None
     student_name: str
     register_number: str
     mobile_number: str
@@ -40,6 +42,8 @@ class StudentSubmissionResponse(BaseModel):
     id: str
     batch_id: str
     batch_name: str | None = None
+    class_id: str | None = None
+    class_name: str | None = None
     student_name: str
     register_number: str
     mobile_number: str

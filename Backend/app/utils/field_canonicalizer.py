@@ -5,7 +5,9 @@ Maps raw document field aliases to canonical field names,
 and merges duplicate field extraction results based on confidence.
 """
 
-from typing import Any, Dict
+import re
+from typing import Any, Dict, Optional
+
 
 
 # Alias to Canonical Field Mapping
@@ -36,6 +38,7 @@ CANONICAL_FIELD_MAP: Dict[str, str] = {
 
     "community name": "Community Name",
     "community_name": "Community Name",
+    "caste":"Community Name",
     "caste name": "Community Name",
     "sub caste": "Community Name",
     "sub_caste": "Community Name",
@@ -57,6 +60,10 @@ CANONICAL_FIELD_MAP: Dict[str, str] = {
     "register no": "Register Number",
     "register_number": "Register Number",
 
+    #collage reg
+    "Collage Register No":"register_number",
+    "collage register no":"register_number",
+
     # Mobile Number
     "mobile": "Mobile Number",
     "phone": "Mobile Number",
@@ -70,6 +77,18 @@ CANONICAL_FIELD_MAP: Dict[str, str] = {
     "permanent address": "Address",
     "postal address": "Address",
     "communication address": "Address",
+
+    # Bank Details
+    "ifsc": "IFSC Code",
+    "ifsc code": "IFSC Code",
+    "ifsc_code": "IFSC Code",
+    "bank name": "Bank Name",
+    "bank_name": "Bank Name",
+    "bank branch": "Bank Branch",
+    "account number": "Account Number",
+    "account_number": "Account Number",
+    "bank account number": "Account Number",
+    "account no": "Account Number",
 }
 
 
@@ -147,14 +166,17 @@ def normalize_and_merge_extracted_data(extracted_dict: Dict[str, Any]) -> Dict[s
             new_val = item.get("value")
             new_conf = item.get("confidence", 0)
 
-            # Rule 1: Replace null existing with non-null new item
-            if existing_val is None and new_val is not None:
+            def _is_present(v):
+                return v is not None and str(v).strip() != "" and str(v).strip().upper() not in ["NO", "NULL"]
+
+            # Rule 1: Replace missing/NO existing with valid non-NO new item
+            if not _is_present(existing_val) and _is_present(new_val):
                 canonical_dict[canonical_key] = item
-            # Rule 2: If both non-null, keep higher confidence item
-            elif existing_val is not None and new_val is not None:
+            # Rule 2: If both valid non-NULL, keep higher confidence item
+            elif _is_present(existing_val) and _is_present(new_val):
                 if new_conf > existing_conf:
                     canonical_dict[canonical_key] = item
-            # Rule 3: Keep existing if new item is null or lower confidence
+            # Rule 3: Keep existing if new item is missing or lower confidence
 
     return canonical_dict
 
@@ -192,18 +214,86 @@ def is_address_field(name: str) -> bool:
     if not name:
         return False
     n_clean = name.strip().lower()
+    # Question / boolean flag fields must NOT be treated as postal address text fields
+    if any(q in n_clean for q in ["same as", "is ", "whether", "yes/no", "?"]):
+        return False
     if n_clean in ADDRESS_FIELD_ALIASES:
         return True
     canon = get_canonical_field_name(name).strip().lower()
     return canon == "address" or canon in ADDRESS_FIELD_ALIASES
 
 
+def is_yes_no_question_field(name: str) -> bool:
+    """
+    Check if a field name represents a Yes/No question or boolean indicator.
+    Examples:
+    - "Orphan Category (Yes/No)"
+    - "Communication address same as permanent address"
+    - "Is EMIS ID Available"
+    - "Is the student the first graduate in the family?"
+    - "Did you come under any special admission Quota?"
+    - "Did you belong to differently abled category?"
+    """
+    if not name:
+        return False
+    n_lower = name.strip().lower()
+    if any(tag in n_lower for tag in ["yes/no", "(yes/no)", "yes / no", "yes/no"]):
+        return True
+    if any(n_lower.startswith(p) for p in ["is ", "did ", "does ", "whether ", "has "]):
+        return True
+    if re.search(r"\b(is|did|does|whether|has)\b", n_lower):
+        return True
+    if any(phrase in n_lower for phrase in ["same as", "first graduate", "special admission", "differently abled", "orphan"]):
+        return True
+    if n_lower.endswith("?"):
+        return True
+    return False
+
+
+def normalize_yes_no_value(raw_val: Any) -> Any:
+    """
+    Normalize raw LLM or string value strictly to 'Yes', 'No', or None.
+    """
+    if raw_val is None:
+        return None
+    val_str = str(raw_val).strip().lower()
+    if not val_str or val_str in ["null", "none", "n/a", "not detected"]:
+        return None
+    if val_str in ["yes", "true", "y", "available", "present", "applicable", "1"]:
+        return "Yes"
+    if val_str in ["no", "false", "n", "not available", "absent", "not applicable", "0"]:
+        return "No"
+    if "yes" in val_str:
+        return "Yes"
+    if "no" in val_str:
+        return "No"
+    return None
+
+
 import logging
 
 logger = logging.getLogger(__name__)
 
+ADDRESS_SOURCE_PRIORITY: list[str] = [
+    "AADHAAR",
+    "RESIDENCE",
+    "RESIDENCE_CERTIFICATE",
+    "NATIVITY",
+    "COMMUNITY",
+    "PASSPORT",
+    "DRIVING_LICENCE",
+    "DRIVING_LICENSE",
+    "VOTER_ID",
+    "BANK_PASSBOOK",
+    "TRANSFER_CERTIFICATE",
+    "INCOME",
+    "BONAFIDE",
+    "MIGRATION",
+]
+
 # Master Extensible Field Alias Registry (Ordered by priority)
 FIELD_ALIASES: Dict[str, list[str]] = {
+
     "Community": [
         "Community Category",
         "Community",
@@ -212,6 +302,7 @@ FIELD_ALIASES: Dict[str, list[str]] = {
         "Caste Category",
         "Caste Name",
         "Caste Code",
+        "Caste",
         "Community Certificate",
     ],
     "Community Category": [
@@ -222,6 +313,7 @@ FIELD_ALIASES: Dict[str, list[str]] = {
         "Caste Category",
         "Caste Name",
         "Caste Code",
+        "Caste",
         "Community Certificate",
     ],
     "Aadhaar Number": [
@@ -235,6 +327,16 @@ FIELD_ALIASES: Dict[str, list[str]] = {
         "Aadhar Card Number",
         "Aadhar Card",
         "Aadhar",
+    ],
+    "Aadhaar Number (without space)": [
+        "Aadhaar Number (without space)",
+        "Aadhaar Number",
+        "Aadhaar Card Number",
+        "Aadhaar Card",
+        "Aadhaar No",
+        "Aadhaar No.",
+        "Aadhaar ID",
+        "Aadhar Number",
     ],
     "Aadhaar Card": [
         "Aadhaar Number",
@@ -269,7 +371,53 @@ FIELD_ALIASES: Dict[str, list[str]] = {
         "Phone",
         "Mobile No",
     ],
+    "Gender": [
+        "Gender",
+        "Sex",
+    ],
+    "Blood Group": [
+        "Blood Group",
+        "Blood Group / Rh Factor",
+    ],
+    "Nationality": [
+        "Nationality",
+        "Citizenship",
+    ],
+    "Religion": [
+        "Religion",
+    ],
+    "Father's Name": [
+        "Father's Name",
+        "Father Name",
+        "Father/Guardian Name",
+        "Father's Name / Husband Name",
+    ],
+    "Mother's Name": [
+        "Mother's Name",
+        "Mother Name",
+    ],
+    "Father's Occupation": [
+        "Father's Occupation",
+        "Father Occupation",
+    ],
+    "Mother's Occupation": [
+        "Mother's Occupation",
+        "Mother Occupation",
+    ],
+    "Guardian's / Spouse's Name": [
+        "Guardian's / Spouse's Name",
+        "Guardian Name",
+        "Spouse Name",
+        "Guardian / Spouse Name",
+    ],
     "Date of Birth": [
+        "Date of Birth",
+        "DOB",
+        "Birth Date",
+        "Student Date of Birth(DD.MM.YYYY)",
+    ],
+    "Student Date of Birth(DD.MM.YYYY)": [
+        "Student Date of Birth(DD.MM.YYYY)",
         "Date of Birth",
         "DOB",
         "Birth Date",
@@ -383,6 +531,60 @@ FIELD_ALIASES: Dict[str, list[str]] = {
         "Residential Address",
         "Current Address",
     ],
+    "Country": [
+        "Country",
+        "Nation",
+    ],
+    "State": [
+        "State",
+        "State Name",
+    ],
+    "District": [
+        "District",
+        "District Name",
+        "Dist",
+    ],
+    "Taluk": [
+        "Taluk",
+        "Taluk Name",
+        "Tehsil",
+    ],
+    "Village": [
+        "Village",
+        "Village Name",
+        "Town",
+    ],
+    "City": [
+        "City",
+        "City Name",
+    ],
+    "IFSC Code": [
+        "IFSC Code",
+        "IFSC",
+        "IFSC CODE",
+        "IFSC Code No",
+        "IFSC Code Number",
+        "RTGS / IFSC Code",
+        "IFS Code",
+    ],
+    "Bank Name": [
+        "Bank Name",
+        "Name of the Bank",
+        "Bank",
+    ],
+    "Bank Branch": [
+        "Bank Branch",
+        "Branch Name",
+        "Branch",
+    ],
+    "Account Number": [
+        "Account Number",
+        "Bank Account Number",
+        "Account No",
+        "Bank Account No",
+        "A/c No",
+        "A/c Number",
+    ],
 }
 
 
@@ -479,22 +681,24 @@ def filter_extracted_data_by_excel_headers(
         # Secondary Fallback: Keyword substring match if exact alias did not match
         if matched_alias is None:
             header_lower = header_clean.lower()
-            for k, raw in extracted_data.items():
-                if not k or is_profile_field(k):
-                    continue
-                k_lower = k.strip().lower()
-                if header_lower in k_lower or k_lower in header_lower:
-                    if isinstance(raw, dict):
-                        v = raw.get("value")
-                        c = raw.get("confidence", 100)
-                    else:
-                        v = raw
-                        c = 100
-                    if v is not None and str(v).strip() != "":
-                        matched_alias = k
-                        matched_val = v
-                        matched_conf = c
-                        break
+            # Skip loose substring matching for Yes/No question or boolean flag headers
+            if not any(q in header_lower for q in ["same as", "is ", "whether", "yes/no", "?"]):
+                for k, raw in extracted_data.items():
+                    if not k or is_profile_field(k):
+                        continue
+                    k_lower = k.strip().lower()
+                    if (header_lower in k_lower or k_lower in header_lower) and len(k_lower) > 3:
+                        if isinstance(raw, dict):
+                            v = raw.get("value")
+                            c = raw.get("confidence", 100)
+                        else:
+                            v = raw
+                            c = 100
+                        if v is not None and str(v).strip() != "":
+                            matched_alias = k
+                            matched_val = v
+                            matched_conf = c
+                            break
 
         # Log mapping decisions
         if matched_alias is not None:
@@ -506,11 +710,11 @@ def filter_extracted_data_by_excel_headers(
                 "confidence": matched_conf,
             }
         else:
-            log_msg = f"Excel Header : {header_clean} | Matched Alias : None | Value : None"
+            log_msg = f"Excel Header : {header_clean} | Matched Alias : None | Value : NO"
             logger.info(log_msg)
             print(log_msg, flush=True)
             result_dict[header_clean] = {
-                "value": None,
+                "value": "NO",
                 "confidence": 0,
             }
 
@@ -518,33 +722,140 @@ def filter_extracted_data_by_excel_headers(
 
 
 FIELD_SOURCE_RULES: Dict[str, list[str]] = {
+    # Aadhaar & ID Cards
     "Aadhaar Number": ["AADHAAR"],
     "Aadhaar Card": ["AADHAAR"],
-    "Address": ["AADHAAR"],
-    "Full Address": ["AADHAAR"],
-    "Permanent Address": ["AADHAAR"],
-    "Postal Address": ["AADHAAR"],
-    "Residential Address": ["AADHAAR"],
-    "Communication Address": ["AADHAAR"],
+    "Aadhaar Card Number": ["AADHAAR"],
+    "Aadhaar Number (without space)": ["AADHAAR"],
+    "Aadhar Number": ["AADHAAR"],
+    "Aadhar Card": ["AADHAAR"],
 
-    "Community": ["COMMUNITY"],
+    # Address & Location
+    "Address": ADDRESS_SOURCE_PRIORITY,
+    "Full Address": ADDRESS_SOURCE_PRIORITY,
+    "Permanent Address": ADDRESS_SOURCE_PRIORITY,
+    "Postal Address": ADDRESS_SOURCE_PRIORITY,
+    "Residential Address": ADDRESS_SOURCE_PRIORITY,
+    "Communication Address": ADDRESS_SOURCE_PRIORITY,
+    "Communication address": ADDRESS_SOURCE_PRIORITY,
+    "Current Address": ADDRESS_SOURCE_PRIORITY,
+    "House Address": ADDRESS_SOURCE_PRIORITY,
+    "Country": ADDRESS_SOURCE_PRIORITY,
+    "State": ADDRESS_SOURCE_PRIORITY,
+    "State Name": ADDRESS_SOURCE_PRIORITY,
+    "District": ADDRESS_SOURCE_PRIORITY,
+    "District Name": ADDRESS_SOURCE_PRIORITY,
+    "Dist": ADDRESS_SOURCE_PRIORITY,
+    "Taluk": ADDRESS_SOURCE_PRIORITY,
+    "Taluk Name": ADDRESS_SOURCE_PRIORITY,
+    "Tehsil": ADDRESS_SOURCE_PRIORITY,
+    "Village": ADDRESS_SOURCE_PRIORITY,
+    "Village Name": ADDRESS_SOURCE_PRIORITY,
+    "Town": ADDRESS_SOURCE_PRIORITY,
+    "VTC": ADDRESS_SOURCE_PRIORITY,
+    "Pincode": ADDRESS_SOURCE_PRIORITY,
+    "Pin Code": ADDRESS_SOURCE_PRIORITY,
+    "PIN Code": ADDRESS_SOURCE_PRIORITY,
+    "PIN": ADDRESS_SOURCE_PRIORITY,
+    "Postal Code": ADDRESS_SOURCE_PRIORITY,
+    "City": ADDRESS_SOURCE_PRIORITY,
+    "Location Type": ADDRESS_SOURCE_PRIORITY,
+    "Block": ADDRESS_SOURCE_PRIORITY,
+    "Village Panchayat": ADDRESS_SOURCE_PRIORITY,
+    "Communication address same as permanent address": ADDRESS_SOURCE_PRIORITY,
+
+
+
+    # Personal Details
+    "Gender": ["AADHAAR", "TRANSFER_CERTIFICATE", "SSLC", "HSC", "COMMUNITY", "NATIVITY"],
+    "Sex": ["AADHAAR", "TRANSFER_CERTIFICATE", "SSLC", "HSC", "COMMUNITY", "NATIVITY"],
+    "Salutation": ["AADHAAR", "TRANSFER_CERTIFICATE", "SSLC", "HSC", "COMMUNITY"],
+    "Blood Group": ["TRANSFER_CERTIFICATE", "AADHAAR"],
+    "Nationality": ["AADHAAR", "COMMUNITY", "NATIVITY", "TRANSFER_CERTIFICATE"],
+    "Religion": ["COMMUNITY", "TRANSFER_CERTIFICATE", "NATIVITY"],
+
+    # Community & Caste
+    "Community": ["COMMUNITY", "TRANSFER_CERTIFICATE"],
     "Community Category": ["COMMUNITY"],
     "Community Code": ["COMMUNITY"],
     "Community Name": ["COMMUNITY"],
+    "Caste Category": ["COMMUNITY"],
+    "Caste Name": ["COMMUNITY"],
+    "Caste Code": ["COMMUNITY"],
+    "Caste": ["COMMUNITY", "TRANSFER_CERTIFICATE"],
+    "Community Certificate": ["COMMUNITY"],
 
+    # Parent & Guardian Details
+    "Father's Name": ["AADHAAR", "COMMUNITY", "TRANSFER_CERTIFICATE", "INCOME", "NATIVITY", "SSLC", "HSC"],
+    "Father Name": ["AADHAAR", "COMMUNITY", "TRANSFER_CERTIFICATE", "INCOME", "NATIVITY", "SSLC", "HSC"],
+    "Father's Occupation": ["INCOME", "COMMUNITY", "TRANSFER_CERTIFICATE"],
+    "Father Occupation": ["INCOME", "COMMUNITY", "TRANSFER_CERTIFICATE"],
+    "Mother's Name": ["AADHAAR", "COMMUNITY", "TRANSFER_CERTIFICATE", "INCOME", "NATIVITY", "SSLC", "HSC"],
+    "Mother Name": ["AADHAAR", "COMMUNITY", "TRANSFER_CERTIFICATE", "INCOME", "NATIVITY", "SSLC", "HSC"],
+    "Mother's Occupation": ["INCOME", "COMMUNITY", "TRANSFER_CERTIFICATE"],
+    "Mother Occupation": ["INCOME", "COMMUNITY", "TRANSFER_CERTIFICATE"],
+    "Guardian's / Spouse's Name": ["AADHAAR", "COMMUNITY", "TRANSFER_CERTIFICATE", "INCOME"],
+    "Guardian Name": ["AADHAAR", "COMMUNITY", "TRANSFER_CERTIFICATE", "INCOME"],
+    "Parent / spouse / Guardian Mobile Number": ["AADHAAR", "TRANSFER_CERTIFICATE"],
+
+    # Academic & TC & EMIS
     "EMIS ID": ["TRANSFER_CERTIFICATE"],
+    "Is EMIS ID Available": ["TRANSFER_CERTIFICATE"],
+    "UMIS NO": ["TRANSFER_CERTIFICATE", "SSLC", "HSC"],
+    "Registration Number": ["TRANSFER_CERTIFICATE", "SSLC", "HSC"],
     "Transfer Certificate Number": ["TRANSFER_CERTIFICATE"],
+    "TC Number": ["TRANSFER_CERTIFICATE"],
+    "TC No": ["TRANSFER_CERTIFICATE"],
     "Admission Number": ["TRANSFER_CERTIFICATE"],
     "School Name": ["TRANSFER_CERTIFICATE", "SSLC", "HSC"],
     "Issue Date": ["TRANSFER_CERTIFICATE"],
     "Leaving Date": ["TRANSFER_CERTIFICATE"],
+    "TC Issue Date": ["TRANSFER_CERTIFICATE"],
+    "Academic Year of Joining": ["TRANSFER_CERTIFICATE", "SSLC", "HSC", "BONAFIDE"],
+    "Stream Type": ["TRANSFER_CERTIFICATE", "SSLC", "HSC", "BONAFIDE"],
+    "Course Type": ["TRANSFER_CERTIFICATE", "SSLC", "HSC", "BONAFIDE"],
+    "COURSE": ["TRANSFER_CERTIFICATE", "SSLC", "HSC", "BONAFIDE"],
+    "Branch / Specialization": ["TRANSFER_CERTIFICATE", "SSLC", "HSC", "BONAFIDE"],
+    "Medium of Intruction": ["TRANSFER_CERTIFICATE", "SSLC", "HSC"],
+    "Mode of Study": ["TRANSFER_CERTIFICATE", "SSLC", "HSC", "BONAFIDE"],
 
+    # Income
     "Annual Family Income": ["INCOME"],
     "Income": ["INCOME"],
+    "Family Income": ["INCOME"],
 
+    # Marks
     "SSLC Mark Percentage": ["SSLC"],
+    "SSLC Marks": ["SSLC"],
+    "10th Mark": ["SSLC"],
+    "10th Percentage": ["SSLC"],
+
     "HSC Mark Percentage": ["HSC"],
+    "HSC Marks": ["HSC"],
+    "12th Mark": ["HSC"],
+    "12th Percentage": ["HSC"],
+
+    # Certificates & Quotas
     "Nativity": ["NATIVITY"],
+    "Nativity Certificate": ["NATIVITY"],
+    "Migration Number": ["MIGRATION"],
+    "University": ["MIGRATION"],
+    "Year": ["MIGRATION"],
+    "Bonafide": ["BONAFIDE"],
+    "Date of Birth": ["AADHAAR", "TRANSFER_CERTIFICATE", "SSLC", "HSC", "COMMUNITY", "NATIVITY"],
+    "Student Date of Birth(DD.MM.YYYY)": ["AADHAAR", "TRANSFER_CERTIFICATE", "SSLC", "HSC", "COMMUNITY", "NATIVITY"],
+    "DOB": ["AADHAAR", "TRANSFER_CERTIFICATE", "SSLC", "HSC", "COMMUNITY", "NATIVITY"],
+    "Is the student the first graduate in the family?": ["BONAFIDE", "TRANSFER_CERTIFICATE", "INCOME"],
+    "First Graduate Number": ["BONAFIDE", "TRANSFER_CERTIFICATE", "INCOME"],
+    "Did you come under any special admission Quota?": ["TRANSFER_CERTIFICATE", "BONAFIDE"],
+    "Did you belong to differently abled category?": ["TRANSFER_CERTIFICATE", "BONAFIDE"],
+    "Orphan Category (Yes/No)": ["TRANSFER_CERTIFICATE", "INCOME", "COMMUNITY", "BONAFIDE"],
+
+    # Bank Details
+    "IFSC Code": ["INCOME", "BONAFIDE", "TRANSFER_CERTIFICATE", "AADHAAR"],
+    "Bank Name": ["INCOME", "BONAFIDE", "TRANSFER_CERTIFICATE", "AADHAAR"],
+    "Bank Branch": ["INCOME", "BONAFIDE", "TRANSFER_CERTIFICATE", "AADHAAR"],
+    "Account Number": ["INCOME", "BONAFIDE", "TRANSFER_CERTIFICATE", "AADHAAR"],
 }
 
 
@@ -552,7 +863,11 @@ def get_allowed_sources_for_field(field_name: str) -> list[str]:
     """
     Get allowed document types for a field using FIELD_SOURCE_RULES.
     Returns list of document types, e.g. ["AADHAAR"] or ["COMMUNITY"].
+    If no source rule matches, returns default set of valid document types.
     """
+    if not field_name:
+        return []
+
     fn_clean = field_name.strip()
     if fn_clean in FIELD_SOURCE_RULES:
         return FIELD_SOURCE_RULES[fn_clean]
@@ -562,35 +877,368 @@ def get_allowed_sources_for_field(field_name: str) -> list[str]:
         if k.lower() == fn_lower:
             return v
 
-    if is_address_field(fn_clean) or "address" in fn_lower:
-        return ["AADHAAR"]
+    # Dynamic Fallback Rules (evaluated in strict order)
+    if is_address_field(fn_clean) or any(c in fn_lower for c in ["address", "village", "taluk", "tehsil", "district", "pincode", "pin code", "postal code", "state", "city", "country", "location", "block", "panchayat"]):
+        return ADDRESS_SOURCE_PRIORITY
+
+    if any(c in fn_lower for c in ["gender", "sex", "salutation"]):
+        return ["AADHAAR", "TRANSFER_CERTIFICATE", "SSLC", "HSC", "COMMUNITY", "NATIVITY"]
+    if any(c in fn_lower for c in ["father", "mother", "parent", "guardian", "spouse"]):
+        return ["AADHAAR", "COMMUNITY", "TRANSFER_CERTIFICATE", "INCOME", "NATIVITY", "SSLC", "HSC"]
+    if any(c in fn_lower for c in ["religion", "nationality", "blood group", "blood"]):
+        return ["AADHAAR", "COMMUNITY", "NATIVITY", "TRANSFER_CERTIFICATE"]
+
     if any(c in fn_lower for c in ["community", "caste"]):
-        return ["COMMUNITY"]
-    if any(c in fn_lower for c in ["transfer certificate", "emis id", "leaving date", "admission number"]):
+        return ["COMMUNITY", "TRANSFER_CERTIFICATE"]
+    if any(c in fn_lower for c in ["transfer certificate", "emis id", "leaving date", "admission number", "tc no", "tc number"]):
         return ["TRANSFER_CERTIFICATE"]
+    if any(c in fn_lower for c in ["bank", "ifsc", "account"]):
+        return ["INCOME", "BONAFIDE", "TRANSFER_CERTIFICATE", "AADHAAR"]
+    if any(c in fn_lower for c in ["course", "stream", "medium", "branch", "specialization", "academic year", "mode of study"]):
+        return ["TRANSFER_CERTIFICATE", "SSLC", "HSC", "BONAFIDE"]
     if "income" in fn_lower:
         return ["INCOME"]
+    if "sslc" in fn_lower or "10th" in fn_lower:
+        return ["SSLC"]
+    if "hsc" in fn_lower or "12th" in fn_lower:
+        return ["HSC"]
+    if "nativity" in fn_lower:
+        return ["NATIVITY"]
+    if "migration" in fn_lower:
+        return ["MIGRATION"]
+    if "bonafide" in fn_lower:
+        return ["BONAFIDE"]
+    if "dob" in fn_lower or "birth" in fn_lower:
+        return ["AADHAAR", "TRANSFER_CERTIFICATE", "SSLC", "HSC", "COMMUNITY", "NATIVITY"]
 
-    return ["ALL"]
+    # For any unrecognized custom field, allow searching across known document types (excluding UNKNOWN)
+    return ["AADHAAR", "TRANSFER_CERTIFICATE", "COMMUNITY", "INCOME", "NATIVITY", "SSLC", "HSC", "BONAFIDE", "MIGRATION"]
 
 
 def is_document_authorized_for_field(doc_type: str, field_name: str) -> bool:
     """
     Strict Document-Field Alignment Rule:
-    - Address fields must ONLY come from AADHAAR.
-    - Community fields must ONLY come from COMMUNITY.
-    - Transfer Certificate fields must ONLY come from TRANSFER_CERTIFICATE.
-    - Income fields must ONLY come from INCOME.
-    - UNKNOWN documents allow extraction if features are present.
+    - Return True ONLY if doc_type is a valid allowed source for field_name.
+    - UNKNOWN document types return False.
     """
     if not doc_type or doc_type == "UNKNOWN":
-        return True
+        return False
 
     allowed_sources = get_allowed_sources_for_field(field_name)
-    if "ALL" in allowed_sources:
-        return True
-
     return doc_type in allowed_sources
+
+
+def get_doc_type_for_requirement(doc_name: str) -> str:
+    """
+    Map document requirement name (e.g., 'Income Certificate', 'Aadhaar Card')
+    to standard document classification type (e.g. 'INCOME', 'AADHAAR').
+    """
+    if not doc_name:
+        return "UNKNOWN"
+    lower = doc_name.lower().strip()
+    if "aadhaar" in lower or "aadhar" in lower:
+        return "AADHAAR"
+    if "community" in lower or "caste" in lower:
+        return "COMMUNITY"
+    if "income" in lower:
+        return "INCOME"
+    if "transfer" in lower or "tc" in lower:
+        return "TRANSFER_CERTIFICATE"
+    if "sslc" in lower or "10th" in lower:
+        return "SSLC"
+    if "hsc" in lower or "12th" in lower:
+        return "HSC"
+    if "nativity" in lower:
+        return "NATIVITY"
+    if "migration" in lower:
+        return "MIGRATION"
+    if "bonafide" in lower:
+        return "BONAFIDE"
+    return doc_name.upper().replace(" ", "_")
+
+
+def is_optional_requirement(doc_req_item: Any) -> bool:
+    """
+    Check if a document requirement item is configured as OPTIONAL.
+    """
+    if not doc_req_item:
+        return False
+    if isinstance(doc_req_item, dict):
+        req_type = str(doc_req_item.get("type", "")).upper()
+        required = doc_req_item.get("required", True)
+    else:
+        req_type = str(getattr(doc_req_item, "type", "")).upper()
+        required = getattr(doc_req_item, "required", True)
+    return req_type == "OPTIONAL" or not required
+
+
+def is_field_belonging_to_optional_doc(
+    field_name: str,
+    doc_requirements: list,
+) -> tuple[bool, str | None]:
+    """
+    Determine if field_name belongs to an OPTIONAL document requirement.
+    Returns (is_optional, doc_type_str).
+    """
+    if not field_name or not doc_requirements:
+        return False, None
+
+    fn_clean = field_name.strip()
+    fn_lower = fn_clean.lower()
+
+    for doc_req in doc_requirements:
+        is_opt = is_optional_requirement(doc_req)
+        if not is_opt:
+            continue
+
+        req_name = getattr(doc_req, "name", "") if not isinstance(doc_req, dict) else doc_req.get("name", "")
+        req_doc_type = get_doc_type_for_requirement(req_name)
+        extraction_fields = getattr(doc_req, "extraction_fields", []) if not isinstance(doc_req, dict) else doc_req.get("extraction_fields", [])
+
+        # 1. Direct match in requirement's extraction_fields
+        if any(f.strip().lower() == fn_lower for f in (extraction_fields or [])):
+            return True, req_doc_type
+
+        # 2. Match requirement name substring in field name
+        if req_name and len(req_name.strip()) > 3 and req_name.lower().strip() in fn_lower:
+            return True, req_doc_type
+
+    # 3. Check allowed sources for field
+    allowed_sources = get_allowed_sources_for_field(fn_clean)
+    for doc_req in doc_requirements:
+        is_opt = is_optional_requirement(doc_req)
+        if not is_opt:
+            continue
+        req_name = getattr(doc_req, "name", "") if not isinstance(doc_req, dict) else doc_req.get("name", "")
+        req_doc_type = get_doc_type_for_requirement(req_name)
+        if req_doc_type in allowed_sources:
+            non_opt_sources = [s for s in allowed_sources if s != req_doc_type]
+            if not non_opt_sources or len(allowed_sources) == 1:
+                return True, req_doc_type
+
+    return False, None
+
+
+INDIAN_STATES = [
+    "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
+    "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka",
+    "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram",
+    "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu",
+    "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
+    "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu",
+    "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry", "Pondicherry"
+]
+
+
+PIN_CODE_LOOKUP_DATABASE: dict[str, dict[str, str]] = {
+    "641016": {"district": "Coimbatore", "taluk": "Sulur", "village": "Pattanam", "state": "Tamil Nadu"},
+    "625106": {"district": "Madurai", "taluk": "Melur", "village": "Melur", "state": "Tamil Nadu"},
+    "625532": {"district": "Madurai", "taluk": "Usilampatti", "village": "Kallupatti", "state": "Tamil Nadu"},
+    "625001": {"district": "Madurai", "taluk": "Madurai South", "village": "Madurai", "state": "Tamil Nadu"},
+    "625002": {"district": "Madurai", "taluk": "Madurai South", "village": "Madurai", "state": "Tamil Nadu"},
+    "600001": {"district": "Chennai", "taluk": "Fort Tondiarpet", "village": "George Town", "state": "Tamil Nadu"},
+    "600028": {"district": "Chennai", "taluk": "Mylapore", "village": "Raja Annamalaipuram", "state": "Tamil Nadu"},
+    "641001": {"district": "Coimbatore", "taluk": "Coimbatore South", "village": "Coimbatore", "state": "Tamil Nadu"},
+    "641004": {"district": "Coimbatore", "taluk": "Coimbatore South", "village": "Peelamedu", "state": "Tamil Nadu"},
+    "641014": {"district": "Coimbatore", "taluk": "Coimbatore South", "village": "Civil Aerodrome", "state": "Tamil Nadu"},
+    "641035": {"district": "Coimbatore", "taluk": "Coimbatore North", "village": "Saravanampatti", "state": "Tamil Nadu"},
+    "641046": {"district": "Coimbatore", "taluk": "Coimbatore South", "village": "Bharathiar University", "state": "Tamil Nadu"},
+    "641601": {"district": "Tiruppur", "taluk": "Tiruppur North", "village": "Tiruppur", "state": "Tamil Nadu"},
+    "638001": {"district": "Erode", "taluk": "Erode", "village": "Erode", "state": "Tamil Nadu"},
+    "636001": {"district": "Salem", "taluk": "Salem", "village": "Salem", "state": "Tamil Nadu"},
+    "620001": {"district": "Tiruchirappalli", "taluk": "Tiruchirappalli", "village": "Tiruchirappalli", "state": "Tamil Nadu"},
+    "627001": {"district": "Tirunelveli", "taluk": "Tirunelveli", "village": "Tirunelveli", "state": "Tamil Nadu"},
+    "629001": {"district": "Kanniyakumari", "taluk": "Agastheeswaram", "village": "Nagercoil", "state": "Tamil Nadu"},
+}
+
+
+def parse_location_components_from_address(address_str: str) -> dict[str, dict[str, Any]]:
+    """
+    Intelligently derive location sub-fields (Pincode, State, District, Taluk, Village)
+    from a full address string using text parsing and PIN code lookup database.
+    Returns dictionary mapping field keys to {"value": val, "confidence": conf}.
+    Missing or non-derivable components return {"value": "NO", "confidence": 0}.
+    """
+    result: dict[str, dict[str, Any]] = {
+        "Address": {"value": "NO", "confidence": 0},
+        "Pincode": {"value": "NO", "confidence": 0},
+        "State": {"value": "NO", "confidence": 0},
+        "District": {"value": "NO", "confidence": 0},
+        "Taluk": {"value": "NO", "confidence": 0},
+        "Village": {"value": "NO", "confidence": 0},
+    }
+
+    if not address_str or not isinstance(address_str, str):
+        return result
+
+    clean_addr = address_str.strip()
+    result["Address"] = {"value": clean_addr, "confidence": 100}
+
+    # 1. PINCODE (6 digits)
+    pin_match = re.search(r"\b([1-9]\d{5})\b", clean_addr)
+    pin_code = None
+    if pin_match:
+        pin_code = pin_match.group(1)
+        result["Pincode"] = {"value": pin_code, "confidence": 100}
+
+    pin_info = PIN_CODE_LOOKUP_DATABASE.get(pin_code) if pin_code else None
+
+    # 2. STATE
+    for state in INDIAN_STATES:
+        if re.search(r"\b" + re.escape(state) + r"\b", clean_addr, re.IGNORECASE):
+            result["State"] = {"value": state, "confidence": 100}
+            break
+    if result["State"]["value"] in [None, "NO", "NULL"] and pin_info and pin_info.get("state"):
+        result["State"] = {"value": pin_info["state"], "confidence": 100}
+
+    # 3. DISTRICT
+    dist_match = re.search(
+        r"\b([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+(?:District|Dist\.?|Dt\.?)\b",
+        clean_addr,
+        re.IGNORECASE
+    )
+    if not dist_match:
+        dist_match = re.search(
+            r"\b(?:District|Dist\.?|Dt\.?)\s*[:.-]?\s*([A-Za-z]+(?:\s+[A-Za-z]+)?)\b",
+            clean_addr,
+            re.IGNORECASE
+        )
+    if dist_match:
+        raw_dist = dist_match.group(1).strip()
+        words = raw_dist.split()
+        filtered_words = [w for w in words if w.lower() not in ["the", "of", "in", "from", "state"]]
+        if filtered_words:
+            result["District"] = {"value": " ".join(filtered_words), "confidence": 100}
+
+    if result["District"]["value"] in [None, "NO", "NULL"] and pin_info and pin_info.get("district"):
+        result["District"] = {"value": pin_info["district"], "confidence": 100}
+
+    # 4. TALUK
+    taluk_match = re.search(
+        r"\b([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+(?:Taluk|Tk\.?|Tehsil|T\.k\.?)\b",
+        clean_addr,
+        re.IGNORECASE
+    )
+    if not taluk_match:
+        taluk_match = re.search(
+            r"\b(?:Taluk|Tk\.?|Tehsil)\s*[:.-]?\s*([A-Za-z]+(?:\s+[A-Za-z]+)?)\b",
+            clean_addr,
+            re.IGNORECASE
+        )
+    if taluk_match:
+        raw_taluk = taluk_match.group(1).strip()
+        words = raw_taluk.split()
+        filtered_words = [w for w in words if w.lower() not in ["the", "of", "in", "from", "district", "village"]]
+        if filtered_words:
+            result["Taluk"] = {"value": " ".join(filtered_words), "confidence": 95}
+
+    if result["Taluk"]["value"] in [None, "NO", "NULL"] and pin_info and pin_info.get("taluk"):
+        result["Taluk"] = {"value": pin_info["taluk"], "confidence": 90}
+
+    # 5. VILLAGE
+    village_match = re.search(
+        r"\b([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+(?:Village|Town|VTC|Panchayat|Gramam)\b",
+        clean_addr,
+        re.IGNORECASE
+    )
+    if not village_match:
+        village_match = re.search(
+            r"\b(?:VTC|Village|Town|Panchayat|Gramam|PO|P\.O)\s*[:.-]?\s*([A-Za-z]+(?:\s+[A-Za-z]+)?)\b",
+            clean_addr,
+            re.IGNORECASE
+        )
+    if village_match:
+        raw_village = village_match.group(1).strip()
+        words = raw_village.split()
+        filtered_words = [w for w in words if w.lower() not in ["the", "of", "in", "from", "district", "taluk"]]
+        if filtered_words:
+            result["Village"] = {"value": " ".join(filtered_words), "confidence": 95}
+
+    if result["Village"]["value"] in [None, "NO", "NULL"] and pin_info and pin_info.get("village"):
+        result["Village"] = {"value": pin_info["village"], "confidence": 90}
+
+    return result
+
+
+SALUTATION_GENDER_MAP: dict[str, str] = {
+    "mr.": "Male",
+    "mr": "Male",
+    "master": "Male",
+    "mrs.": "Female",
+    "mrs": "Female",
+    "ms.": "Female",
+    "ms": "Female",
+    "miss": "Female",
+}
+
+AMBIGUOUS_SALUTATIONS: list[str] = ["dr.", "dr", "prof.", "prof", "rev.", "rev", "er.", "er", "shri", "smt", "smt.", "sir", "madam"]
+
+
+def infer_gender_from_salutation(
+    salutation_val: Optional[str] = None,
+    name_val: Optional[str] = None,
+    all_extracted: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Infers Gender strictly from explicit title/salutation (e.g. Mr., Master -> Male; Mrs., Ms., Miss -> Female).
+    Do NOT infer gender from person's name alone!
+    Ambiguous titles (Dr., Prof., Rev., Er., Shri, Smt.) or missing titles return None.
+    """
+    candidates_to_check: list[str] = []
+
+    if salutation_val:
+        candidates_to_check.append(str(salutation_val).strip())
+
+    if all_extracted and isinstance(all_extracted, dict):
+        for k in ["Salutation", "Title", "Student Name", "Name", "Father's Name", "Mother's Name"]:
+            if k in all_extracted:
+                v = all_extracted[k]
+                val_str = v.get("value") if isinstance(v, dict) else v
+                if val_str and str(val_str).strip():
+                    candidates_to_check.append(str(val_str).strip())
+
+    if name_val:
+        candidates_to_check.append(str(name_val).strip())
+
+    for text in candidates_to_check:
+        if not text:
+            continue
+
+        words = text.strip().split()
+        if not words:
+            continue
+
+        first_word = words[0].lower()
+        first_word_clean = first_word.rstrip(".")
+
+        # Check explicit ambiguous titles first — if ambiguous, do NOT infer
+        if first_word in AMBIGUOUS_SALUTATIONS or first_word_clean in [a.rstrip(".") for a in AMBIGUOUS_SALUTATIONS]:
+            return None
+
+        # Check explicit salutation mapping
+        for title_key, gender in SALUTATION_GENDER_MAP.items():
+            key_clean = title_key.rstrip(".")
+            if first_word == title_key or first_word_clean == key_clean:
+                display_title = title_key.title()
+                if not display_title.endswith(".") and title_key.endswith("."):
+                    display_title += "."
+                elif display_title.endswith(".") and not title_key.endswith("."):
+                    display_title = display_title.rstrip(".")
+
+                return {
+                    "value": gender,
+                    "confidence": 95,
+                    "source": "Salutation",
+                    "rule_applied": f"{display_title} -> {gender}",
+                }
+
+    return None
+
+
+
+
+
+
 
 
 

@@ -54,6 +54,14 @@ FIELD_ALIASES = {
     "enrolment number": "Enrolment Number",
     "enrolment no": "Enrolment Number",
     "enrolment no.": "Enrolment Number",
+    "emis id": "EMIS ID",
+    "emis no": "EMIS ID",
+    "emis no.": "EMIS ID",
+    "emis number": "EMIS ID",
+    "ifsc code": "IFSC Code",
+    "ifsc": "IFSC Code",
+    "ifsc code no": "IFSC Code",
+    "ifs code": "IFSC Code",
 }
 
 
@@ -174,6 +182,16 @@ class OCRPreprocessor:
         enrolment_match = re.search(r"\b(?:Enrolment No\.?|Enrolment)?\s*[:\-]?\s*(\d{4}/\d{5}/\d{5})\b", text, re.IGNORECASE)
         if enrolment_match:
             results["Enrolment Number"] = {"value": enrolment_match.group(1).strip(), "confidence": 100}
+
+        # 8. EMIS ID (Explicitly labeled numeric identifier, commonly 9-11 digits)
+        emis_match = re.search(r"\bEMIS\s*(?:ID|NO|Number)?\s*[:\-]?\s*(\d{8,12})\b", text, re.IGNORECASE)
+        if emis_match:
+            results["EMIS ID"] = {"value": emis_match.group(1).strip(), "confidence": 100}
+
+        # 9. IFSC Code (11 characters: 4 uppercase letters, 5th character 0, 6 digits/letters)
+        ifsc_match = re.search(r"\b([A-Z]{4}0[A-Z0-9]{6})\b", text)
+        if ifsc_match:
+            results["IFSC Code"] = {"value": ifsc_match.group(1).upper().strip(), "confidence": 100}
 
         # 8. Community Certificate & Category & Code
         context_match = re.search(

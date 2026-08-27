@@ -46,18 +46,22 @@ class AIExtractionService:
     ) -> str:
         """
         Generate dynamic AI extraction prompt based strictly on requested target fields.
-        No hardcoded field rules or hardcoded field names.
+        Enforces strict non-hallucination policy and "NULL" with 0 confidence for missing fields.
         """
         fields_bullet_list = "\n".join([f"- {field}" for field in required_fields])
 
-        # Build dynamic example JSON structure from the actual required fields
+        # Build dynamic example JSON structure demonstrating both extracted and NO fields
         example_json_dict = {}
-        for f in required_fields[:3]:
-            example_json_dict[f] = {"value": "Sample Value", "confidence": 100}
+        if required_fields:
+            example_json_dict[required_fields[0]] = {"value": "Sample Value", "confidence": 100}
+        if len(required_fields) > 1:
+            example_json_dict[required_fields[1]] = {"value": "NO", "confidence": 0}
         example_json_str = json.dumps(example_json_dict, indent=2)
 
+        from app.utils.field_canonicalizer import is_yes_no_question_field
+
         address_hint = ""
-        if document_type == "AADHAAR" or any("address" in f.lower() for f in required_fields):
+        if document_type == "AADHAAR" or any("address" in f.lower() for f in required_fields if not is_yes_no_question_field(f)):
             address_hint = """
 SPECIAL ADDRESS EXTRACTION RULE:
 - Extract the COMPLETE English postal address exactly as printed on the document.
@@ -67,7 +71,25 @@ SPECIAL ADDRESS EXTRACTION RULE:
 - Example: "3/331, Srinivasa Nagar, Pattanam, VTC: Pattanam, PO: Pattanam, District: Coimbatore, Tamil Nadu - 641016"
 """
 
-        prompt = f"""You are an Admission Document Extraction AI.
+        boolean_hint = """
+SPECIAL BOOLEAN / YES-NO QUESTION RULE:
+- For fields asking Yes/No questions or boolean flags (e.g. "Communication address same as permanent address", "Is EMIS ID Available", "Is the student the first graduate in the family?", "Did you come under any special admission Quota?", "Did you belong to differently abled category?", "Orphan Category (Yes/No)"), return ONLY "Yes" or "No" (or "NO" with confidence 0 if not determinable).
+- Never return full text addresses or multi-word descriptive sentences for boolean fields.
+"""
+
+        emis_hint = ""
+        if any("emis" in f.lower() for f in required_fields if not is_yes_no_question_field(f)):
+            emis_hint = """
+SPECIAL EMIS ID EXTRACTION RULE:
+- Source Document: Transfer Certificate (TC) ONLY. Search ONLY the uploaded Transfer Certificate for the EMIS ID.
+- Extract the EMIS ID exactly as printed. The EMIS ID is usually a numeric identifier (commonly 9–11 digits, depending on the format issued).
+- Do NOT extract Admission Number, Register Number, Roll Number, UDISE Code, or any other ID as the EMIS ID.
+- If the EMIS ID is not present in the Transfer Certificate, return "value": "NO", "confidence": 0.
+- Do NOT search other documents (Aadhaar, Community Certificate, Income Certificate, etc.) for the EMIS ID.
+- Preserve the value exactly as printed without adding or removing digits.
+"""
+
+        prompt = f"""You are a strict Admission Document Extraction AI.
 
 Document Type:
 {document_type}
@@ -75,13 +97,24 @@ Document Type:
 Requested Target Fields:
 {fields_bullet_list}
 {address_hint}
-RULES:
-1. Extract ONLY the requested target fields listed above.
-2. Never return extra fields outside the requested target list.
-3. Never guess, assume, or hallucinate values not present in the document.
-4. If a requested target field is not present or unavailable in the OCR text, set "value" to null and "confidence" to 0.
-5. Return valid JSON ONLY. No markdown wrappers, no extra explanation text.
-6. The JSON structure MUST map each requested target field name to an object containing "value" and "confidence" (integer between 0 and 100).
+{boolean_hint}
+{emis_hint}
+STRICT EXTRACTION POLICY & RULES:
+1. Extract ONLY what is explicitly present in the provided document OCR text.
+2. NEVER infer, guess, fabricate, or force values based on assumptions, OCR context, general knowledge, or similar fields.
+3. NEVER copy values from unrelated documents or fill blanks with likely values (e.g. guessing Occupation as "Farmer" when not explicitly mentioned).
+4. Do NOT derive values unless explicitly allowed by field-specific rules.
+5. IF A REQUESTED FIELD IS NOT EXPLICITLY PRESENT OR FOUND IN THE DOCUMENT, YOU MUST RETURN:
+   "value": "NO", "confidence": 0
+6. CONFIDENCE SCORE RULES:
+   - 100: Value explicitly visible and verified in the document.
+   - 70-99: OCR uncertainty but the value is still present in the text.
+   - 0: Field not found (value MUST be "NO").
+   - NEVER assign high confidence to guessed or inferred values.
+7. PRIORITIZE ACCURACY OVER COMPLETENESS: Returning "NO" is always preferable to returning an incorrect or guessed value. Preserve exact document values whenever possible.
+8. Extract ONLY the requested target fields listed above. Never return extra fields outside the list.
+9. Return valid JSON ONLY. No markdown wrappers, no extra explanation text.
+10. The JSON structure MUST map each requested target field name to an object containing "value" and "confidence" (integer between 0 and 100).
 
 EXAMPLE EXPECTED OUTPUT STRUCTURE:
 {example_json_str}
@@ -171,7 +204,7 @@ CLEAN OCR TEXT:
         except ValueError as val_err:
             _log(f"[ERROR] Mistral Client configuration error: {val_err}")
             for f in llm_needed_fields:
-                final_extracted[f] = {"value": None, "confidence": 0}
+                final_extracted[f] = {"value": "NO", "confidence": 0}
             return final_extracted
 
         parsed_llm_result: Optional[Dict[str, Any]] = None
@@ -184,8 +217,9 @@ CLEAN OCR TEXT:
                         {
                             "role": "system",
                             "content": (
-                                "You are an Admission Document Extraction AI. "
-                                "Return valid JSON containing ONLY requested fields."
+                                "You are a strict Admission Document Extraction AI. "
+                                "Return valid JSON containing ONLY requested fields. "
+                                "Extract ONLY explicitly visible text. If a field is not present, set 'value' to 'NO' and 'confidence' to 0. Do not hallucinate."
                             ),
                         },
                         {"role": "user", "content": prompt},
@@ -213,9 +247,9 @@ CLEAN OCR TEXT:
                 _log(f"[ERROR] API call failed on attempt {attempt}: {exc}")
 
         if parsed_llm_result is None:
-            _log("[ERROR] LLM Extraction failed after retries. Using fallback null values.")
+            _log("[ERROR] LLM Extraction failed after retries. Using fallback NO values.")
             for f in llm_needed_fields:
-                final_extracted[f] = {"value": None, "confidence": 0}
+                final_extracted[f] = {"value": "NO", "confidence": 0}
         else:
             # CRITICAL: Merge LLM-extracted fields into final result
             final_extracted.update(parsed_llm_result)
@@ -238,6 +272,7 @@ CLEAN OCR TEXT:
     ) -> Optional[Dict[str, Any]]:
         """
         Validate and format raw LLM JSON response.
+        Ensures missing, non-detected, or ungrounded fields strictly return {"value": "NO", "confidence": 0}.
         """
         try:
             data = json.loads(raw_json_str)
@@ -249,6 +284,8 @@ CLEAN OCR TEXT:
 
         formatted: Dict[str, Any] = {}
 
+        from app.utils.field_canonicalizer import is_yes_no_question_field, normalize_yes_no_value
+
         for field in required_fields:
             if field not in data:
                 matching_key = next(
@@ -258,7 +295,7 @@ CLEAN OCR TEXT:
                 if matching_key:
                     field_data = data[matching_key]
                 else:
-                    return None
+                    field_data = {"value": "NO", "confidence": 0}
             else:
                 field_data = data[field]
 
@@ -266,14 +303,24 @@ CLEAN OCR TEXT:
                 val = field_data.get("value")
                 conf = field_data.get("confidence")
 
-                if val == "null" or val == "None" or val == "":
-                    val = None
+                if val is None or str(val).strip().upper() in ["NO", "NULL", "NONE", "N/A", "NOT DETECTED", "NOT FOUND", "UNAVAILABLE", ""]:
+                    val = "NO"
+                    conf = 0
+                else:
+                    try:
+                        conf = int(conf) if conf is not None else 80
+                        conf = max(0, min(100, conf))
+                    except (ValueError, TypeError):
+                        conf = 80
 
-                try:
-                    conf = int(conf) if conf is not None else 0
-                    conf = max(0, min(100, conf))
-                except (ValueError, TypeError):
-                    conf = 0 if val is None else 80
+                if is_yes_no_question_field(field):
+                    norm_val = normalize_yes_no_value(val)
+                    if norm_val is None or norm_val == "No":
+                        val = "NO" if conf == 0 or norm_val is None else "No"
+                        if norm_val is None:
+                            conf = 0
+                    else:
+                        val = norm_val
 
                 formatted[field] = {
                     "value": val,
@@ -281,14 +328,27 @@ CLEAN OCR TEXT:
                 }
             elif field_data is None:
                 formatted[field] = {
-                    "value": None,
+                    "value": "NO",
                     "confidence": 0,
                 }
             else:
                 val_str = str(field_data).strip()
-                formatted[field] = {
-                    "value": val_str if val_str else None,
-                    "confidence": 80 if val_str else 0,
-                }
+                if not val_str or val_str.upper() in ["NO", "NULL", "NONE", "N/A", "NOT DETECTED", "NOT FOUND", "UNAVAILABLE"]:
+                    formatted[field] = {
+                        "value": "NO",
+                        "confidence": 0,
+                    }
+                else:
+                    if is_yes_no_question_field(field):
+                        norm_val = normalize_yes_no_value(val_str)
+                        formatted[field] = {
+                            "value": norm_val if norm_val else "NO",
+                            "confidence": (100 if norm_val else 0) if norm_val else 0,
+                        }
+                    else:
+                        formatted[field] = {
+                            "value": val_str,
+                            "confidence": 80,
+                        }
 
         return formatted

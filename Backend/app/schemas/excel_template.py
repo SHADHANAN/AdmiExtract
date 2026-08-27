@@ -10,6 +10,7 @@ class ExcelMappingUpdate(BaseModel):
 class ExcelTemplateResponse(BaseModel):
     id: str
     batch_id: str
+    class_id: str | None = None
     template_filename: str
     file_path: str
     headers: list[str] = Field(default_factory=list)
@@ -27,4 +28,5 @@ class ExcelTemplateResponse(BaseModel):
 
 class StudentRowUpdatePayload(BaseModel):
     register_number: str
+    class_id: str | None = None
     extracted_fields: dict[str, str | int | float | None] = Field(default_factory=dict)

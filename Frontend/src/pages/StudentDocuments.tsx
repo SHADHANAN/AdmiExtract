@@ -143,6 +143,8 @@ export const StudentDocuments: React.FC = () => {
   const [mobileNum, setMobileNum] = useState('')
   const [email, setEmail] = useState('')
   const [batchName, setBatchName] = useState('')
+  const [classId, setClassId] = useState<string | undefined>()
+  const [className, setClassName] = useState<string | undefined>()
   const [assignedRequirements, setAssignedRequirements] = useState<DocumentRequirement[]>([])
   const [isLoadingBatch, setIsLoadingBatch] = useState(true)
 
@@ -190,6 +192,8 @@ export const StudentDocuments: React.FC = () => {
     setRegisterNum(session.register_number)
     setMobileNum(session.mobile_number)
     setBatchName(session.batch_name)
+    if (session.class_id) setClassId(session.class_id)
+    if (session.class_name) setClassName(session.class_name)
 
     const fetchStudentProfile = async () => {
       const tokenInStore = useAuthStore.getState().token
@@ -448,6 +452,8 @@ export const StudentDocuments: React.FC = () => {
     const payload = {
       batch_id: batchId,
       batch_name: batchName,
+      class_id: classId,
+      class_name: className,
       student_name: studentName,
       register_number: registerNum,
       mobile_number: mobileNum,
@@ -901,7 +907,7 @@ export const StudentDocuments: React.FC = () => {
               if (lower.includes('community') || lower.includes('caste')) return <Award className="h-4 w-4 text-amber-500" />
               if (lower.includes('category')) return <Users className="h-4 w-4 text-purple-500" />
               if (lower.includes('birth') || lower.includes('dob')) return <Baby className="h-4 w-4 text-pink-500" />
-              if (lower.includes('income')) return <CircleDollarSign className="h-4 w-4 text-emerald-500" />
+              if (lower.includes('income') || lower.includes('bank') || lower.includes('ifsc') || lower.includes('account')) return <CircleDollarSign className="h-4 w-4 text-emerald-500" />
               if (lower.includes('mark') || lower.includes('sslc') || lower.includes('hsc')) return <Award className="h-4 w-4 text-purple-500" />
               return <FileText className="h-4 w-4 text-primary" />
             }
@@ -910,6 +916,15 @@ export const StudentDocuments: React.FC = () => {
             const isProfileField = (fieldName: string) => {
               const lower = fieldName.toLowerCase().trim()
               return PROFILE_FIELDS.some(p => lower === p || lower.includes('student name') || lower.includes('register number') || lower.includes('mobile number'))
+            }
+
+            const isYesNoQuestionField = (name: string): boolean => {
+              if (!name) return false
+              const lower = name.trim().toLowerCase()
+              if (lower.includes('yes/no') || lower.includes('yes / no') || lower.endsWith('?')) return true
+              if (['is ', 'did ', 'does ', 'whether ', 'has '].some((p) => lower.startsWith(p))) return true
+              if (['same as', 'first graduate', 'special admission', 'differently abled', 'orphan'].some((p) => lower.includes(p))) return true
+              return false
             }
 
             const documentFields = Object.keys(extractedData).filter(f => !isProfileField(f))
@@ -981,8 +996,18 @@ export const StudentDocuments: React.FC = () => {
                         {documentFields.map((fieldName) => {
                           const item = extractedData[fieldName]
                           const value = typeof item === 'object' && item !== null ? item.value : item
-                          const confidence = typeof item === 'object' && item !== null ? (item.confidence ?? 100) : 100
-                          const isLow = confidence < 90
+                          const rawConf = typeof item === 'object' && item !== null ? item.confidence : undefined
+                          const isYesNoQuestion = isYesNoQuestionField(fieldName)
+                          const isMissingValue =
+                            value === null ||
+                            value === undefined ||
+                            String(value).trim() === '' ||
+                            String(value).trim().toLowerCase() === 'not detected' ||
+                            String(value).trim().toUpperCase() === 'NULL' ||
+                            (!isYesNoQuestion && (value === 'NO' || value === 'No' || rawConf === 0))
+                          const isOptionalUnuploaded = (value === 'No' || value === 'NO') && rawConf === 0
+                          const confidence = isMissingValue ? 0 : (rawConf !== undefined && rawConf !== null ? rawConf : 80)
+                          const isLow = !isMissingValue && !isOptionalUnuploaded && confidence > 0 && confidence < 90
                           const isEditing = editingFields[fieldName]
 
                           return (
@@ -1003,7 +1028,9 @@ export const StudentDocuments: React.FC = () => {
                                     </span>
                                     <span
                                       className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-3xs font-extrabold uppercase border ${
-                                        confidence >= 95
+                                        isMissingValue
+                                          ? 'bg-secondary/80 text-muted-foreground border-border'
+                                          : confidence >= 95
                                           ? 'bg-green-500/10 text-green-600 border-green-500/15'
                                           : confidence >= 90
                                           ? 'bg-blue-500/10 text-blue-600 border-blue-500/15'
@@ -1023,14 +1050,16 @@ export const StudentDocuments: React.FC = () => {
                                   {isEditing ? (
                                     <input
                                       type="text"
-                                      value={value || ''}
+                                      value={value === 'NO' || value === 'NULL' ? '' : value || ''}
                                       onChange={(e) => handleFieldChange(fieldName, e.target.value)}
                                       className="flex h-10 w-full rounded-lg border border-primary bg-card px-3 py-2 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                       autoFocus
                                     />
                                   ) : (
                                     <div className="text-base font-bold text-foreground truncate">
-                                      {value || (
+                                      {!isMissingValue && value !== null && value !== undefined && String(value).trim() !== '' ? (
+                                        String(value)
+                                      ) : (
                                         <span className="text-muted-foreground italic font-normal">Not detected</span>
                                       )}
                                     </div>

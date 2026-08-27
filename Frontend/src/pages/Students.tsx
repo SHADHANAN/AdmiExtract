@@ -26,7 +26,7 @@ import type { StudentSubmission } from '../types'
 
 export const Students: React.FC = () => {
   const { submissions, updateStudentStatus, startAiProcessing, fetchAllSubmissions } = useStudentStore()
-  const { batches, fetchBatches } = useBatchStore()
+  const { batches, fetchBatches, classesByBatch, fetchClassesForBatch } = useBatchStore()
   const { addToast } = useToastStore()
 
   // Fetch all student submissions and batches from FastAPI backend when component mounts
@@ -37,8 +37,20 @@ export const Students: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedBatchId, setSelectedBatchId] = useState<string>('ALL')
+  const [selectedClassId, setSelectedClassId] = useState<string>('ALL')
   const [selectedStudent, setSelectedStudent] = useState<StudentSubmission | null>(null)
   const [previewDoc, setPreviewDoc] = useState<{ title: string; url?: string; type?: string; studentName?: string } | null>(null)
+
+  // Fetch classes when batch selection changes
+  React.useEffect(() => {
+    if (selectedBatchId !== 'ALL') {
+      fetchClassesForBatch(selectedBatchId)
+    }
+    setSelectedClassId('ALL')
+  }, [selectedBatchId, fetchClassesForBatch])
+
+  // Available classes for current batch filter
+  const currentBatchClasses = selectedBatchId !== 'ALL' ? (classesByBatch[selectedBatchId] || []) : []
 
   // Filter submissions
   const filteredSubmissions = submissions.filter((sub) => {
@@ -46,7 +58,8 @@ export const Students: React.FC = () => {
       sub.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       sub.registerNum.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesBatch = selectedBatchId === 'ALL' || sub.batchId === selectedBatchId
-    return matchesSearch && matchesBatch
+    const matchesClass = selectedClassId === 'ALL' || sub.classId === selectedClassId
+    return matchesSearch && matchesBatch && matchesClass
   })
 
   return (
@@ -69,7 +82,7 @@ export const Students: React.FC = () => {
           <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-3" />
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
           <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
           <select
             value={selectedBatchId}
@@ -83,6 +96,21 @@ export const Students: React.FC = () => {
               </option>
             ))}
           </select>
+
+          {selectedBatchId !== 'ALL' && currentBatchClasses.length > 0 && (
+            <select
+              value={selectedClassId}
+              onChange={(e) => setSelectedClassId(e.target.value)}
+              className="h-10 rounded-md border border-border bg-card px-3 text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
+            >
+              <option value="ALL">All Classes</option>
+              {currentBatchClasses.map((cls) => (
+                <option key={cls.id} value={cls.id}>
+                  {cls.class_name} (Sec {cls.section})
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 
@@ -95,6 +123,7 @@ export const Students: React.FC = () => {
                 <TableHead>Register ID</TableHead>
                 <TableHead>Student Name</TableHead>
                 <TableHead>Admission Batch</TableHead>
+                <TableHead>Class</TableHead>
                 <TableHead>Contact Mobile</TableHead>
                 <TableHead>Uploaded Documents</TableHead>
                 <TableHead>Verification Status</TableHead>
@@ -112,6 +141,7 @@ export const Students: React.FC = () => {
                     <TableCell className="font-mono text-xs font-bold text-foreground">{student.registerNum}</TableCell>
                     <TableCell className="font-semibold text-foreground">{student.name}</TableCell>
                     <TableCell className="text-xs font-medium text-muted-foreground">{batch ? batch.name : 'N/A'}</TableCell>
+                    <TableCell className="text-xs font-semibold text-primary">{student.className || 'Default Class'}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{student.mobile}</TableCell>
                     <TableCell className="text-xs font-bold text-foreground">{uploadedDocs} Files</TableCell>
                     <TableCell>

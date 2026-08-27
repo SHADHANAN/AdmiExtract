@@ -41,6 +41,7 @@ class UploadLinkService:
         new_link = UploadLink(
             department_id=data.department_id,
             batch_id=data.batch_id,
+            class_id=data.class_id,
             token=token,
             slug=slug,
             title=data.title.strip(),

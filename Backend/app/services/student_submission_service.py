@@ -60,9 +60,20 @@ class StudentSubmissionService:
             for d in data.documents
         ]
 
+        class_id = data.class_id.strip() if data.class_id else None
+        class_name = data.class_name.strip() if data.class_name else None
+
+        if class_id and not class_name:
+            from app.models.batch_class import BatchClass
+            class_doc = await BatchClass.get(class_id)
+            if class_doc:
+                class_name = class_doc.class_name
+
         submission = StudentSubmission(
             batch_id=batch_id,
             batch_name=data.batch_name.strip() if data.batch_name else None,
+            class_id=class_id,
+            class_name=class_name,
             department_id=department_id,
             student_name=data.student_name.strip(),
             register_number=data.register_number.strip(),

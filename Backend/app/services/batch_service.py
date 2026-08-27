@@ -54,6 +54,20 @@ class BatchService:
         return updated
 
     async def delete_batch(self, batch_id: str) -> bool:
+        # Check if batch exists
+        batch = await self.get_batch_by_id(batch_id)
+        
+        # Check student submissions mapped to this batch
+        from app.models.student_submission import StudentSubmission
+        student_count = await StudentSubmission.find(StudentSubmission.batch_id == batch.id).count()
+        if student_count > 0:
+            raise ValueError(f"Cannot delete batch '{batch.name}': {student_count} student submission(s) exist.")
+
+        # Clean up associated classes
+        from app.repositories.batch_class_repository import BatchClassRepository
+        class_repo = BatchClassRepository()
+        await class_repo.delete_classes_by_batch_id(batch_id)
+
         deleted = await self.repository.delete_batch(batch_id)
         if not deleted:
             raise BatchNotFoundException(f"Batch with ID '{batch_id}' not found.")

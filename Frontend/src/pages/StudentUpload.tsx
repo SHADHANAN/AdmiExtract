@@ -11,7 +11,6 @@ import {
   X,
   Lock,
   Loader2,
-  FileCheck,
   ChevronRight,
   UserCheck,
 } from 'lucide-react'
@@ -136,6 +135,8 @@ export const StudentUpload: React.FC = () => {
       writeSubmissionSession({
         batch_id: result.batch_id,
         batch_name: result.batch_name,
+        class_id: result.class_id,
+        class_name: result.class_name,
         register_number: registerNum.trim(),
         student_name: studentName.trim(),
         mobile_number: mobileNum.trim(),

@@ -11,6 +11,7 @@ class UploadLink(Document):
     """
     department_id: Annotated[PydanticObjectId, Indexed()]
     batch_id: str | None = None  # The admission batch this link is associated with
+    class_id: str | None = None  # The specific class this link is associated with
     token: Annotated[str, Indexed(unique=True)]
     slug: Annotated[str, Indexed(unique=True)]
     title: str | None = None

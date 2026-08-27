@@ -3,6 +3,7 @@ import { api } from './api'
 export interface ExcelTemplateResponse {
   id: string
   batch_id: string
+  class_id?: string
   template_filename: string
   file_path: string
   headers: string[]
@@ -16,11 +17,14 @@ export interface ExcelTemplateResponse {
 }
 
 export const excelTemplateService = {
-  // Upload .xlsx template file for a batch
-  async uploadTemplate(batchId: string, file: File): Promise<ExcelTemplateResponse> {
+  // Upload .xlsx template file for a batch or specific class
+  async uploadTemplate(batchId: string, file: File, classId?: string): Promise<ExcelTemplateResponse> {
     const formData = new FormData()
     formData.append('file', file)
-    const response = await api.post(`/excel-templates/upload/${batchId}`, formData, {
+    const url = classId 
+      ? `/excel-templates/upload/${batchId}?classId=${encodeURIComponent(classId)}`
+      : `/excel-templates/upload/${batchId}`
+    const response = await api.post(url, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -28,10 +32,13 @@ export const excelTemplateService = {
     return response.data
   },
 
-  // Get Excel template metadata & headers for a batch
-  async getTemplate(batchId: string): Promise<ExcelTemplateResponse | null> {
+  // Get Excel template metadata & headers for a batch or specific class
+  async getTemplate(batchId: string, classId?: string): Promise<ExcelTemplateResponse | null> {
     try {
-      const response = await api.get(`/excel-templates/batch/${batchId}`)
+      const url = classId 
+        ? `/excel-templates/batch/${batchId}?classId=${encodeURIComponent(classId)}`
+        : `/excel-templates/batch/${batchId}`
+      const response = await api.get(url)
       return response.data
     } catch (err) {
       return null
@@ -48,14 +55,17 @@ export const excelTemplateService = {
     }
   },
 
-
   // Save column field mappings
   async saveMappings(
     batchId: string,
     fieldMappings: Record<string, string>,
-    lookupColumn: string
+    lookupColumn: string,
+    classId?: string
   ): Promise<ExcelTemplateResponse> {
-    const response = await api.put(`/excel-templates/mappings/${batchId}`, {
+    const url = classId 
+      ? `/excel-templates/mappings/${batchId}?classId=${encodeURIComponent(classId)}`
+      : `/excel-templates/mappings/${batchId}`
+    const response = await api.put(url, {
       field_mappings: fieldMappings,
       lookup_column: lookupColumn,
     })
@@ -66,27 +76,32 @@ export const excelTemplateService = {
   async updateStudentRow(
     batchId: string,
     registerNumber: string,
-    extractedFields: Record<string, any>
+    extractedFields: Record<string, any>,
+    classId?: string
   ): Promise<{ status: string; message: string; updated?: boolean }> {
     const response = await api.post(`/excel-templates/update-row/${batchId}`, {
       register_number: registerNumber,
+      class_id: classId,
       extracted_fields: extractedFields,
     })
     return response.data
   },
 
   // Download updated Excel workbook
-  async downloadExcel(batchId: string, filename?: string): Promise<void> {
-    const response = await api.get(`/excel-templates/download/${batchId}`, {
+  async downloadExcel(batchId: string, filename?: string, classId?: string): Promise<void> {
+    const url = classId 
+      ? `/excel-templates/download/${batchId}?classId=${encodeURIComponent(classId)}`
+      : `/excel-templates/download/${batchId}`
+    const response = await api.get(url, {
       responseType: 'blob',
     })
-    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const urlBlob = window.URL.createObjectURL(new Blob([response.data]))
     const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', filename || `${batchId}_Updated_Admissions.xlsx`)
+    link.href = urlBlob
+    link.setAttribute('download', filename || `${batchId}${classId ? '_' + classId : ''}_Updated_Admissions.xlsx`)
     document.body.appendChild(link)
     link.click()
     link.remove()
-    window.URL.revokeObjectURL(url)
+    window.URL.revokeObjectURL(urlBlob)
   },
 }

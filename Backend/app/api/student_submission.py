@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.schemas.student_submission import (
     StudentSubmissionCreate,
@@ -42,6 +43,8 @@ def _to_response(s) -> StudentSubmissionResponse:
         id=str(s.id),
         batch_id=s.batch_id,
         batch_name=s.batch_name,
+        class_id=getattr(s, "class_id", None),
+        class_name=getattr(s, "class_name", None),
         student_name=s.student_name,
         register_number=s.register_number,
         mobile_number=s.mobile_number,
@@ -169,9 +172,19 @@ async def verify_student_identity(data: StudentIdentityVerifyRequest):
             detail="You have already submitted your documents for this admission batch.",
         )
 
+    class_id = getattr(link, "class_id", None)
+    class_name = None
+    if class_id:
+        from app.models.batch_class import BatchClass
+        class_doc = await BatchClass.get(class_id)
+        if class_doc:
+            class_name = class_doc.class_name
+
     return StudentIdentityVerifyResponse(
         batch_id=batch_id,
         batch_name=batch.name,
+        class_id=class_id,
+        class_name=class_name,
     )
 
 
@@ -417,71 +430,83 @@ async def extract_student_documents(
             safe_log(f"Detected Document Type: {doc_type}")
             safe_log("============================================================\n")
 
-            # Expand target_fields with semantic aliases for this document extraction
+            if doc_type == "UNKNOWN":
+                safe_log(f"[Document Classifier] Document type for '{filename}' is UNKNOWN. Skipping target field extraction.")
+                extracted_fields_per_document[filename] = {}
+                continue
+
+            # Determine target fields authorized for this specific document type
+            authorized_doc_fields = [tf for tf in target_fields if is_document_authorized_for_field(doc_type, tf)]
+
+            if not authorized_doc_fields:
+                safe_log(f"[Document Authority Guard] No target fields authorized for document type {doc_type} in {filename}. Skipping AI extraction.")
+                extracted_fields_per_document[filename] = {}
+                continue
+
+            # Expand authorized target fields with semantic aliases for this document extraction
             expanded_doc_fields: list[str] = []
-            for tf in target_fields:
+            for tf in authorized_doc_fields:
                 aliases = get_aliases_for_header(tf)
                 for a in aliases[:4]:
                     if a not in expanded_doc_fields:
                         expanded_doc_fields.append(a)
 
-            if not expanded_doc_fields:
-                expanded_doc_fields = ["Document Details"]
-
             # Perform Regex Extraction
             regex_results = preprocessor.extract_regex_fields(clean_ocr)
             ocr_addr_obj = preprocessor.extract_address_from_ocr(clean_ocr) or preprocessor.extract_address_from_ocr(raw_ocr)
 
-            aadhaar_matches = re.findall(r"\b([2-9]\d{3}[\s-]?\d{4}[\s-]?\d{4})\b", clean_ocr)
-            valid_aadhaar = None
-            for match in aadhaar_matches:
-                clean_digits = re.sub(r"\D", "", match)
-                if len(clean_digits) == 12:
-                    valid_aadhaar = f"{clean_digits[:4]} {clean_digits[4:8]} {clean_digits[8:]}"
-                    break
-
-            # Perform AI Extraction for all target fields across this document
+            # Perform AI Extraction strictly for target fields authorized for this document
             doc_extracted = ai_service.extract(
                 document_type=doc_type,
                 ocr_text=raw_ocr,
                 required_fields=expanded_doc_fields,
             )
 
-            # Integrate Regex & Aadhaar Numbers if found
-            if valid_aadhaar:
-                doc_extracted["Aadhaar Card"] = {"value": valid_aadhaar, "confidence": 100}
-                doc_extracted["Aadhaar Number"] = {"value": valid_aadhaar, "confidence": 100}
+            # Integrate Regex & Aadhaar Numbers ONLY if document is AADHAAR
+            if doc_type == "AADHAAR":
+                aadhaar_matches = re.findall(r"\b([2-9]\d{3}[\s-]?\d{4}[\s-]?\d{4})\b", clean_ocr)
+                valid_aadhaar = None
+                for match in aadhaar_matches:
+                    clean_digits = re.sub(r"\D", "", match)
+                    if len(clean_digits) == 12:
+                        valid_aadhaar = f"{clean_digits[:4]} {clean_digits[4:8]} {clean_digits[8:]}"
+                        break
+
+                if valid_aadhaar:
+                    doc_extracted["Aadhaar Card"] = {"value": valid_aadhaar, "confidence": 100}
+                    doc_extracted["Aadhaar Number"] = {"value": valid_aadhaar, "confidence": 100}
+
+                # Address Fallback & Integration for Aadhaar
+                ai_addr_val = None
+                for ak in ["Address", "Full Address", "Permanent Address", "Postal Address", "Residential Address", "Communication Address"]:
+                    if ak in doc_extracted and isinstance(doc_extracted[ak], dict) and doc_extracted[ak].get("value"):
+                        ai_addr_val = doc_extracted[ak].get("value")
+                        break
+
+                if ai_addr_val and str(ai_addr_val).strip():
+                    final_addr_obj = {"value": str(ai_addr_val).strip(), "confidence": 100}
+                elif ocr_addr_obj and ocr_addr_obj.get("value"):
+                    final_addr_obj = ocr_addr_obj
+                else:
+                    final_addr_obj = {"value": "NO", "confidence": 0}
+
+                if final_addr_obj.get("value"):
+                    doc_extracted["Address"] = final_addr_obj
+                    doc_extracted["Full Address"] = final_addr_obj
+                    doc_extracted["Permanent Address"] = final_addr_obj
+                    doc_extracted["Residential Address"] = final_addr_obj
 
             if isinstance(regex_results, dict):
                 for k, v in regex_results.items():
-                    if k not in doc_extracted or not doc_extracted[k].get("value"):
-                        doc_extracted[k] = v
-
-            # Address Fallback & Integration
-            ai_addr_val = None
-            for ak in ["Address", "Full Address", "Permanent Address", "Postal Address", "Residential Address", "Communication Address"]:
-                if ak in doc_extracted and isinstance(doc_extracted[ak], dict) and doc_extracted[ak].get("value"):
-                    ai_addr_val = doc_extracted[ak].get("value")
-                    break
-
-            if ai_addr_val and str(ai_addr_val).strip():
-                final_addr_obj = {"value": str(ai_addr_val).strip(), "confidence": 100}
-            elif ocr_addr_obj and ocr_addr_obj.get("value"):
-                final_addr_obj = ocr_addr_obj
-            else:
-                final_addr_obj = {"value": None, "confidence": 0}
-
-            if final_addr_obj.get("value"):
-                doc_extracted["Address"] = final_addr_obj
-                doc_extracted["Full Address"] = final_addr_obj
-                doc_extracted["Permanent Address"] = final_addr_obj
-                doc_extracted["Residential Address"] = final_addr_obj
+                    if is_document_authorized_for_field(doc_type, k):
+                        if k not in doc_extracted or not doc_extracted[k].get("value"):
+                            doc_extracted[k] = v
 
             doc_extracted_filtered = {k: v for k, v in (doc_extracted or {}).items() if not is_profile_field(k)}
             extracted_fields_per_document[filename] = doc_extracted_filtered
 
-            # Collect Candidates into candidate_pool for each target Excel field
-            for tf in target_fields:
+            # Collect Candidates into candidate_pool for authorized target Excel fields ONLY
+            for tf in authorized_doc_fields:
                 if tf not in candidate_pool:
                     candidate_pool[tf] = []
 
@@ -495,7 +520,7 @@ async def extract_student_documents(
                         if ek.strip().lower() == alias_lower:
                             val = ev.get("value") if isinstance(ev, dict) else ev
                             conf = ev.get("confidence", 100) if isinstance(ev, dict) else 100
-                            if val is not None and str(val).strip() != "":
+                            if val is not None and str(val).strip() != "" and str(val).strip().lower() not in ["null", "none", "n/a", "not detected"]:
                                 matched_val = val
                                 matched_conf = conf
                                 break
@@ -503,33 +528,31 @@ async def extract_student_documents(
                         break
 
                 if matched_val is not None:
-                    if is_document_authorized_for_field(doc_type, tf):
-                        candidate_pool[tf].append({
-                            "source_file": filename,
-                            "doc_type": doc_type,
-                            "value": matched_val,
-                            "confidence": matched_conf,
-                        })
-                    else:
-                        safe_log(f"[Document Authority Guard] Ignored '{tf}' candidate from {filename} ({doc_type}) because {doc_type} is not authorized for {tf}.")
+                    candidate_pool[tf].append({
+                        "source_file": filename,
+                        "doc_type": doc_type,
+                        "value": matched_val,
+                        "confidence": matched_conf,
+                    })
 
-            # Also merge into all_extracted_pool keeping non-null / highest confidence values
+            # Merge into all_extracted_pool keeping non-null / highest confidence values
             for k, v in doc_extracted_filtered.items():
-                if k not in all_extracted_pool:
-                    all_extracted_pool[k] = v
-                else:
-                    existing = all_extracted_pool[k]
-                    existing_val = existing.get("value") if isinstance(existing, dict) else existing
-                    new_val = v.get("value") if isinstance(v, dict) else v
-                    existing_conf = existing.get("confidence", 0) if isinstance(existing, dict) else 100
-                    new_conf = v.get("confidence", 0) if isinstance(v, dict) else 100
+                if is_document_authorized_for_field(doc_type, k):
+                    if k not in all_extracted_pool:
+                        all_extracted_pool[k] = v
+                    else:
+                        existing = all_extracted_pool[k]
+                        existing_val = existing.get("value") if isinstance(existing, dict) else existing
+                        new_val = v.get("value") if isinstance(v, dict) else v
+                        existing_conf = existing.get("confidence", 0) if isinstance(existing, dict) else 100
+                        new_conf = v.get("confidence", 0) if isinstance(v, dict) else 100
 
-                    if (existing_val is None or str(existing_val).strip() == "") and (new_val is not None and str(new_val).strip() != ""):
-                        all_extracted_pool[k] = v
-                    elif existing_val is not None and str(existing_val).strip() != "" and (new_val is None or str(new_val).strip() == ""):
-                        pass
-                    elif new_conf > existing_conf:
-                        all_extracted_pool[k] = v
+                        if (existing_val is None or str(existing_val).strip() == "") and (new_val is not None and str(new_val).strip() != ""):
+                            all_extracted_pool[k] = v
+                        elif existing_val is not None and str(existing_val).strip() != "" and (new_val is None or str(new_val).strip() == ""):
+                            pass
+                        elif new_conf > existing_conf:
+                            all_extracted_pool[k] = v
 
         # Requirement 12 Log 3: Candidate Matches
         safe_log("\n==================== CANDIDATE MATCHES ====================")
@@ -541,6 +564,20 @@ async def extract_student_documents(
             else:
                 safe_log("  - [No candidate matches found across uploaded documents]")
         safe_log("===========================================================\n")
+
+        from app.utils.field_canonicalizer import (
+            is_profile_field,
+            is_field_belonging_to_optional_doc,
+            is_optional_requirement,
+            get_doc_type_for_requirement,
+            is_yes_no_question_field,
+            normalize_yes_no_value,
+            parse_location_components_from_address,
+            is_address_field,
+            infer_gender_from_salutation,
+        )
+
+        doc_reqs = active_version.documents if (active_version and active_version.documents) else []
 
         # Per-Field Extraction Source Validation Debug Logs & Final Selection
         safe_log("\n==================== FIELD EXTRACTION SOURCE VALIDATION ====================")
@@ -561,20 +598,52 @@ async def extract_student_documents(
                 safe_log(f"Final : {val}")
                 continue
 
+            # Check if field belongs to an OPTIONAL document requirement
+            is_opt_field, opt_doc_type = is_field_belonging_to_optional_doc(header, doc_reqs)
+
+            if is_opt_field and opt_doc_type:
+                # Rule 2 & Rule 6: If an OPTIONAL document is not uploaded by the student:
+                # Do not attempt OCR/LLM. Return every field belonging to that document as {"value": "No", "confidence": 0}
+                if opt_doc_type not in detected_documents:
+                    safe_log(f"\nField : {header}")
+                    safe_log(f"Allowed Documents : {opt_doc_type} (OPTIONAL)")
+                    safe_log(f"Searching : Optional document ({opt_doc_type}) NOT uploaded by student")
+                    safe_log("Result : Optional Document Not Uploaded")
+                    safe_log("Final : No (confidence=0)")
+                    verification_fields[header] = {"value": "No", "confidence": 0}
+                    continue
+
             allowed_sources = get_allowed_sources_for_field(header)
-            allowed_str = ", ".join(allowed_sources) if "ALL" not in allowed_sources else "Any Uploaded Document"
+            allowed_str = ", ".join(allowed_sources) if allowed_sources else "None"
 
             safe_log(f"\nField : {header}")
             safe_log(f"Allowed Documents : {allowed_str}")
 
+            # Check if an uploaded document matching allowed_sources exists
+            matching_doc_uploaded = any(dt in allowed_sources for dt in detected_documents)
+
+            if not matching_doc_uploaded:
+                safe_log(f"Searching : Allowed document type(s) ({allowed_str}) NOT uploaded by student")
+                safe_log("Result : Missing Document")
+                if is_opt_field:
+                    safe_log("Final : No (confidence=0)")
+                    verification_fields[header] = {"value": "No", "confidence": 0}
+                else:
+                    safe_log("Final : NO (confidence=0)")
+                    verification_fields[header] = {"value": "NO", "confidence": 0}
+                continue
+
             candidates = candidate_pool.get(header, [])
 
             # Filter candidates strictly by allowed document types
-            valid_candidates = []
-            for c in candidates:
-                c_doc_type = c.get("doc_type", "UNKNOWN")
-                if "ALL" in allowed_sources or c_doc_type in allowed_sources or c_doc_type == "UNKNOWN":
-                    valid_candidates.append(c)
+            valid_candidates = [
+                c for c in candidates
+                if c.get("doc_type") in allowed_sources
+            ]
+
+            # Rule 6 Guard: If field belongs to an optional document, only allow candidates from that specific optional doc
+            if is_opt_field and opt_doc_type:
+                valid_candidates = [c for c in valid_candidates if c.get("doc_type") == opt_doc_type]
 
             best_candidate = None
             if valid_candidates:
@@ -588,11 +657,216 @@ async def extract_student_documents(
                     "confidence": best_candidate["confidence"],
                 }
             else:
-                safe_log(f"Searching : {allowed_str}")
-                safe_log("Result : Not Found")
-                safe_log("Final : null")
-                verification_fields[header] = {"value": None, "confidence": 0}
+                safe_log(f"Searching : {allowed_str} (Uploaded)")
+                safe_log("Result : Field Absent in Source Document")
+                # Rule 3: Document uploaded but field absent inside it -> NO, confidence 0
+                safe_log("Final : NO (confidence=0)")
+                verification_fields[header] = {"value": "NO", "confidence": 0}
 
+        from app.utils.field_canonicalizer import (
+            ADDRESS_SOURCE_PRIORITY,
+            is_profile_field,
+            is_field_belonging_to_optional_doc,
+            is_optional_requirement,
+            get_doc_type_for_requirement,
+            is_yes_no_question_field,
+            normalize_yes_no_value,
+            parse_location_components_from_address,
+            is_address_field,
+        )
+
+        DOC_TYPE_LABELS: Dict[str, str] = {
+            "AADHAAR": "Aadhaar Card",
+            "RESIDENCE": "Residence Certificate",
+            "RESIDENCE_CERTIFICATE": "Residence Certificate",
+            "NATIVITY": "Nativity Certificate",
+            "COMMUNITY": "Community Certificate",
+            "TRANSFER_CERTIFICATE": "Transfer Certificate",
+            "INCOME": "Income Certificate",
+            "PASSPORT": "Passport",
+            "DRIVING_LICENCE": "Driving Licence",
+            "DRIVING_LICENSE": "Driving Licence",
+            "VOTER_ID": "Voter ID",
+            "BONAFIDE": "Bonafide Certificate",
+            "MIGRATION": "Migration Certificate",
+        }
+
+        # 1. Priority-Based Address Source Document Selection
+        selected_address_doc = None
+        selected_address_str = None
+
+        for priority_doc_type in ADDRESS_SOURCE_PRIORITY:
+            if priority_doc_type in detected_documents:
+                # Search candidate pool for candidates from this document type
+                for cand_field in ["Address", "Full Address", "Permanent Address", "Communication Address", "Postal Address", "Residential Address"]:
+                    cands = candidate_pool.get(cand_field, [])
+                    match = next((c for c in cands if c.get("doc_type") == priority_doc_type and c.get("value")), None)
+                    if match:
+                        selected_address_doc = priority_doc_type
+                        selected_address_str = match.get("value")
+                        break
+
+                if not selected_address_str:
+                    # Fallback search inside extracted_fields_per_document
+                    for fname, doc_ext in extracted_fields_per_document.items():
+                        for k_addr, v_item in (doc_ext or {}).items():
+                            if is_address_field(k_addr) and isinstance(v_item, dict) and v_item.get("value"):
+                                selected_address_doc = priority_doc_type
+                                selected_address_str = v_item.get("value")
+                                break
+                        if selected_address_str:
+                            break
+
+            if selected_address_str:
+                break
+
+        # 2. Debug Logging according to Requirement 7
+        doc_label = "None"
+        if selected_address_doc == "AADHAAR":
+            doc_label = "Aadhaar Card"
+        elif selected_address_doc:
+            label = DOC_TYPE_LABELS.get(selected_address_doc, selected_address_doc.title().replace("_", " "))
+            if "AADHAAR" in detected_documents:
+                doc_label = label
+            else:
+                doc_label = f"{label} (Aadhaar not uploaded)"
+
+        derived_loc = parse_location_components_from_address(str(selected_address_str)) if selected_address_str else {}
+
+        v_val = derived_loc.get("Village", {}).get("value")
+        t_val = derived_loc.get("Taluk", {}).get("value")
+        d_val = derived_loc.get("District", {}).get("value")
+        s_val = derived_loc.get("State", {}).get("value")
+        p_val = derived_loc.get("Pincode", {}).get("value")
+
+        safe_log("\n==================== ADDRESS PARSING & DERIVATION ====================")
+        safe_log(f"Address Source: {doc_label}")
+        safe_log(f"Parsed Address: {selected_address_str}")
+        safe_log(f"Village: {v_val}")
+        safe_log(f"Taluk: {t_val}")
+        safe_log(f"District: {d_val}")
+        safe_log(f"State: {s_val}")
+        safe_log(f"Pincode: {p_val}")
+        safe_log("======================================================================\n")
+
+        # 3. Derive location components and populate address & location fields ONLY from selected_address_doc
+        address_location_fields = [
+            h for h in list(verification_fields.keys())
+            if is_address_field(h) or any(c in h.lower() for c in ["village", "vtc", "town", "taluk", "tehsil", "tk", "district", "dist", "dt", "state", "pincode", "pin code", "postal code", "pin"])
+        ]
+
+        if selected_address_str:
+            for header in address_location_fields:
+                if is_profile_field(header):
+                    continue
+
+                h_lower = header.strip().lower()
+
+                if is_address_field(header):
+                    verification_fields[header] = {"value": str(selected_address_str), "confidence": 100}
+
+                elif any(k in h_lower for k in ["village", "vtc", "town"]):
+                    verification_fields[header] = derived_loc.get("Village", {"value": "NO", "confidence": 0})
+
+                elif any(k in h_lower for k in ["taluk", "tehsil", "tk"]):
+                    verification_fields[header] = derived_loc.get("Taluk", {"value": "NO", "confidence": 0})
+
+                elif any(k in h_lower for k in ["district", "dist", "dt"]):
+                    verification_fields[header] = derived_loc.get("District", {"value": "NO", "confidence": 0})
+
+                elif any(k in h_lower for k in ["state"]):
+                    verification_fields[header] = derived_loc.get("State", {"value": "NO", "confidence": 0})
+
+                elif any(k in h_lower for k in ["pincode", "pin code", "postal code", "pin"]):
+                    verification_fields[header] = derived_loc.get("Pincode", {"value": "NO", "confidence": 0})
+
+        else:
+            # No uploaded document contains a valid address
+            for header in address_location_fields:
+                if not is_profile_field(header):
+                    verification_fields[header] = {"value": "NO", "confidence": 0}
+
+
+
+
+        # Post-processing normalization for Aadhaar Number (without space)
+        for k in list(verification_fields.keys()):
+            if "aadhaar" in k.lower() and "without space" in k.lower():
+                val = verification_fields[k].get("value")
+                if val:
+                    clean_val = re.sub(r"\D", "", str(val))
+                    verification_fields[k]["value"] = clean_val
+
+        # Post-processing normalization for Communication Address Same As Permanent Address
+        comm_same_key = next((k for k in verification_fields.keys() if "communication address same as" in k.lower()), None)
+        if comm_same_key:
+            perm_val = None
+            for pk in ["Permanent Address", "Address", "Full Address", "Communication address"]:
+                if pk in verification_fields and isinstance(verification_fields[pk], dict) and verification_fields[pk].get("value"):
+                    perm_val = verification_fields[pk].get("value")
+                    break
+
+            raw_val = verification_fields[comm_same_key].get("value")
+            if perm_val or (raw_val and len(str(raw_val)) > 10):
+                verification_fields[comm_same_key] = {"value": "Yes", "confidence": 100}
+
+        # Post-processing normalization for EMIS ID Available flag
+        emis_avail_key = next((k for k in verification_fields.keys() if "emis" in k.lower() and ("available" in k.lower() or "is " in k.lower())), None)
+        emis_val_key = next((k for k in verification_fields.keys() if k.strip().lower() in ["emis id", "emis_id", "emis no"]), None)
+        if emis_avail_key and emis_val_key:
+            if verification_fields[emis_val_key].get("value"):
+                verification_fields[emis_avail_key] = {"value": "Yes", "confidence": 100}
+
+        # Normalize ALL Yes/No question fields strictly to 'Yes', 'No', or 'NO' if missing
+        for header, item in list(verification_fields.items()):
+            if is_yes_no_question_field(header):
+                current_val = item.get("value") if isinstance(item, dict) else item
+                current_conf = item.get("confidence", 0) if isinstance(item, dict) else 0
+                norm_val = normalize_yes_no_value(current_val)
+                if norm_val:
+                    verification_fields[header] = {"value": norm_val, "confidence": current_conf if current_conf == 0 else 100}
+                else:
+                    verification_fields[header] = {"value": "NO", "confidence": 0}
+
+        # Execute Smart Lookup Engine Layer (OCR -> AI Extraction -> Smart Lookup Engine -> Verification)
+        from app.services.smart_lookup_service import SmartLookupEngine
+        lookup_engine = SmartLookupEngine()
+        verification_fields = lookup_engine.process_lookup(
+            verification_fields=verification_fields,
+            all_extracted_pool=all_extracted_pool,
+            detected_documents=detected_documents,
+        )
+
+        # Structured Field Extraction & Inference Audit Logs
+        safe_log("\n==================== FIELD INFERENCE & EXTRACTION AUDIT ====================")
+        for header, item in verification_fields.items():
+            val = item.get("value") if isinstance(item, dict) else item
+            conf = item.get("confidence", 0) if isinstance(item, dict) else 0
+            src = item.get("source") if isinstance(item, dict) else None
+            rule = item.get("rule_applied") if isinstance(item, dict) else None
+
+            safe_log(f"Field: {header}")
+            if val and str(val).upper() not in ["NO", "NULL"] and conf > 0:
+                if src:
+                    safe_log(f"Source: {src}")
+                elif any(k in header.lower() for k in ["village", "vtc", "town", "taluk", "tehsil", "tk", "district", "dist", "dt", "state", "pincode", "pin code", "postal code", "pin"]) or is_address_field(header):
+                    addr_src = f"{doc_label} Address" if doc_label != "None" else "Address Proof"
+                    safe_log(f"Source: {addr_src}")
+                else:
+                    allowed_sources = get_allowed_sources_for_field(header)
+                    doc_str = ", ".join(allowed_sources) if allowed_sources else "Document Extraction"
+                    safe_log(f"Source: {doc_str}")
+
+                if rule:
+                    safe_log(f"Rule Applied: {rule}")
+                elif any(k in header.lower() for k in ["village", "vtc", "town", "taluk", "tehsil", "tk", "district", "dist", "dt", "state", "pincode", "pin code", "postal code", "pin"]) or is_address_field(header):
+                    safe_log("Rule Applied: Address Parsing")
+                else:
+                    safe_log("Rule Applied: Direct Extraction")
+            else:
+                safe_log("Source: Not Found")
+                safe_log("Returned: NO")
+            safe_log("")
         safe_log("=========================================================================\n")
 
         safe_log("\n================ DETECTED DOCUMENT TYPES ================")
@@ -705,6 +979,7 @@ async def confirm_student_submission(
                 batch_id=data.batch_id,
                 register_number=data.register_number,
                 student_data=excel_updates,
+                class_id=data.class_id,
             )
         except Exception as excel_err:
             print(f"Warning: Failed to update Excel workbook: {str(excel_err)}")
@@ -752,8 +1027,10 @@ async def get_student_me_alias(current_user: User = Depends(get_current_user)):
 async def verify_student_identity(data: StudentIdentityVerifyRequest):
     import os, sys
     try:
-        sys.stdout.reconfigure(encoding='utf-8')
-        sys.stderr.reconfigure(encoding='utf-8')
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding='utf-8')  # type: ignore[attr-defined]
+        if hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding='utf-8')  # type: ignore[attr-defined]
     except Exception:
         pass
 
@@ -805,13 +1082,13 @@ async def verify_student_identity(data: StudentIdentityVerifyRequest):
             )
 
     # 3. Batch check
-    batch_id: str = link.batch_id
-    if not batch_id:
+    if not link.batch_id:
         safe_print("Batch ID Missing on Link ❌")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Invalid upload link.",
         )
+    batch_id: str = link.batch_id
 
     try:
         batch = await batch_service.get_batch_by_id(batch_id)
@@ -861,9 +1138,19 @@ async def verify_student_identity(data: StudentIdentityVerifyRequest):
     safe_print("Duplicate Check Passed ✅")
     safe_print("Student Verification Succeeded 🎉")
 
+    class_id = getattr(link, "class_id", None)
+    class_name = None
+    if class_id:
+        from app.models.batch_class import BatchClass
+        class_doc = await BatchClass.get(class_id)
+        if class_doc:
+            class_name = class_doc.class_name
+
     return StudentIdentityVerifyResponse(
         batch_id=batch_id,
         batch_name=batch.name,
+        class_id=class_id,
+        class_name=class_name,
     )
 
 

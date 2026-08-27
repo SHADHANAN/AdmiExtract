@@ -10,6 +10,8 @@ export interface VerifyIdentityPayload {
 export interface VerifyIdentityResponse {
   batch_id: string
   batch_name: string
+  class_id?: string | null
+  class_name?: string | null
 }
 
 /** Session key used to persist the student's temporary submission context in sessionStorage. */
@@ -18,6 +20,8 @@ export const STUDENT_SESSION_KEY = 'student_submission_session'
 export interface StudentSubmissionSession {
   batch_id: string
   batch_name: string
+  class_id?: string | null
+  class_name?: string | null
   register_number: string
   student_name: string
   mobile_number: string

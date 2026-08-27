@@ -22,6 +22,7 @@ async def init_db():
     from app.models.excel_template import ExcelBatchTemplate
     from app.models.doc_config_version import DocumentConfigurationVersion
     from app.models.batch import AdmissionBatch
+    from app.models.batch_class import BatchClass
     from app.core.security import get_password_hash
 
     # Clean up legacy user documents with missing or null username to allow unique index creation
@@ -40,6 +41,14 @@ async def init_db():
                 {"$set": {"slug": token}}
             )
 
+    # Drop legacy unique batch_id_1 index on excel_templates to allow non-unique per-class template index creation
+    try:
+        index_info = await db["excel_templates"].index_information()
+        if "batch_id_1" in index_info and index_info["batch_id_1"].get("unique"):
+            await db["excel_templates"].drop_index("batch_id_1")
+    except Exception:
+        pass
+
     await init_beanie(
         database=cast(Any, db),
         document_models=[
@@ -50,7 +59,9 @@ async def init_db():
             ExcelBatchTemplate,
             DocumentConfigurationVersion,
             AdmissionBatch,
+            BatchClass,
         ],
+        allow_index_dropping=True,
     )
 
 
@@ -86,106 +97,6 @@ async def init_db():
             created_by="system",
             is_active=True,
         ).insert()
-
-    # Seed default Admission Batches
-    batch1 = await AdmissionBatch.get("batch_1")
-    if not batch1:
-        await AdmissionBatch(
-            id="batch_1",
-            name="AIML 2025-2029",
-            department_id="AIML",
-            academic_year="2025-2029",
-            description="Admissions batch for AI and Machine Learning specialization courses.",
-            start_date="2025-06-01",
-            end_date="2025-08-30",
-            status="active",
-            created_by="system",
-        ).insert()
-
-    batch2 = await AdmissionBatch.get("batch_2")
-    if not batch2:
-        await AdmissionBatch(
-            id="batch_2",
-            name="CSE 2025-2029",
-            department_id="CSE",
-            academic_year="2025-2029",
-            description="Admissions batch for standard Computer Science engineering curriculum.",
-            start_date="2025-06-01",
-            end_date="2025-08-30",
-            status="active",
-            created_by="system",
-        ).insert()
-
-    batch3 = await AdmissionBatch.get("batch_3")
-    if not batch3:
-        await AdmissionBatch(
-            id="batch_3",
-            name="ECE 2025-2029",
-            department_id="ECE",
-            academic_year="2025-2029",
-            description="Admissions batch for Electronics and Communication courses.",
-            start_date="2025-05-15",
-            end_date="2025-07-31",
-            status="closed",
-            created_by="system",
-        ).insert()
-
-    # Seed default Upload Links
-    aiml_link = await UploadLink.find_one(UploadLink.token == "aiml-2025-portal")
-    if not aiml_link:
-        dept = await Department.find_one(Department.code == "AIML")
-        if dept:
-            await UploadLink(
-                department_id=dept.id,
-                batch_id="batch_1",
-                token="aiml-2025-portal",
-                slug="aiml-2025-portal",
-                title="AIML Public Upload",
-                description="Admissions upload portal for AI & ML specialization.",
-                is_active=True,
-                expires_at=datetime(2026, 8, 30, 23, 59, 59, tzinfo=timezone.utc),
-                max_submissions=100,
-                submission_count=15,
-                created_by="system",
-            ).insert()
-    else:
-        changed = False
-        if not aiml_link.batch_id:
-            aiml_link.batch_id = "batch_1"
-            changed = True
-        if not getattr(aiml_link, "slug", None):
-            aiml_link.slug = "aiml-2025-portal"
-            changed = True
-        if changed:
-            await aiml_link.save()
-
-    cse_link = await UploadLink.find_one(UploadLink.token == "cse-2025-portal")
-    if not cse_link:
-        dept = await Department.find_one(Department.code == "CSE")
-        if dept:
-            await UploadLink(
-                department_id=dept.id,
-                batch_id="batch_2",
-                token="cse-2025-portal",
-                slug="cse-2025-portal",
-                title="CSE Public Upload",
-                description="Admissions upload portal for Computer Science & Engineering.",
-                is_active=True,
-                expires_at=datetime(2026, 8, 30, 23, 59, 59, tzinfo=timezone.utc),
-                max_submissions=100,
-                submission_count=32,
-                created_by="system",
-            ).insert()
-    else:
-        changed = False
-        if not cse_link.batch_id:
-            cse_link.batch_id = "batch_2"
-            changed = True
-        if not getattr(cse_link, "slug", None):
-            cse_link.slug = "cse-2025-portal"
-            changed = True
-        if changed:
-            await cse_link.save()
 
     # Seed default Super Admin user (username: admin, password: admin123, department: null)
     admin_user = await User.find_one(User.username == "admin")

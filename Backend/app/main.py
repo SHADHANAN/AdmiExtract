@@ -11,7 +11,9 @@ from app.api.student_submission import router as student_submission_router, stud
 from app.api.excel_template import router as excel_template_router
 from app.api.doc_config_version import router as doc_config_version_router
 from app.api.batch import router as batch_router, public_router as public_batch_router
+from app.api.batch_class import router as batch_class_router
 from app.api.upload_link import router as upload_link_router
+
 
 
 @asynccontextmanager
@@ -43,6 +45,7 @@ app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(department_router)
 app.include_router(batch_router)
+app.include_router(batch_class_router)
 app.include_router(public_batch_router)
 app.include_router(upload_link_router)
 app.include_router(student_submission_router)

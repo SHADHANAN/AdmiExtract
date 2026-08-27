@@ -1,126 +1,29 @@
 import { create } from 'zustand'
-import type { BatchState, Batch, UploadLink, DocumentRequirement, DocumentConfigurationVersion } from '../types'
+import type { BatchState, Batch, UploadLink, DocumentRequirement, DocumentConfigurationVersion, BatchClass } from '../types'
 import { batchService } from '../services/batch'
+import { batchClassService } from '../services/batchClass'
 import { api } from '../services/api'
 
-const v1Requirements: DocumentRequirement[] = [
+
+
+const defaultRequirements: DocumentRequirement[] = [
   { id: 'req_1', name: 'Aadhaar Card', required: true, allowedTypes: ['PDF', 'JPG', 'PNG'], maxSizeMb: 5, description: 'Upload front and back side of Aadhaar card', type: 'MANDATORY' },
-  { id: 'req_5', name: 'SSLC Marksheet', required: true, allowedTypes: ['PDF', 'JPG', 'PNG'], maxSizeMb: 5, description: '10th grade official marks statement', type: 'MANDATORY' },
-  { id: 'req_6', name: 'HSC Marksheet', required: true, allowedTypes: ['PDF', 'JPG', 'PNG'], maxSizeMb: 5, description: '12th grade / Diploma final marks statement', type: 'MANDATORY' },
-  { id: 'req_3', name: 'Community Certificate', required: true, allowedTypes: ['PDF', 'JPG'], maxSizeMb: 5, description: 'Caste / Community reservation proof', type: 'MANDATORY' },
+  { id: 'req_2', name: 'SSLC Marksheet', required: true, allowedTypes: ['PDF', 'JPG', 'PNG'], maxSizeMb: 5, description: '10th grade official marks statement', type: 'MANDATORY' },
+  { id: 'req_3', name: 'HSC Marksheet', required: true, allowedTypes: ['PDF', 'JPG', 'PNG'], maxSizeMb: 5, description: '12th grade / Diploma final marks statement', type: 'MANDATORY' },
+  { id: 'req_4', name: 'Community Certificate', required: true, allowedTypes: ['PDF', 'JPG'], maxSizeMb: 5, description: 'Caste / Community reservation proof', type: 'MANDATORY' },
 ]
 
-const v2Requirements: DocumentRequirement[] = [
-  { id: 'req_1', name: 'Aadhaar Card', required: true, allowedTypes: ['PDF', 'JPG', 'PNG'], maxSizeMb: 5, description: 'Upload front and back side of Aadhaar card', type: 'MANDATORY' },
-  { id: 'req_5', name: 'SSLC Marksheet', required: true, allowedTypes: ['PDF', 'JPG', 'PNG'], maxSizeMb: 5, description: '10th grade official marks statement', type: 'MANDATORY' },
-  { id: 'req_6', name: 'HSC Marksheet', required: true, allowedTypes: ['PDF', 'JPG', 'PNG'], maxSizeMb: 5, description: '12th grade / Diploma final marks statement', type: 'MANDATORY' },
-  { id: 'req_4', name: 'Income Certificate', required: true, allowedTypes: ['PDF', 'JPG'], maxSizeMb: 5, description: 'Annual family income certificate for scholarship eligibility', type: 'MANDATORY' },
-]
+const initialDocVersions: Record<string, DocumentConfigurationVersion[]> = {}
 
-const initialDocVersions: Record<string, DocumentConfigurationVersion[]> = {
-  batch_1: [
-    {
-      id: 'ver_batch1_v2',
-      batchId: 'batch_1',
-      version: 2,
-      documents: v2Requirements,
-      isCurrent: true,
-      changeSummary: 'Removed Community Certificate, Added Income Certificate',
-      createdBy: 'Admission Officer',
-      createdAt: '2026-07-25T10:30:00Z',
-    },
-    {
-      id: 'ver_batch1_v1',
-      batchId: 'batch_1',
-      version: 1,
-      documents: v1Requirements,
-      isCurrent: false,
-      changeSummary: 'Initial document configuration (Version 1)',
-      createdBy: 'System Administrator',
-      createdAt: '2026-06-01T08:00:00Z',
-    },
-  ],
-  batch_2: [
-    {
-      id: 'ver_batch2_v1',
-      batchId: 'batch_2',
-      version: 1,
-      documents: v1Requirements,
-      isCurrent: true,
-      changeSummary: 'Initial document configuration (Version 1)',
-      createdBy: 'System Administrator',
-      createdAt: '2026-06-01T08:00:00Z',
-    },
-  ],
-}
+const initialBatches: Batch[] = []
 
-const initialBatches: Batch[] = [
-  {
-    id: 'batch_1',
-    name: 'AIML 2025-2029',
-    department: 'AIML',
-    academicYear: '2025-2029',
-    description: 'Admissions batch for AI and Machine Learning specialization courses.',
-    startDate: '2025-06-01',
-    endDate: '2025-08-30',
-    status: 'active',
-    stats: { students: 45, pending: 12, verified: 30, rejected: 3 },
-    currentDocVersion: 2,
-    docRequirements: [...v2Requirements],
-  },
-  {
-    id: 'batch_2',
-    name: 'CSE 2025-2029',
-    department: 'CSE',
-    academicYear: '2025-2029',
-    description: 'Admissions batch for standard Computer Science engineering curriculum.',
-    startDate: '2025-06-01',
-    endDate: '2025-08-30',
-    status: 'active',
-    stats: { students: 120, pending: 24, verified: 90, rejected: 6 },
-    currentDocVersion: 1,
-    docRequirements: [...v1Requirements],
-  },
-  {
-    id: 'batch_3',
-    name: 'ECE 2025-2029',
-    department: 'ECE',
-    academicYear: '2025-2029',
-    description: 'Admissions batch for Electronics and Communication courses.',
-    startDate: '2025-05-15',
-    endDate: '2025-07-31',
-    status: 'closed',
-    stats: { students: 60, pending: 0, verified: 58, rejected: 2 },
-    currentDocVersion: 1,
-    docRequirements: [...v1Requirements],
-  },
-]
-
-const initialLinks: UploadLink[] = [
-  {
-    id: 'lnk_1',
-    batchId: 'batch_1',
-    token: 'aiml-2025-portal',
-    title: 'AIML Public Upload',
-    expiresAt: '2026-08-30',
-    isActive: true,
-    submissionCount: 15,
-  },
-  {
-    id: 'lnk_2',
-    batchId: 'batch_2',
-    token: 'cse-2025-portal',
-    title: 'CSE Public Upload',
-    expiresAt: '2026-08-30',
-    isActive: true,
-    submissionCount: 32,
-  },
-]
+const initialLinks: UploadLink[] = []
 
 export const useBatchStore = create<BatchState>((set, get) => ({
   batches: initialBatches,
   uploadLinks: initialLinks,
   docVersions: initialDocVersions,
+  classesByBatch: {},
 
   fetchBatches: async () => {
     try {
@@ -142,7 +45,15 @@ export const useBatchStore = create<BatchState>((set, get) => ({
             }))
             version = currentV.version || 1
           } catch {
-            requirements = [...v1Requirements]
+            requirements = [...defaultRequirements]
+          }
+
+          // Fetch classes for this batch
+          let classes: BatchClass[] = []
+          try {
+            classes = await batchClassService.getClassesByBatch(b.id)
+          } catch {
+            classes = []
           }
 
           // Fetch student submissions to calculate stats dynamically
@@ -173,15 +84,82 @@ export const useBatchStore = create<BatchState>((set, get) => ({
             endDate: b.end_date || '',
             status: b.status as any,
             stats,
+            classes,
             currentDocVersion: version,
             docRequirements: requirements,
           }
         })
       )
-      set({ batches: formattedBatches })
+
+      const classesMap: Record<string, BatchClass[]> = {}
+      formattedBatches.forEach((b) => {
+        if (b.classes) {
+          classesMap[b.id] = b.classes
+        }
+      })
+
+      set({ batches: formattedBatches, classesByBatch: classesMap })
     } catch (err) {
       console.warn('API connection failed. Using fallback mock batches.', err)
     }
+  },
+
+  fetchClassesForBatch: async (batchId: string) => {
+    try {
+      const classes = await batchClassService.getClassesByBatch(batchId)
+      set((state) => ({
+        classesByBatch: { ...state.classesByBatch, [batchId]: classes },
+        batches: state.batches.map((b) => (b.id === batchId ? { ...b, classes } : b)),
+      }))
+      return classes
+    } catch (err) {
+      console.warn('Failed to fetch classes for batch', batchId, err)
+      return get().classesByBatch[batchId] || []
+    }
+  },
+
+  createClass: async (batchId: string, data) => {
+    const newClass = await batchClassService.createClass(batchId, data)
+    set((state) => {
+      const existing = state.classesByBatch[batchId] || []
+      const updatedClasses = [...existing, newClass]
+      return {
+        classesByBatch: { ...state.classesByBatch, [batchId]: updatedClasses },
+        batches: state.batches.map((b) => (b.id === batchId ? { ...b, classes: updatedClasses } : b)),
+      }
+    })
+    return newClass
+  },
+
+  updateClass: async (classId: string, data) => {
+    const updatedClass = await batchClassService.updateClass(classId, data)
+    set((state) => {
+      const batchId = updatedClass.batch_id
+      const existing = state.classesByBatch[batchId] || []
+      const updatedClasses = existing.map((c) => (c.id === classId ? updatedClass : c))
+      return {
+        classesByBatch: { ...state.classesByBatch, [batchId]: updatedClasses },
+        batches: state.batches.map((b) => (b.id === batchId ? { ...b, classes: updatedClasses } : b)),
+      }
+    })
+    return updatedClass
+  },
+
+  deleteClass: async (classId: string) => {
+    await batchClassService.deleteClass(classId)
+    set((state) => {
+      const newClassesByBatch: Record<string, BatchClass[]> = {}
+      Object.keys(state.classesByBatch).forEach((bId) => {
+        newClassesByBatch[bId] = state.classesByBatch[bId].filter((c) => c.id !== classId)
+      })
+      return {
+        classesByBatch: newClassesByBatch,
+        batches: state.batches.map((b) => ({
+          ...b,
+          classes: (b.classes || []).filter((c) => c.id !== classId),
+        })),
+      }
+    })
   },
 
   fetchUploadLinks: async () => {
@@ -214,10 +192,46 @@ export const useBatchStore = create<BatchState>((set, get) => ({
         ...batchData,
         id: newId,
         stats: { students: 0, pending: 0, verified: 0, rejected: 0 },
+        classes: [],
         currentDocVersion: 1,
-        docRequirements: [...v1Requirements],
+        docRequirements: [...defaultRequirements],
       }
       set((state) => ({ batches: [newBatch, ...state.batches] }))
+    }
+  },
+
+  updateBatch: async (batchId, data) => {
+    try {
+      await batchService.update(batchId, {
+        name: data.name,
+        department_id: data.department,
+        academic_year: data.academicYear,
+        description: data.description,
+        start_date: data.startDate,
+        end_date: data.endDate,
+        status: data.status,
+      })
+      const { fetchBatches } = get()
+      await fetchBatches()
+    } catch (err) {
+      console.error('Failed to update batch', err)
+      set((state) => ({
+        batches: state.batches.map((b) => (b.id === batchId ? { ...b, ...data } : b)),
+      }))
+    }
+  },
+
+  deleteBatch: async (batchId) => {
+    try {
+      await batchService.delete(batchId)
+      set((state) => ({
+        batches: state.batches.filter((b) => b.id !== batchId),
+      }))
+    } catch (err) {
+      console.error('Failed to delete batch', err)
+      set((state) => ({
+        batches: state.batches.filter((b) => b.id !== batchId),
+      }))
     }
   },
 
@@ -258,30 +272,67 @@ export const useBatchStore = create<BatchState>((set, get) => ({
       // Fetch departments to find department ObjectId matching batch department code
       const deptsRes = await api.get('/departments')
       const userDept = deptsRes.data.find((d: any) => d.code === batch?.department)
-      if (!userDept) {
-        throw new Error('Assigned department code not found in backend.')
+      const deptId = userDept ? userDept.id : (deptsRes.data[0]?.id || '650000000000000000000001')
+
+      let createdItem: UploadLink
+      if (linkData.class_id) {
+        const res = await api.post(`/classes/${linkData.class_id}/upload-link`, {
+          department_id: deptId,
+          batch_id: linkData.batchId,
+          class_id: linkData.class_id,
+          title: linkData.title || 'Public Upload Link',
+          expires_at: linkData.expiresAt ? (linkData.expiresAt.includes('T') ? linkData.expiresAt : `${linkData.expiresAt}T23:59:59Z`) : undefined,
+          max_submissions: 100,
+        })
+        createdItem = {
+          id: res.data.id,
+          batchId: res.data.batch_id || linkData.batchId,
+          class_id: res.data.class_id || linkData.class_id,
+          token: res.data.token,
+          slug: res.data.slug || res.data.token,
+          title: res.data.title,
+          expiresAt: res.data.expires_at ? res.data.expires_at.split('T')[0] : '',
+          isActive: res.data.is_active,
+          submissionCount: res.data.submission_count || 0,
+        }
+      } else {
+        createdItem = await batchService.createUploadLink({
+          department_id: deptId,
+          batch_id: linkData.batchId,
+          class_id: linkData.class_id || undefined,
+          title: linkData.title || 'Public Upload Link',
+          expires_at: linkData.expiresAt ? (linkData.expiresAt.includes('T') ? linkData.expiresAt : `${linkData.expiresAt}T23:59:59Z`) : undefined,
+          max_submissions: 100,
+        })
       }
 
-      await batchService.createUploadLink({
-        department_id: userDept.id,
-        batch_id: linkData.batchId,
-        title: linkData.title || 'Public Upload Link',
-        expires_at: linkData.expiresAt ? `${linkData.expiresAt}T23:59:59Z` : undefined,
-        max_submissions: 100,
-      })
+      if (linkData.class_id) createdItem.class_id = linkData.class_id
+      if (linkData.batchId) createdItem.batchId = linkData.batchId
+
+      set((state) => ({
+        uploadLinks: [createdItem, ...state.uploadLinks.filter((l) => l.id !== createdItem.id)],
+      }))
 
       const { fetchUploadLinks } = get()
       await fetchUploadLinks()
+      return createdItem
     } catch (err) {
       console.error('Failed to add upload link', err)
       // Fallback local state update
       const newId = `lnk_${Math.random().toString(36).substring(2, 9)}`
       const newLink: UploadLink = {
-        ...linkData,
         id: newId,
+        batchId: linkData.batchId,
+        class_id: linkData.class_id,
+        token: linkData.token || Math.random().toString(36).substring(2, 9),
+        slug: linkData.slug || linkData.token || Math.random().toString(36).substring(2, 9),
+        title: linkData.title || 'Public Upload Link',
+        expiresAt: linkData.expiresAt || '',
+        isActive: linkData.isActive ?? true,
         submissionCount: 0,
       }
       set((state) => ({ uploadLinks: [newLink, ...state.uploadLinks] }))
+      return newLink
     }
   },
 

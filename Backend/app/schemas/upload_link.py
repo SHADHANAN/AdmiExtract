@@ -15,6 +15,10 @@ class UploadLinkCreate(BaseModel):
         default=None,
         description="The admission batch ID this upload link is associated with"
     )
+    class_id: str | None = Field(
+        default=None,
+        description="The specific class ID this upload link is associated with"
+    )
     title: str = Field(
         ...,
         max_length=100,
@@ -116,6 +120,7 @@ class UploadLinkResponse(BaseModel):
     id: PydanticObjectId
     department_id: PydanticObjectId
     batch_id: str | None = None
+    class_id: str | None = None
     token: str
     slug: str
     title: str | None = None

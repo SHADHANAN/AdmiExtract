@@ -14,50 +14,7 @@ interface StudentState {
   deleteSubmission: (id: string) => void
 }
 
-const initialSubmissions: StudentSubmission[] = [
-  {
-    id: 'sub_1',
-    batchId: 'batch_1',
-    batchName: 'AIML 2025-2029',
-    registerNum: '24AM001',
-    name: 'Rahul Sharma',
-    mobile: '9876543210',
-    email: 'rahul.s@example.com',
-    status: 'Submitted',
-    aiStatus: 'Processing',
-    submittedAt: '2026-07-30 10:15',
-    documents: [
-      { reqName: 'Aadhaar Card', fileName: 'Aadhaar_Rahul.pdf', fileSizeMb: 2.1, fileType: 'PDF', status: 'Uploaded', uploadedAt: '2026-07-30 10:10', fileUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800' },
-      { reqName: 'Birth Certificate', fileName: 'BirthCert_Rahul.jpg', fileSizeMb: 1.4, fileType: 'JPG', status: 'Uploaded', uploadedAt: '2026-07-30 10:11', fileUrl: 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?w=800' },
-      { reqName: 'Community Certificate', fileName: 'Community_Rahul.pdf', fileSizeMb: 0.9, fileType: 'PDF', status: 'Uploaded', uploadedAt: '2026-07-30 10:12', fileUrl: 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=800' },
-      { reqName: 'Income Certificate', status: 'Not Available' },
-      { reqName: 'SSLC Marksheet', fileName: 'SSLC_Rahul.pdf', fileSizeMb: 3.2, fileType: 'PDF', status: 'Uploaded', uploadedAt: '2026-07-30 10:13', fileUrl: 'https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?w=800' },
-      { reqName: 'HSC Marksheet', fileName: 'HSC_Rahul.pdf', fileSizeMb: 3.5, fileType: 'PDF', status: 'Uploaded', uploadedAt: '2026-07-30 10:14', fileUrl: 'https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?w=800' },
-      { reqName: 'Transfer Certificate', status: 'Not Available' },
-    ],
-  },
-  {
-    id: 'sub_2',
-    batchId: 'batch_1',
-    batchName: 'AIML 2025-2029',
-    registerNum: '24AM002',
-    name: 'Kumar V',
-    mobile: '9812345678',
-    email: 'kumar.v@example.com',
-    status: 'Verified',
-    aiStatus: 'Complete',
-    submittedAt: '2026-07-29 16:45',
-    documents: [
-      { reqName: 'Aadhaar Card', fileName: 'Aadhaar_Kumar.pdf', fileSizeMb: 1.8, fileType: 'PDF', status: 'Uploaded', uploadedAt: '2026-07-29 16:40', fileUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800' },
-      { reqName: 'Birth Certificate', fileName: 'BirthCert_Kumar.png', fileSizeMb: 2.3, fileType: 'PNG', status: 'Uploaded', uploadedAt: '2026-07-29 16:41', fileUrl: 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?w=800' },
-      { reqName: 'Community Certificate', fileName: 'Community_Kumar.pdf', fileSizeMb: 1.1, fileType: 'PDF', status: 'Uploaded', uploadedAt: '2026-07-29 16:42', fileUrl: 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=800' },
-      { reqName: 'Income Certificate', fileName: 'Income_Kumar.pdf', fileSizeMb: 1.5, fileType: 'PDF', status: 'Uploaded', uploadedAt: '2026-07-29 16:42', fileUrl: 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=800' },
-      { reqName: 'SSLC Marksheet', fileName: 'SSLC_Kumar.pdf', fileSizeMb: 2.8, fileType: 'PDF', status: 'Uploaded', uploadedAt: '2026-07-29 16:43', fileUrl: 'https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?w=800' },
-      { reqName: 'HSC Marksheet', fileName: 'HSC_Kumar.pdf', fileSizeMb: 3.1, fileType: 'PDF', status: 'Uploaded', uploadedAt: '2026-07-29 16:44', fileUrl: 'https://images.unsplash.com/photo-1606326608606-aa0b62935f2b?w=800' },
-      { reqName: 'Transfer Certificate', fileName: 'TC_Kumar.pdf', fileSizeMb: 1.2, fileType: 'PDF', status: 'Uploaded', uploadedAt: '2026-07-29 16:44', fileUrl: 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=800' },
-    ],
-  },
-]
+const initialSubmissions: StudentSubmission[] = []
 
 export const useStudentStore = create<StudentState>((set) => ({
   submissions: initialSubmissions,

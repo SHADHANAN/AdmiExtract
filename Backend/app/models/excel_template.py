@@ -9,7 +9,8 @@ class ExcelBatchTemplate(Document):
     """
     Beanie Document model representing an Excel template (.xlsx) associated with an Admission Batch.
     """
-    batch_id: Annotated[str, Indexed(unique=True)]
+    batch_id: Annotated[str, Indexed()]
+    class_id: Annotated[str | None, Indexed()] = None
     department_id: str | None = None
     template_filename: str
     file_path: str

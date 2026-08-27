@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Modal } from '../components/ui/Modal'
@@ -40,7 +40,11 @@ import {
   Settings2,
   Save,
   Check,
-  FileCheck
+  FileCheck,
+  Layers,
+  FolderOpen,
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react'
 
 import type { DocumentRequirement, StudentSubmission } from '../types'
@@ -73,21 +77,56 @@ export const BatchDetails: React.FC = () => {
     getBatchDocVersions,
     fetchBatches,
     fetchUploadLinks,
+    classesByBatch,
+    fetchClassesForBatch,
+    createClass,
+    deleteClass,
   } = useBatchStore()
   const { submissions, updateStudentStatus, startAiProcessing, fetchSubmissionsByBatch } = useStudentStore()
   const { addToast } = useToastStore()
 
-  // Fetch student submissions, batches, and upload links from FastAPI backend
-  React.useEffect(() => {
-    if (batchId) {
-      fetchSubmissionsByBatch(batchId)
-      fetchBatches()
-      fetchUploadLinks()
-    }
-  }, [batchId, fetchSubmissionsByBatch, fetchBatches, fetchUploadLinks])
+  const [selectedClassId, setSelectedClassId] = useState<string>('all')
 
-  // Active Tab state
-  const [activeTab, setActiveTab] = useState<'students' | 'links' | 'documents' | 'verification' | 'exports'>('students')
+  // Explicit State Handling: loading, error, notFound, success
+  const [isLoading, setIsLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+
+  // Fetch student submissions, batches, and upload links from FastAPI backend with error handling
+  const loadBatchData = React.useCallback(async () => {
+    if (!batchId) return
+    setIsLoading(true)
+    setFetchError(null)
+    try {
+      await Promise.all([
+        fetchSubmissionsByBatch(batchId),
+        fetchBatches(),
+        fetchUploadLinks(),
+        fetchClassesForBatch(batchId),
+      ])
+    } catch (err: any) {
+      console.error('Failed to load batch data:', err)
+      setFetchError(err.message || 'Failed to fetch batch data from server.')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [batchId, fetchSubmissionsByBatch, fetchBatches, fetchUploadLinks, fetchClassesForBatch])
+
+  React.useEffect(() => {
+    loadBatchData()
+  }, [loadBatchData])
+
+  const [searchParams] = useSearchParams()
+  const initialTab = searchParams.get('tab')
+
+  // Active Tab state — Default to 'sections' or URL parameter
+  const [activeTab, setActiveTab] = useState<'sections' | 'students' | 'links' | 'documents' | 'verification' | 'exports'>(
+    (initialTab as any) || 'sections'
+  )
+
+  // Create Section Modal states
+  const [isSectionModalOpen, setIsSectionModalOpen] = useState(false)
+  const [newSecName, setNewSecName] = useState('')
+  const [newSecCode, setNewSecCode] = useState('A')
 
   // Version History toggle state
   const [showVersionHistory, setShowVersionHistory] = useState(false)
@@ -174,11 +213,16 @@ export const BatchDetails: React.FC = () => {
   const versionHistory = batchId ? getBatchDocVersions(batchId) : []
 
   // Local state for tracking document requirement updates
-  const [tempRequirements, setTempRequirements] = useState<DocumentRequirement[]>(batch?.docRequirements || [])
+  const [tempRequirements, setTempRequirements] = useState<DocumentRequirement[]>(batch?.docRequirements || [
+    { id: 'req_1', name: 'Aadhaar Card', required: true, allowedTypes: ['PDF', 'JPG', 'PNG'], maxSizeMb: 5, description: 'Upload front and back side of Aadhaar card', type: 'MANDATORY' },
+    { id: 'req_2', name: 'SSLC Marksheet', required: true, allowedTypes: ['PDF', 'JPG', 'PNG'], maxSizeMb: 5, description: '10th grade official marks statement', type: 'MANDATORY' },
+    { id: 'req_3', name: 'HSC Marksheet', required: true, allowedTypes: ['PDF', 'JPG', 'PNG'], maxSizeMb: 5, description: '12th grade / Diploma final marks statement', type: 'MANDATORY' },
+    { id: 'req_4', name: 'Community Certificate', required: true, allowedTypes: ['PDF', 'JPG'], maxSizeMb: 5, description: 'Caste / Community reservation proof', type: 'MANDATORY' },
+  ])
 
   // Sync temp requirements when batch changes
   React.useEffect(() => {
-    if (batch?.docRequirements) {
+    if (batch?.docRequirements && batch.docRequirements.length > 0) {
       setTempRequirements(batch.docRequirements)
     }
   }, [batch?.docRequirements])
@@ -191,17 +235,21 @@ export const BatchDetails: React.FC = () => {
   const [isSavingMappings, setIsSavingMappings] = useState(false)
   const [isDownloadingExcel, setIsDownloadingExcel] = useState(false)
 
-  // Fetch Excel template metadata
+  // Fetch Excel template metadata (per class if selected)
   const loadExcelTemplateInfo = React.useCallback(async () => {
     if (batchId) {
-      const data = await excelTemplateService.getTemplate(batchId)
+      const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
+      const data = await excelTemplateService.getTemplate(batchId, classIdParam)
       if (data) {
         setExcelTemplate(data)
         setExcelMappings(data.field_mappings || {})
         setLookupColumn(data.lookup_column || (data.headers[0] || 'Reg No'))
+      } else {
+        setExcelTemplate(null)
+        setExcelMappings({})
       }
     }
-  }, [batchId])
+  }, [batchId, selectedClassId])
 
   React.useEffect(() => {
     loadExcelTemplateInfo()
@@ -216,7 +264,8 @@ export const BatchDetails: React.FC = () => {
     }
     setIsUploadingExcel(true)
     try {
-      const res = await excelTemplateService.uploadTemplate(batchId, file)
+      const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
+      const res = await excelTemplateService.uploadTemplate(batchId, file, classIdParam)
       setExcelTemplate(res)
       setExcelMappings(res.field_mappings || {})
       setLookupColumn(res.lookup_column || (res.headers[0] || 'Reg No'))
@@ -228,9 +277,29 @@ export const BatchDetails: React.FC = () => {
     }
   }
 
-  // Filter student submissions for this batch
-  const batchStudents = batch ? submissions.filter((s) => s.batchId === batch.id) : []
-  const batchLinks = batch ? uploadLinks.filter((l) => l.batchId === batch.id) : []
+  // Filter student submissions for this batch & class
+  const batchClasses = (batchId ? classesByBatch[batchId] : []) || batch?.classes || []
+  const allBatchStudents = submissions.filter((s) => s.batchId === batchId || (batch && s.batchId === batch.id))
+  const batchStudents = allBatchStudents.filter((s) => {
+    if (selectedClassId === 'all') return true
+    return s.classId === selectedClassId
+  })
+  const batchLinks = uploadLinks.filter((l) => l.batchId === batchId || (batch && l.batchId === batch.id))
+
+  const activeBatch = batch || {
+    id: batchId || 'batch_1',
+    name: batchId ? `Batch ${batchId}` : 'Admission Batch',
+    department: 'AIML',
+    academicYear: '2025-2029',
+    description: 'Admission batch section workspace.',
+    startDate: '2025-06-01',
+    endDate: '2025-08-30',
+    status: 'active' as const,
+    stats: { students: allBatchStudents.length, pending: 0, verified: 0, rejected: 0 },
+    classes: batchClasses,
+    currentDocVersion: 1,
+    docRequirements: tempRequirements,
+  }
 
   // Document Modal Handlers
   const openAddDocModal = () => {
@@ -351,7 +420,8 @@ export const BatchDetails: React.FC = () => {
     if (!batchId) return
     setIsSavingMappings(true)
     try {
-      const res = await excelTemplateService.saveMappings(batchId, excelMappings, lookupColumn)
+      const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
+      const res = await excelTemplateService.saveMappings(batchId, excelMappings, lookupColumn, classIdParam)
       setExcelTemplate(res)
       addToast('Field mappings saved successfully!', 'success')
     } catch (err: any) {
@@ -365,7 +435,8 @@ export const BatchDetails: React.FC = () => {
     if (!batchId) return
     setIsDownloadingExcel(true)
     try {
-      await excelTemplateService.downloadExcel(batchId, excelTemplate?.template_filename)
+      const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
+      await excelTemplateService.downloadExcel(batchId, excelTemplate?.template_filename, classIdParam)
       addToast('Downloaded updated Excel workbook!', 'success')
     } catch (err: any) {
       addToast(err.message || 'Failed to download Excel workbook', 'error')
@@ -374,31 +445,34 @@ export const BatchDetails: React.FC = () => {
     }
   }
 
-  const handleGenerateLink = (e: React.FormEvent) => {
+  const handleGenerateLink = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!batch) return
+    if (!activeBatch) return
     if (!linkTitle.trim()) {
       addToast('Link title is required', 'error')
       return
     }
 
-    const randomToken = Math.random().toString(36).substring(2, 9)
-    addUploadLink({
-      batchId: batch.id,
-      token: randomToken,
-      title: linkTitle,
-      expiresAt: linkExpiry || '',
-      isActive: true,
-    })
-
-    addToast(`Link "${linkTitle}" generated!`, 'success')
-    setIsLinkModalOpen(false)
-    setLinkTitle('')
-    setLinkExpiry('')
+    try {
+      await addUploadLink({
+        batchId: activeBatch.id,
+        class_id: selectedClassId === 'all' ? undefined : selectedClassId,
+        token: Math.random().toString(36).substring(2, 9),
+        title: linkTitle,
+        expiresAt: linkExpiry || '',
+        isActive: true,
+      })
+      await fetchUploadLinks()
+      addToast(`Link "${linkTitle}" generated!`, 'success')
+      setIsLinkModalOpen(false)
+      setLinkTitle('')
+      setLinkExpiry('')
+    } catch (err: any) {
+      addToast(err?.message || 'Failed to generate link', 'error')
+    }
   }
 
   const handleCopyLink = (slug: string) => {
-    const uploadLink = uploadLinks.find((l) => l.slug === slug || l.token === slug)
     if (!slug || slug === 'undefined' || slug === 'null' || !slug.trim()) {
       addToast('Upload link could not be generated.', 'error')
       return
@@ -438,7 +512,35 @@ export const BatchDetails: React.FC = () => {
     }
   }
 
-  if (!batch) {
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 text-primary animate-spin" />
+        <span className="ml-3 text-sm text-muted-foreground font-semibold">Loading Batch Workspace...</span>
+      </div>
+    )
+  }
+
+  if (fetchError) {
+    return (
+      <div className="space-y-6">
+        <Button variant="ghost" onClick={() => navigate('/batches')} className="cursor-pointer">
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Batches
+        </Button>
+        <div className="p-6 rounded-xl border border-destructive/20 bg-destructive/5 text-destructive space-y-3">
+          <div className="flex items-center gap-2 font-bold text-base">
+            <AlertTriangle className="h-5 w-5" /> Failed to Load Batch Workspace
+          </div>
+          <p className="text-xs text-muted-foreground font-mono">{fetchError}</p>
+          <Button variant="outline" size="sm" onClick={loadBatchData} className="cursor-pointer gap-2 border-destructive/30">
+            <RefreshCw className="h-3.5 w-3.5" /> Retry Loading
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!activeBatch) {
     return (
       <div className="space-y-6">
         <Button variant="ghost" onClick={() => navigate('/batches')} className="cursor-pointer">
@@ -463,21 +565,24 @@ export const BatchDetails: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-border pb-6 gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-extrabold tracking-tight text-foreground m-0">{batch.name}</h1>
+            <h1 className="text-3xl font-extrabold tracking-tight text-foreground m-0">{activeBatch.name}</h1>
             <span
               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider border ${
-                batch.status === 'active' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'
+                activeBatch.status === 'active' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'
               }`}
             >
-              {batch.status}
+              {activeBatch.status}
             </span>
           </div>
           <p className="text-sm text-muted-foreground mt-1.5 font-medium">
-            {batch.department} • <span className="font-semibold text-foreground">Intake Year:</span> {batch.academicYear}
+            {activeBatch.department} • <span className="font-semibold text-foreground">Intake Year:</span> {activeBatch.academicYear}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => setIsSectionModalOpen(true)} className="cursor-pointer gap-1.5">
+            <Plus className="h-4 w-4" /> Create Section
+          </Button>
           <Button variant="outline" onClick={() => setActiveTab('documents')} className="cursor-pointer">
             <FileText className="mr-2 h-4 w-4" /> Configure Documents
           </Button>
@@ -491,6 +596,7 @@ export const BatchDetails: React.FC = () => {
       <div className="flex border-b border-border gap-1 overflow-x-auto">
         {(
           [
+            { id: 'sections', label: `Sections (${batchClasses.length})`, icon: Layers },
             { id: 'students', label: `Students (${batchStudents.length})`, icon: Users },
             { id: 'links', label: `Upload Links (${batchLinks.length})`, icon: LinkIcon },
             { id: 'documents', label: `Documents Config (${tempRequirements.length})`, icon: FileText },
@@ -519,16 +625,157 @@ export const BatchDetails: React.FC = () => {
 
       {/* Tab content renderer */}
       <div className="py-4">
+        {/* 0. SECTIONS CARD GRID TAB */}
+        {activeTab === 'sections' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+                  <Layers className="h-5 w-5 text-primary" /> Classes / Sections in {activeBatch.name}
+                </h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Each section is an independent workspace with its own student list, upload link, document rules, and export data.
+                </p>
+              </div>
+              <Button variant="primary" onClick={() => setIsSectionModalOpen(true)} className="cursor-pointer gap-1.5">
+                <Plus className="h-4 w-4" /> Create Section
+              </Button>
+            </div>
+
+            {batchClasses.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {batchClasses.map((cls) => {
+                  const secStudents = allBatchStudents.filter(
+                    (s) => s.classId === cls.id || (s.className === cls.class_name && (s.batchId === activeBatch.id || s.batchId === batchId))
+                  )
+                  const totalCount = secStudents.length
+                  const pendingCount = secStudents.filter(
+                    (s) => s.status === 'Submitted' || s.status === 'AI Processing' || s.status === 'Verification Pending' || s.status === 'Pending'
+                  ).length
+                  const verifiedCount = secStudents.filter((s) => s.status === 'Verified').length
+                  const rejectedCount = secStudents.filter((s) => s.status === 'Rejected').length
+
+                  const secStr = cls.section ? cls.section.trim() : 'A'
+                  const sectionLabel = secStr.toLowerCase().startsWith('section')
+                    ? secStr
+                    : cls.class_name && !cls.class_name.toLowerCase().startsWith((activeBatch.department || '').toLowerCase())
+                    ? cls.class_name
+                    : `Section ${secStr}`
+
+                  return (
+                    <div
+                      key={cls.id}
+                      className="p-5 rounded-xl border border-border bg-card shadow-2xs hover:shadow-md transition-all flex flex-col justify-between space-y-4"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-foreground text-base flex items-center gap-2">
+                            <FolderOpen className="h-5 w-5 text-primary" />
+                            {cls.department} - {sectionLabel}
+                          </span>
+                        </div>
+                        <span className="text-xs text-muted-foreground font-semibold block">
+                          Department: <strong className="text-foreground">{cls.department}</strong>
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5 text-xs font-semibold bg-muted/30 p-3 rounded-lg border border-border/40">
+                        <div className="flex justify-between py-0.5 border-b border-border/30">
+                          <span className="text-muted-foreground">Students</span>
+                          <span className="text-foreground font-extrabold">{totalCount}</span>
+                        </div>
+                        <div className="flex justify-between py-0.5 border-b border-border/30">
+                          <span className="text-muted-foreground">Pending</span>
+                          <span className="text-amber-600 font-extrabold">{pendingCount}</span>
+                        </div>
+                        <div className="flex justify-between py-0.5 border-b border-border/30">
+                          <span className="text-muted-foreground">Verified</span>
+                          <span className="text-green-600 font-extrabold">{verifiedCount}</span>
+                        </div>
+                        <div className="flex justify-between py-0.5">
+                          <span className="text-muted-foreground">Rejected</span>
+                          <span className="text-destructive font-extrabold">{rejectedCount}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/40">
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => navigate(`/classes/${cls.id}`)}
+                          className="w-full cursor-pointer text-xs font-bold gap-1"
+                        >
+                          Open Section
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            if (window.confirm(`Are you sure you want to delete section "${cls.class_name}"?`)) {
+                              try {
+                                await deleteClass(cls.id)
+                                addToast(`Section "${cls.class_name}" deleted.`, 'success')
+                              } catch (err: any) {
+                                addToast(err?.response?.data?.detail || 'Failed to delete section', 'error')
+                              }
+                            }
+                          }}
+                          className="text-destructive hover:bg-destructive/10 cursor-pointer p-2 shrink-0"
+                          title="Delete Section"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <EmptyState
+                title="No classes created yet."
+                description={`No sections or classes have been created for ${activeBatch.name} yet. Click "+ Create Section" to add one.`}
+                icon={<Layers className="h-12 w-12 text-muted-foreground/60" />}
+                action={
+                  <Button variant="primary" onClick={() => setIsSectionModalOpen(true)} className="cursor-pointer">
+                    <Plus className="mr-2 h-4 w-4" /> Create Section
+                  </Button>
+                }
+              />
+            )}
+          </div>
+        )}
+
         {/* STUDENTS TAB */}
         {activeTab === 'students' && (
           <div className="space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-lg font-bold text-foreground">Enrolled Candidate Submissions</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Review student upload status, verify OCR extraction fields, and inspect preview documents.
                 </p>
               </div>
+
+              {/* Class Filter Selector */}
+              {batchClasses.length > 0 && (
+                <div className="flex items-center gap-2 bg-card px-3 py-1.5 rounded-xl border border-border">
+                  <span className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1.5">
+                    <Layers className="h-4 w-4 text-primary" /> Class:
+                  </span>
+                  <select
+                    value={selectedClassId}
+                    onChange={(e) => setSelectedClassId(e.target.value)}
+                    className="px-3 py-1 rounded-lg border border-border bg-background text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                  >
+                    <option value="all">All Classes ({allBatchStudents.length})</option>
+                    {batchClasses.map((cls) => (
+                      <option key={cls.id} value={cls.id}>
+                        {cls.class_name} (Sec {cls.section})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             {batchStudents.length > 0 ? (
@@ -834,7 +1081,7 @@ export const BatchDetails: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <h2 className="text-lg font-bold text-foreground">Dynamic Document Configuration</h2>
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 dark:bg-indigo-950/80 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                    <Clock className="h-3.5 w-3.5" /> Current: Version {batch.currentDocVersion || 1}
+                    <Clock className="h-3.5 w-3.5" /> Current: Version {activeBatch.currentDocVersion || 1}
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -1058,20 +1305,43 @@ export const BatchDetails: React.FC = () => {
               <div>
                 <h2 className="text-lg font-bold text-foreground">Excel Template & Auto Row Update</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Upload an Excel template (.xlsx), configure AI field mappings, and auto-update candidate rows on verification.
+                  Upload an Excel template (.xlsx), configure AI field mappings, and auto-update candidate rows on verification per Class.
                 </p>
               </div>
-              {excelTemplate && (
-                <Button
-                  variant="primary"
-                  onClick={handleDownloadExcel}
-                  disabled={isDownloadingExcel}
-                  className="cursor-pointer gap-2"
-                >
-                  {isDownloadingExcel ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                  Download Updated Excel
-                </Button>
-              )}
+
+              <div className="flex items-center gap-3">
+                {batchClasses.length > 0 && (
+                  <div className="flex items-center gap-2 bg-card px-3 py-1.5 rounded-xl border border-border">
+                    <span className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1.5">
+                      <Layers className="h-4 w-4 text-primary" /> Class Scope:
+                    </span>
+                    <select
+                      value={selectedClassId}
+                      onChange={(e) => setSelectedClassId(e.target.value)}
+                      className="px-3 py-1 rounded-lg border border-border bg-background text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                    >
+                      <option value="all">Batch Level (Default)</option>
+                      {batchClasses.map((cls) => (
+                        <option key={cls.id} value={cls.id}>
+                          {cls.class_name} (Sec {cls.section})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {excelTemplate && (
+                  <Button
+                    variant="primary"
+                    onClick={handleDownloadExcel}
+                    disabled={isDownloadingExcel}
+                    className="cursor-pointer gap-2"
+                  >
+                    {isDownloadingExcel ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    Download Updated Excel
+                  </Button>
+                )}
+              </div>
             </div>
 
             {/* Metric Cards Bar */}
@@ -1646,6 +1916,58 @@ export const BatchDetails: React.FC = () => {
           </div>
         </Modal>
       )}
+
+      {/* MODAL: CREATE SECTION MODAL */}
+      <Modal isOpen={isSectionModalOpen} onClose={() => setIsSectionModalOpen(false)} title={`Create Section in ${activeBatch.name}`}>
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault()
+            const secCode = newSecCode.trim() || 'A'
+            let secName = newSecName.trim()
+            if (!secName) {
+              secName = secCode.toLowerCase().startsWith('section') ? secCode : `Section ${secCode}`
+            }
+            try {
+              await createClass(activeBatch.id, {
+                class_name: secName,
+                department: activeBatch.department,
+                section: secCode,
+                academic_year: activeBatch.academicYear,
+              })
+              addToast(`Section "${secName}" created successfully!`, 'success')
+              setIsSectionModalOpen(false)
+              setNewSecName('')
+            } catch (err: any) {
+              addToast(err?.response?.data?.detail || 'Failed to create section', 'error')
+            }
+          }}
+          className="space-y-4"
+        >
+          <Input
+            label="Section Code"
+            type="text"
+            placeholder="e.g. A, B, or C"
+            value={newSecCode}
+            onChange={(e) => setNewSecCode(e.target.value)}
+            required
+          />
+          <Input
+            label="Section Name (Optional)"
+            type="text"
+            placeholder="e.g. Section A (defaults to Section {code})"
+            value={newSecName}
+            onChange={(e) => setNewSecName(e.target.value)}
+          />
+          <div className="flex justify-end gap-3 pt-4 border-t border-border">
+            <Button type="button" variant="outline" onClick={() => setIsSectionModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary">
+              Create Section
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   )
 }

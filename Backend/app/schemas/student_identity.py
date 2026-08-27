@@ -20,3 +20,5 @@ class StudentIdentityVerifyResponse(BaseModel):
     """
     batch_id: str
     batch_name: str
+    class_id: str | None = None
+    class_name: str | None = None

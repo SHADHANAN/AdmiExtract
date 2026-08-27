@@ -1,4 +1,4 @@
-export type UserRole = 'super_admin' | 'department_admin';
+export type UserRole = 'super_admin' | 'department_admin' | 'student';
 
 export interface User {
   id: string;
@@ -56,7 +56,8 @@ export type StudentVerificationStatus =
   | 'AI Processing' 
   | 'Verification Pending' 
   | 'Verified' 
-  | 'Rejected';
+  | 'Rejected'
+  | 'Pending';
 export type AiProcessingStatus = 'Complete' | 'Processing' | 'Requires Review';
 
 export interface StudentDocumentSubmission {
@@ -81,10 +82,23 @@ export interface DocumentConfigurationVersion {
   createdAt: string;
 }
 
+export interface BatchClass {
+  id: string;
+  batch_id: string;
+  class_name: string;
+  department: string;
+  section: string;
+  academic_year: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface StudentSubmission {
   id: string;
   batchId: string;
   batchName?: string;
+  classId?: string;
+  className?: string;
   registerNum: string;
   name: string;
   mobile: string;
@@ -108,6 +122,7 @@ export interface Batch {
   endDate?: string;
   status: BatchStatus;
   stats: BatchStats;
+  classes?: BatchClass[];
   currentDocVersion?: number;
   docRequirements?: DocumentRequirement[];
 }
@@ -116,7 +131,8 @@ export interface UploadLink {
   id: string;
   batchId: string;
   token: string;
-  slug: string;
+  slug?: string;
+  class_id?: string | null;
   title?: string;
   expiresAt: string;
   isActive: boolean;
@@ -127,9 +143,16 @@ export interface BatchState {
   batches: Batch[];
   uploadLinks: UploadLink[];
   docVersions: Record<string, DocumentConfigurationVersion[]>;
+  classesByBatch: Record<string, BatchClass[]>;
   fetchBatches: () => Promise<void>;
   fetchUploadLinks: () => Promise<void>;
+  fetchClassesForBatch: (batchId: string) => Promise<BatchClass[]>;
+  createClass: (batchId: string, data: { class_name: string; department: string; section: string; academic_year: string }) => Promise<BatchClass>;
+  updateClass: (classId: string, data: Partial<{ class_name: string; department: string; section: string; academic_year: string }>) => Promise<BatchClass>;
+  deleteClass: (classId: string) => Promise<void>;
   addBatch: (batch: Omit<Batch, 'id' | 'stats'>) => void;
+  updateBatch: (batchId: string, data: Partial<Omit<Batch, 'id' | 'stats'>>) => Promise<void>;
+  deleteBatch: (batchId: string) => Promise<void>;
   updateBatchRequirements: (
     batchId: string,
     requirements: DocumentRequirement[],
@@ -137,7 +160,7 @@ export interface BatchState {
     createdBy?: string
   ) => void;
   getBatchDocVersions: (batchId: string) => DocumentConfigurationVersion[];
-  addUploadLink: (link: Omit<UploadLink, 'id' | 'submissionCount'>) => void;
+  addUploadLink: (link: Partial<UploadLink> & { batchId: string }) => Promise<UploadLink>;
   toggleUploadLink: (linkId: string) => void;
   updateUploadLinkExpiry: (linkId: string, expiresAt: string | null) => Promise<void>;
   deleteUploadLink: (linkId: string) => void;

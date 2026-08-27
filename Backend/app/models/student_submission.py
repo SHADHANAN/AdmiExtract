@@ -20,6 +20,8 @@ class StudentSubmission(Document):
     """
     batch_id: Annotated[str, Indexed()]
     batch_name: str | None = None
+    class_id: Annotated[str | None, Indexed()] = None
+    class_name: str | None = None
     department_id: str | None = None
     student_name: str
     register_number: Annotated[str, Indexed()]

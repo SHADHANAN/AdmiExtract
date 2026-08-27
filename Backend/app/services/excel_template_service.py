@@ -33,10 +33,10 @@ class ExcelTemplateService:
     def __init__(self, repository: ExcelTemplateRepository | None = None):
         self.repository = repository or ExcelTemplateRepository()
 
-    async def upload_template(self, batch_id: str, file: UploadFile) -> ExcelBatchTemplate:
+    async def upload_template(self, batch_id: str, file: UploadFile, class_id: str | None = None) -> ExcelBatchTemplate:
         """
         Validate .xlsx file, store on disk, parse column headers via openpyxl,
-        and save template metadata in MongoDB.
+        and save template metadata in MongoDB. Supports optional class_id.
         """
         if not file.filename or not file.filename.lower().endswith(".xlsx"):
             raise HTTPException(
@@ -44,7 +44,8 @@ class ExcelTemplateService:
                 detail="Only .xlsx Excel files are allowed. Please upload a valid Excel workbook.",
             )
 
-        file_path = os.path.join(UPLOAD_DIR, f"{batch_id}.xlsx")
+        file_key = f"{batch_id}_{class_id}" if class_id else batch_id
+        file_path = os.path.join(UPLOAD_DIR, f"{file_key}.xlsx")
         
         # Save file to disk
         contents = await file.read()
@@ -87,6 +88,7 @@ class ExcelTemplateService:
 
             template = ExcelBatchTemplate(
                 batch_id=batch_id,
+                class_id=class_id,
                 department_id=department_id,
                 template_filename=file.filename,
                 file_path=file_path,
@@ -104,19 +106,19 @@ class ExcelTemplateService:
                 detail=f"Failed to process Excel workbook: {str(e)}",
             )
 
-    async def get_template_by_batch(self, batch_id: str) -> ExcelBatchTemplate | None:
-        """Retrieve Excel template metadata for a batch."""
-        return await self.repository.get_by_batch_id(batch_id)
+    async def get_template_by_batch(self, batch_id: str, class_id: str | None = None) -> ExcelBatchTemplate | None:
+        """Retrieve Excel template metadata for a batch or class."""
+        return await self.repository.get_by_batch_id(batch_id, class_id=class_id)
 
     async def update_mappings(
-        self, batch_id: str, field_mappings: dict[str, str], lookup_column: str
+        self, batch_id: str, field_mappings: dict[str, str], lookup_column: str, class_id: str | None = None
     ) -> ExcelBatchTemplate:
         """Update field mappings and lookup column."""
-        updated = await self.repository.update_mappings(batch_id, field_mappings, lookup_column)
+        updated = await self.repository.update_mappings(batch_id, field_mappings, lookup_column, class_id=class_id)
         if not updated:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No Excel template found for Admission Batch '{batch_id}'. Please upload a template first.",
+                detail=f"No Excel template found for Admission Batch '{batch_id}' (Class: '{class_id}'). Please upload a template first.",
             )
         return updated
 
@@ -295,10 +297,22 @@ class ExcelTemplateService:
     def _resolve_header_value(self, header: str, data_dict: dict[str, Any]) -> Any:
         """
         Flexible lookup matcher that resolves a value for an Excel column header from student data
-        using priority ordered field aliases.
+        using priority ordered field aliases. Returns None for missing/placeholder values.
         """
         if not header or not data_dict:
             return None
+
+        def _clean_val(v: Any) -> Any:
+            if v is None:
+                return None
+            if isinstance(v, dict):
+                v = v.get("value")
+            if v is None:
+                return None
+            v_str = str(v).strip()
+            if not v_str or v_str.lower() in ["null", "none", "n/a", "not detected"]:
+                return None
+            return v
 
         from app.utils.field_canonicalizer import get_aliases_for_header
         aliases = get_aliases_for_header(header)
@@ -306,18 +320,22 @@ class ExcelTemplateService:
         # Check aliases in priority order
         for alias in aliases:
             alias_lower = alias.lower()
-            for k, v in data_dict.items():
-                if k and k.strip().lower() == alias_lower and v is not None and str(v).strip() != "":
-                    return v
+            for k, raw_v in data_dict.items():
+                if k and k.strip().lower() == alias_lower:
+                    val = _clean_val(raw_v)
+                    if val is not None:
+                        return val
 
         # Fallback to key or substring matches in data_dict
         header_lower = header.strip().lower()
-        for k, v in data_dict.items():
+        for k, raw_v in data_dict.items():
             if not k:
                 continue
             k_lower = k.strip().lower()
-            if (header_lower in k_lower or k_lower in header_lower) and v is not None and str(v).strip() != "":
-                return v
+            if header_lower in k_lower or k_lower in header_lower:
+                val = _clean_val(raw_v)
+                if val is not None:
+                    return val
 
         return None
 
@@ -326,6 +344,7 @@ class ExcelTemplateService:
         batch_id: str,
         register_number: str,
         student_data: dict[str, Any],
+        class_id: str | None = None,
     ) -> bool:
         """
         Template-driven Excel output generator:
@@ -335,14 +354,14 @@ class ExcelTemplateService:
         4. If not found -> append a NEW row at the end of the sheet.
         5. For every column header, write matching value from student_data or leave blank.
         """
-        template = await self.repository.get_by_batch_id(batch_id)
+        template = await self.repository.get_by_batch_id(batch_id, class_id=class_id)
         if not template or not os.path.exists(template.file_path):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Master Excel template file not found for admission batch '{batch_id}'.",
+                detail=f"Master Excel template file not found for admission batch '{batch_id}' (class: '{class_id}').",
             )
 
-        lock = _get_batch_lock(batch_id)
+        lock = _get_batch_lock(f"{batch_id}_{class_id}" if class_id else batch_id)
 
         async with lock:
             self._create_backup(template.file_path, batch_id)
@@ -404,12 +423,12 @@ class ExcelTemplateService:
                 for header_name, col_idx in header_col_map.items():
                     val = self._resolve_header_value(header_name, student_data)
                     cell = sheet.cell(row=target_row, column=col_idx)
-                    cell.value = val if val is not None else ""
+                    cell.value = val  # openpyxl None creates a truly blank cell
 
                 wb.save(template.file_path)
                 wb.close()
 
-                await self.repository.increment_updated_count(batch_id)
+                await self.repository.increment_updated_count(batch_id, class_id=class_id)
                 print(f"[Excel Append/Update] Successfully saved Row {target_row} to {template.file_path}", flush=True)
                 return True
 
@@ -426,20 +445,21 @@ class ExcelTemplateService:
         register_number: str,
         extracted_data: dict[str, str | int | float | None],
         row_index: int | None = None,
+        class_id: str | None = None,
     ) -> bool:
         """
         Locate candidate row in Excel workbook matching register_number using openpyxl,
         write mapped extracted fields into corresponding row cells while keeping formatting intact,
         and save updated workbook safely with concurrency locks and pre-write backups.
         """
-        template = await self.repository.get_by_batch_id(batch_id)
+        template = await self.repository.get_by_batch_id(batch_id, class_id=class_id)
         if not template or not os.path.exists(template.file_path):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Master Excel file not found for admission batch '{batch_id}'.",
             )
 
-        lock = _get_batch_lock(batch_id)
+        lock = _get_batch_lock(f"{batch_id}_{class_id}" if class_id else batch_id)
 
         async with lock:
             backup_path = self._create_backup(template.file_path, batch_id)
@@ -505,7 +525,7 @@ class ExcelTemplateService:
                 wb.close()
 
                 # Increment updated count in database
-                await self.repository.increment_updated_count(batch_id)
+                await self.repository.increment_updated_count(batch_id, class_id=class_id)
                 return True
 
             except HTTPException:

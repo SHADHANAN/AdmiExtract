@@ -14,6 +14,7 @@ export interface CreateBatchInput {
 export interface CreateUploadLinkInput {
   department_id: string
   batch_id?: string
+  class_id?: string
   title: string
   description?: string
   expires_at?: string
