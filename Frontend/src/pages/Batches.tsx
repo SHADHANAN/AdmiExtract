@@ -10,6 +10,7 @@ import { useToastStore } from '../store/useToastStore'
 import { FolderOpen, Plus, Search, Calendar, Share2, Layers, Edit3, Trash2 } from 'lucide-react'
 
 import { api } from '../services/api'
+import { copyToClipboard } from '../utils/clipboard'
 import type { BatchClass, Batch } from '../types'
 
 export const Batches: React.FC = () => {
@@ -196,7 +197,6 @@ export const Batches: React.FC = () => {
       />
 
       {/* Search & Filter Controls */}
-<<<<<<< HEAD
       <div className="flex flex-col md:flex-row gap-3.5 bg-[#0F172A]/70 p-4 rounded-2xl border border-white/[0.08] shadow-lg shadow-black/20">
         <div className="relative flex-1">
           <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-500" />
@@ -218,89 +218,40 @@ export const Batches: React.FC = () => {
             <option value="" className="bg-[#111827] text-white">All Departments</option>
             {uniqueDepts.map((d) => (
               <option key={d} value={d} className="bg-[#111827] text-white">{d}</option>
-=======
-      <div className="flex flex-col md:flex-row gap-4 bg-card p-4 rounded-xl border border-border">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search batches..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <select
-            value={selectedDept}
-            onChange={(e) => setSelectedDept(e.target.value)}
-            className="px-3 py-2 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="">All Departments</option>
-            {uniqueDepts.map((d) => (
-              <option key={d} value={d}>{d}</option>
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
             ))}
           </select>
 
           <select
             value={selectedYear}
             onChange={(e) => setSelectedYear(e.target.value)}
-<<<<<<< HEAD
             className="px-3.5 py-2 border border-white/[0.08] rounded-xl bg-[#111827]/80 text-xs font-semibold text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 hover:border-white/[0.18] cursor-pointer"
           >
             <option value="" className="bg-[#111827] text-white">All Academic Years</option>
             {uniqueYears.map((y) => (
               <option key={y} value={y} className="bg-[#111827] text-white">{y}</option>
-=======
-            className="px-3 py-2 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="">All Years</option>
-            {uniqueYears.map((y) => (
-              <option key={y} value={y}>{y}</option>
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
             ))}
           </select>
 
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-<<<<<<< HEAD
             className="px-3.5 py-2 border border-white/[0.08] rounded-xl bg-[#111827]/80 text-xs font-semibold text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 hover:border-white/[0.18] cursor-pointer"
           >
             <option value="" className="bg-[#111827] text-white">All Statuses</option>
             <option value="active" className="bg-[#111827] text-white">Active</option>
             <option value="closed" className="bg-[#111827] text-white">Closed</option>
             <option value="archived" className="bg-[#111827] text-white">Archived</option>
-=======
-            className="px-3 py-2 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="closed">Closed</option>
-            <option value="archived">Archived</option>
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
           </select>
         </div>
       </div>
 
       {/* Batch Cards Grid */}
-<<<<<<< HEAD
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {filteredBatches.map((batch) => {
           const statusColors = {
             active: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
             closed: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
             archived: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
-=======
-      <div className="grid gap-6 md:grid-cols-3">
-        {filteredBatches.map((batch) => {
-          const statusColors = {
-            active: 'bg-green-100 text-green-800 border-green-200',
-            closed: 'bg-red-100 text-red-800 border-red-200',
-            archived: 'bg-gray-100 text-gray-800 border-gray-200',
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
           }
 
           const classesList: BatchClass[] = batch.classes || []
@@ -309,7 +260,6 @@ export const Batches: React.FC = () => {
             <Card
               key={batch.id}
               onClick={() => navigate(`/batches/${batch.id}`)}
-<<<<<<< HEAD
               className="group relative flex flex-col justify-between hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-300 hover:-translate-y-1 cursor-pointer rounded-2xl border border-white/[0.08] overflow-hidden bg-[#111827]"
             >
               <div className="h-1.5 w-full bg-gradient-to-r from-indigo-500 via-indigo-600 to-purple-600" />
@@ -320,40 +270,20 @@ export const Batches: React.FC = () => {
                     <FolderOpen className="h-5 w-5" />
                   </div>
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${statusColors[batch.status]}`}>
-=======
-              className="group relative flex flex-col justify-between hover:shadow-lg transition-all duration-300 hover:translate-y-[-3px] cursor-pointer rounded-xl border border-border overflow-hidden"
-            >
-              <div className="h-1.5 w-full bg-primary" />
-              
-              <CardHeader className="pb-3">
-                <div className="flex justify-between items-start">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <FolderOpen className="h-5 w-5" />
-                  </div>
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${statusColors[batch.status]}`}>
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                     {batch.status}
                   </span>
                 </div>
                 <div className="mt-3">
-<<<<<<< HEAD
                   <CardTitle className="text-lg font-bold text-white group-hover:text-indigo-400 transition-colors truncate">
                     {batch.name}
                   </CardTitle>
                   <CardDescription className="text-xs font-semibold uppercase tracking-wider text-slate-400 mt-1">
-=======
-                  <CardTitle className="text-xl font-bold group-hover:text-primary transition-colors">
-                    {batch.name}
-                  </CardTitle>
-                  <CardDescription className="text-xs font-medium uppercase tracking-wider text-muted-foreground mt-1">
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                     {batch.department}
                   </CardDescription>
                 </div>
               </CardHeader>
 
               <CardContent className="space-y-4 pt-0">
-<<<<<<< HEAD
                 <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed min-h-[2rem]">
                   {batch.description || 'Institutional admission batch cohort.'}
                 </p>
@@ -365,24 +295,10 @@ export const Batches: React.FC = () => {
                     <span>Dept: <strong className="text-indigo-400">{batch.department}</strong></span>
                   </div>
                   <span className="px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/20 text-[11px] font-bold">
-=======
-                <p className="text-sm text-muted-foreground line-clamp-2">
-                  {batch.description || 'No description provided.'}
-                </p>
-
-                {/* Batch Section Summary Indicator */}
-                <div className="bg-muted/40 p-3 rounded-lg border border-border/60 flex items-center justify-between text-xs font-semibold text-foreground">
-                  <div className="flex items-center gap-2">
-                    <Layers className="h-4 w-4 text-primary" />
-                    <span>Department: <strong className="text-primary">{batch.department}</strong></span>
-                  </div>
-                  <span className="px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 text-xs font-bold">
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                     {classesList.length} {classesList.length === 1 ? 'Section' : 'Sections'}
                   </span>
                 </div>
 
-<<<<<<< HEAD
                 {/* Real Stats Section (No Fake Analytics) */}
                 <div className="grid grid-cols-4 gap-1.5 bg-[#0F172A]/50 p-2.5 rounded-xl border border-white/[0.06] text-center">
                   <div>
@@ -409,33 +325,6 @@ export const Batches: React.FC = () => {
                     <span>{batch.academicYear}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-=======
-                {/* Stats Section */}
-                <div className="grid grid-cols-4 gap-2 bg-secondary/30 p-2.5 rounded-lg border border-border/50 text-center">
-                  <div>
-                    <div className="text-xs text-muted-foreground">Students</div>
-                    <div className="text-sm font-bold text-foreground mt-0.5">{batch.stats.students}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Pending</div>
-                    <div className="text-sm font-bold text-amber-600 mt-0.5">{batch.stats.pending}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Verified</div>
-                    <div className="text-sm font-bold text-green-600 mt-0.5">{batch.stats.verified}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-muted-foreground">Rejected</div>
-                    <div className="text-sm font-bold text-destructive mt-0.5">{batch.stats.rejected}</div>
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center text-xs text-muted-foreground pt-2 border-t border-border/50">
-                  <div className="flex items-center gap-1">
-                    <Calendar className="h-3.5 w-3.5" /> {batch.academicYear}
-                  </div>
-                  <div className="flex gap-2">
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                     <Button
                       size="sm"
                       variant="outline"
@@ -443,18 +332,14 @@ export const Batches: React.FC = () => {
                         e.stopPropagation()
                         navigate(`/batches/${batch.id}`)
                       }}
-<<<<<<< HEAD
                       className="cursor-pointer text-xs"
-=======
-                      className="cursor-pointer"
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                     >
                       Open
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         e.stopPropagation()
                         const uploadLink = uploadLinks.find((l) => l.batchId === batch.id && l.isActive) || uploadLinks.find((l) => l.batchId === batch.id)
                         const slug = uploadLink?.slug || uploadLink?.token
@@ -463,14 +348,15 @@ export const Batches: React.FC = () => {
                           return
                         }
                         const url = `${window.location.origin}/upload/${slug}`
-                        navigator.clipboard.writeText(url)
-                        addToast('Upload portal URL copied to clipboard!', 'success')
+                        try {
+                          await copyToClipboard(url)
+                          addToast('Upload portal URL copied to clipboard!', 'success')
+                        } catch (err) {
+                          console.error('Failed to copy portal URL:', err)
+                          addToast('Failed to copy link to clipboard.', 'error')
+                        }
                       }}
-<<<<<<< HEAD
                       className="cursor-pointer p-1.5"
-=======
-                      className="cursor-pointer"
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                       title="Share Portal Link"
                     >
                       <Share2 className="h-4 w-4" />
@@ -482,11 +368,7 @@ export const Batches: React.FC = () => {
                         e.stopPropagation()
                         openEditModal(batch)
                       }}
-<<<<<<< HEAD
                       className="cursor-pointer p-1.5 text-muted-foreground hover:text-foreground"
-=======
-                      className="cursor-pointer text-muted-foreground hover:text-foreground"
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                       title="Edit Batch"
                     >
                       <Edit3 className="h-4 w-4" />
@@ -505,11 +387,7 @@ export const Batches: React.FC = () => {
                           }
                         }
                       }}
-<<<<<<< HEAD
                       className="cursor-pointer p-1.5 text-muted-foreground hover:text-destructive"
-=======
-                      className="cursor-pointer text-muted-foreground hover:text-destructive"
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                       title="Delete Batch"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -523,17 +401,10 @@ export const Batches: React.FC = () => {
       </div>
 
       {filteredBatches.length === 0 && (
-<<<<<<< HEAD
         <div className="flex flex-col items-center justify-center p-12 text-center bg-card rounded-2xl border border-dashed border-border/80">
           <FolderOpen className="h-12 w-12 text-muted-foreground/60 mb-3" />
           <h3 className="text-base font-bold text-foreground tracking-tight">No cohorts found</h3>
           <p className="text-sm text-muted-foreground mt-1 max-w-sm">Try updating your search query or criteria filters to locate admission batches.</p>
-=======
-        <div className="flex flex-col items-center justify-center p-12 text-center bg-card rounded-xl border border-border">
-          <FolderOpen className="h-12 w-12 text-muted-foreground/60 mb-3" />
-          <h3 className="text-base font-semibold text-foreground">No cohorts found</h3>
-          <p className="text-sm text-muted-foreground mt-1">Try updating search query or criteria filters.</p>
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
         </div>
       )}
 

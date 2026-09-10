@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 import React, { useState } from 'react'
-=======
-import React, { useState, useEffect } from 'react'
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
@@ -53,6 +49,7 @@ import {
 
 import type { DocumentRequirement, StudentSubmission } from '../types'
 import { excelTemplateService, type ExcelTemplateResponse } from '../services/excelTemplate'
+import { copyToClipboard } from '../utils/clipboard'
 
 const PRESET_DOCUMENTS = [
   'Aadhaar Card',
@@ -476,15 +473,20 @@ export const BatchDetails: React.FC = () => {
     }
   }
 
-  const handleCopyLink = (slug: string) => {
+  const handleCopyLink = async (slug: string) => {
     if (!slug || slug === 'undefined' || slug === 'null' || !slug.trim()) {
       addToast('Upload link could not be generated.', 'error')
       return
     }
-    const fullUrl = `${window.location.origin}/upload/${slug}`
-    navigator.clipboard.writeText(fullUrl)
-    addToast('URL copied to clipboard!', 'success')
-    setOpenShareMenu(null)
+    const fullPortalUrl = `${window.location.origin}/upload/${slug}`
+    try {
+      await copyToClipboard(fullPortalUrl)
+      addToast('URL copied to clipboard!', 'success')
+      setOpenShareMenu(null)
+    } catch (err) {
+      console.error('Failed to copy portal URL to clipboard:', err)
+      addToast('Failed to copy link to clipboard.', 'error')
+    }
   }
 
   const handleSaveExpiry = async (e: React.FormEvent) => {
@@ -922,15 +924,21 @@ export const BatchDetails: React.FC = () => {
                 action={
                   <Button
                     variant="outline"
-                    onClick={() => {
+                    onClick={async () => {
                       const activePortal = batchLinks.find((l) => l.isActive) || batchLinks[0]
                       const slug = activePortal?.slug || activePortal?.token
                       if (!slug || slug === 'undefined' || slug === 'null' || !slug.trim()) {
                         addToast('Upload link could not be generated.', 'error')
                         return
                       }
-                      navigator.clipboard.writeText(`${window.location.origin}/upload/${slug}`)
-                      addToast('Upload portal URL copied to clipboard!', 'success')
+                      const fullPortalUrl = `${window.location.origin}/upload/${slug}`
+                      try {
+                        await copyToClipboard(fullPortalUrl)
+                        addToast('Upload portal URL copied to clipboard!', 'success')
+                      } catch (err) {
+                        console.error('Failed to copy upload portal URL:', err)
+                        addToast('Failed to copy link to clipboard.', 'error')
+                      }
                     }}
                     className="cursor-pointer"
                   >

@@ -4,15 +4,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useAuthStore } from '../store/useAuthStore'
 import { useToastStore } from '../store/useToastStore'
-<<<<<<< HEAD
 import { Button } from '../components/ui/Button'
 import { GraduationCap, Sparkles, User, Lock, ArrowRight, Shield } from 'lucide-react'
-=======
-import { Input } from '../components/ui/Input'
-import { Button } from '../components/ui/Button'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/Card'
-import { GraduationCap } from 'lucide-react'
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 
 import { authService } from '../services/auth'
 
@@ -71,7 +64,6 @@ export const Login: React.FC = () => {
   }
 
   return (
-<<<<<<< HEAD
     <div className="relative min-h-screen flex flex-col items-center justify-center bg-background px-4 py-12 sm:px-6 lg:px-8 overflow-hidden">
       {/* Ambient background glow orbs */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-indigo-600/15 rounded-full blur-[140px] pointer-events-none" />
@@ -173,58 +165,6 @@ export const Login: React.FC = () => {
             <span>256-bit Encrypted Admission Portal</span>
           </div>
         </div>
-=======
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 py-12 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md">
-        <div className="flex flex-col items-center justify-center gap-2 mb-6">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg">
-            <GraduationCap className="h-7 w-7" />
-          </div>
-          <h2 className="text-3xl font-extrabold tracking-tight text-foreground">
-            Smart Admissions
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            AI-Powered Document Verification System
-          </p>
-        </div>
-
-        <Card className="border border-border bg-card shadow-lg backdrop-blur-xs">
-          <CardHeader>
-            <CardTitle>Sign in to your account</CardTitle>
-            <CardDescription>
-              Enter your credentials to access your dashboard
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <Input
-                label="Username"
-                type="text"
-                placeholder="Enter your username"
-                error={errors.username?.message}
-                {...register('username')}
-              />
-
-              <Input
-                label="Password"
-                type="password"
-                placeholder="••••••••"
-                error={errors.password?.message}
-                {...register('password')}
-              />
-
-              <Button
-                type="submit"
-                variant="primary"
-                className="w-full mt-2"
-                isLoading={isLoading}
-              >
-                Sign In
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
       </div>
     </div>
   )

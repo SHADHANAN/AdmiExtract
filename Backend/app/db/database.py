@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """
 Database Connection & Initialization Module
 ============================================
@@ -18,25 +17,16 @@ import logging
 from typing import Any, cast
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import ServerSelectionTimeoutError, PyMongoError
-=======
-from typing import Any, cast
-from datetime import datetime, timezone
-from motor.motor_asyncio import AsyncIOMotorClient
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 from beanie import init_beanie
 
 from app.core.config import settings
 
-<<<<<<< HEAD
 logger = logging.getLogger("app.db.database")
 
-=======
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 # Monkeypatch AsyncIOMotorClient to bypass Beanie/Motor compatibility issue
 if not hasattr(AsyncIOMotorClient, "append_metadata"):
     AsyncIOMotorClient.append_metadata = lambda *args, **kwargs: None
 
-<<<<<<< HEAD
 # Default client and database instances
 client = AsyncIOMotorClient(settings.MONGODB_URI, serverSelectionTimeoutMS=2000)
 db = client[settings.DATABASE_NAME]
@@ -53,14 +43,6 @@ def is_mongodb_connected() -> bool:
 async def _run_db_setup():
     """Execute collection migrations, Beanie document registration, and seed data."""
     global _is_connected
-=======
-client = AsyncIOMotorClient(settings.MONGODB_URI)
-
-db = client[settings.DATABASE_NAME]
-
-
-async def init_db():
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
     from app.models.user import User, UserRole
     from app.models.department import Department
     from app.models.upload_link import UploadLink
@@ -110,10 +92,6 @@ async def init_db():
         allow_index_dropping=True,
     )
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
     # Seed default AIML Department
     aiml_dept = await Department.find_one(Department.code == "AIML")
     if not aiml_dept:
@@ -173,7 +151,6 @@ async def init_db():
             is_active=True,
         ).insert()
 
-<<<<<<< HEAD
     _is_connected = True
 
 
@@ -241,6 +218,3 @@ async def close_db():
         except asyncio.CancelledError:
             pass
     client.close()
-=======
-
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4

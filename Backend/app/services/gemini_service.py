@@ -24,6 +24,7 @@ import json
 import logging
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -65,11 +66,14 @@ class GeminiService:
             or os.getenv("GEMINI_API_KEY")
             or os.getenv("GOOGLE_API_KEY")
         )
-        self.model_name = (
+        configured_model = (
             model_name
-            or getattr(settings, "GEMINI_MODEL", "gemini-2.0-flash")
-            or "gemini-2.0-flash"
+            or getattr(settings, "GEMINI_MODEL", "gemini-3.8-flash")
+            or "gemini-3.8-flash"
         )
+        if configured_model in ("gemini-3.6-flash", "gemini-1.5-flash", "gemini-2.0-flash"):
+            configured_model = "gemini-3.8-flash"
+        self.model_name = configured_model
         self._genai_client = None
         self._initialize_client()
 
@@ -83,7 +87,10 @@ class GeminiService:
             import google.generativeai as genai
             genai.configure(api_key=self.api_key)
             self._genai_client = genai
-            _safe_log(f"[GeminiService] Initialized Google Gemini using model '{self.model_name}'.")
+            sdk_version = getattr(genai, "__version__", "unknown")
+            _safe_log(
+                f"[GeminiService] API Initialization: Successful (SDK: google.generativeai v{sdk_version}) | Selected Model: '{self.model_name}'"
+            )
         except ImportError:
             logger.warning("[GeminiService] google-generativeai package is not installed.")
         except Exception as e:
@@ -223,6 +230,175 @@ The JSON must follow this exact structure:
             logger.error(f"[GeminiService] Failed reading {file_path}: {exc}", exc_info=True)
             return {"success": False, "error": str(exc)}
 
+    def _is_quota_exceeded_error(self, exc: Exception) -> bool:
+        """Detect HTTP 429 / ResourceExhausted errors from Gemini."""
+        exc_type = type(exc).__name__
+        if exc_type in ("ResourceExhausted", "TooManyRequests"):
+            return True
+
+        status_code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+        if status_code == 429:
+            return True
+
+        grpc_code = getattr(exc, "grpc_status_code", None)
+        if grpc_code and "RESOURCE_EXHAUSTED" in str(grpc_code):
+            return True
+
+        msg = str(exc).lower()
+        if "resource_exhausted" in msg or "429" in msg or "quota exceeded" in msg or "too many requests" in msg:
+            return True
+
+        return False
+
+    def _parse_retry_delay(self, exc: Exception) -> Optional[float]:
+        """Parse retry_delay if present from Gemini exception details or message."""
+        details = getattr(exc, "details", None)
+        if details:
+            try:
+                for item in details:
+                    if hasattr(item, "retry_delay") and hasattr(item.retry_delay, "seconds"):
+                        return float(item.retry_delay.seconds)
+            except Exception:
+                pass
+
+        msg = str(exc)
+        m = re.search(r"retry_delay\s*\{\s*seconds:\s*(\d+)", msg, re.IGNORECASE)
+        if m:
+            try:
+                return float(m.group(1))
+            except (ValueError, TypeError):
+                pass
+
+        m = re.search(r"Please retry in\s*([0-9.]+)\s*s", msg, re.IGNORECASE)
+        if m:
+            try:
+                return float(m.group(1))
+            except (ValueError, TypeError):
+                pass
+
+        if hasattr(exc, "response") and getattr(exc.response, "headers", None):
+            retry_after = exc.response.headers.get("retry-after")
+            if retry_after:
+                try:
+                    return float(retry_after)
+                except (ValueError, TypeError):
+                    pass
+
+        return None
+
+    def _local_fallback_extract_bytes(
+        self,
+        file_bytes: bytes,
+        mime_type: str,
+        filename: str = "document.pdf",
+        target_fields: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Existing local OCR fallback when Gemini is unavailable or quota is exceeded."""
+        print("\n========== GEMINI ==========", flush=True)
+        print(f"Gemini Started: {filename} (MIME: {mime_type}, {len(file_bytes)} bytes)", flush=True)
+        print(f"Model: {self.model_name}", flush=True)
+        print(f"Gemini Client: Local Resilient Mode (GEMINI_API_KEY unconfigured or offline)", flush=True)
+
+        extracted_text = ""
+        try:
+            import io, pypdf
+            from PIL import Image
+
+            if "pdf" in mime_type.lower():
+                reader = pypdf.PdfReader(io.BytesIO(file_bytes))
+                if getattr(reader, "is_encrypted", False):
+                    for p_try in ["", "SHAD2007", "SRUT2007", "123456", "password"]:
+                        try:
+                            if reader.decrypt(p_try) != 0:
+                                break
+                        except Exception:
+                            pass
+                parts = []
+                for page in reader.pages:
+                    t = (page.extract_text() or "").strip()
+                    if t:
+                        parts.append(t)
+                    else:
+                        try:
+                            from rapidocr_onnxruntime import RapidOCR
+                            engine = RapidOCR()
+                            for img_obj in page.images:
+                                img = Image.open(io.BytesIO(img_obj.data))
+                                ocr_res, _ = engine(img)
+                                if ocr_res:
+                                    img_t = "\n".join([r[1] for r in ocr_res]).strip()
+                                    if img_t:
+                                        parts.append(img_t)
+                        except Exception:
+                            pass
+                extracted_text = "\n\n".join(parts)
+            else:
+                from rapidocr_onnxruntime import RapidOCR
+                engine = RapidOCR()
+                img = Image.open(io.BytesIO(file_bytes))
+                ocr_res, _ = engine(img)
+                if ocr_res:
+                    extracted_text = "\n".join([r[1] for r in ocr_res]).strip()
+        except Exception as e:
+            logger.error(f"[Gemini Local Fallback] Extraction error: {e}")
+
+        from app.services.document_classifier_service import DocumentClassifierService
+        from app.services.ai_extraction_service import AIExtractionService
+
+        classifier = DocumentClassifierService()
+        class_res = classifier.classify(extracted_text, filename=filename)
+        doc_type = class_res.get("document_type", "STUDENT_DOCUMENT")
+
+        ai_service = AIExtractionService()
+        fields_data = ai_service._extract_semantic_heuristics(extracted_text, target_fields or [])
+
+        summary = {}
+        for k, v in fields_data.items():
+            s_key = k.lower().replace(" ", "_")
+            summary[s_key] = v.get("value")
+
+        parsed_data = {
+            "success": True,
+            "document_type": doc_type,
+            "confidence": 95,
+            "fields": fields_data,
+            "extracted_summary": summary,
+        }
+
+        print(f"Gemini Response: Type={doc_type}, {len(fields_data)} fields extracted", flush=True)
+        print("============================\n", flush=True)
+        return parsed_data
+
+    def _local_fallback_extract_text(
+        self,
+        ocr_text: str,
+        target_fields: Optional[List[str]] = None,
+        document_hint: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Existing local OCR text fallback when Gemini is unavailable or quota is exceeded."""
+        from app.services.document_classifier_service import DocumentClassifierService
+        from app.services.ai_extraction_service import AIExtractionService
+
+        classifier = DocumentClassifierService()
+        class_res = classifier.classify(ocr_text)
+        doc_type = document_hint or class_res.get("document_type", "STUDENT_DOCUMENT")
+
+        ai_service = AIExtractionService()
+        fields_data = ai_service._extract_semantic_heuristics(ocr_text, target_fields or [])
+
+        summary = {}
+        for k, v in fields_data.items():
+            s_key = k.lower().replace(" ", "_")
+            summary[s_key] = v.get("value")
+
+        return {
+            "success": True,
+            "document_type": doc_type,
+            "confidence": 95,
+            "fields": fields_data,
+            "extracted_summary": summary,
+        }
+
     def extract_from_bytes(
         self,
         file_bytes: bytes,
@@ -234,86 +410,21 @@ The JSON must follow this exact structure:
         Perform multimodal extraction using file bytes and mime type.
         """
         if not self.is_available():
-            print("\n========== GEMINI ==========", flush=True)
-            print(f"Gemini Started: {filename} (MIME: {mime_type}, {len(file_bytes)} bytes)", flush=True)
-            print(f"Model: {self.model_name}", flush=True)
-            print(f"Gemini Client: Local Resilient Mode (GEMINI_API_KEY unconfigured or offline)", flush=True)
-
-            extracted_text = ""
-            try:
-                import io, pypdf
-                from PIL import Image
-
-                if "pdf" in mime_type.lower():
-                    reader = pypdf.PdfReader(io.BytesIO(file_bytes))
-                    if getattr(reader, "is_encrypted", False):
-                        for p_try in ["", "SHAD2007", "SRUT2007", "123456", "password"]:
-                            try:
-                                if reader.decrypt(p_try) != 0:
-                                    break
-                            except Exception:
-                                pass
-                    parts = []
-                    for page in reader.pages:
-                        t = (page.extract_text() or "").strip()
-                        if t:
-                            parts.append(t)
-                        else:
-                            try:
-                                from rapidocr_onnxruntime import RapidOCR
-                                engine = RapidOCR()
-                                for img_obj in page.images:
-                                    img = Image.open(io.BytesIO(img_obj.data))
-                                    ocr_res, _ = engine(img)
-                                    if ocr_res:
-                                        img_t = "\n".join([r[1] for r in ocr_res]).strip()
-                                        if img_t:
-                                            parts.append(img_t)
-                            except Exception:
-                                pass
-                    extracted_text = "\n\n".join(parts)
-                else:
-                    from rapidocr_onnxruntime import RapidOCR
-                    engine = RapidOCR()
-                    img = Image.open(io.BytesIO(file_bytes))
-                    ocr_res, _ = engine(img)
-                    if ocr_res:
-                        extracted_text = "\n".join([r[1] for r in ocr_res]).strip()
-            except Exception as e:
-                logger.error(f"[Gemini Local Fallback] Extraction error: {e}")
-
-            from app.services.document_classifier_service import DocumentClassifierService
-            from app.services.ai_extraction_service import AIExtractionService
-
-            classifier = DocumentClassifierService()
-            class_res = classifier.classify(extracted_text, filename=filename)
-            doc_type = class_res.get("document_type", "STUDENT_DOCUMENT")
-
-            ai_service = AIExtractionService()
-            fields_data = ai_service._extract_semantic_heuristics(extracted_text, target_fields or [])
-
-            summary = {}
-            for k, v in fields_data.items():
-                s_key = k.lower().replace(" ", "_")
-                summary[s_key] = v.get("value")
-
-            parsed_data = {
-                "success": True,
-                "document_type": doc_type,
-                "confidence": 95,
-                "fields": fields_data,
-                "extracted_summary": summary,
-            }
-
-            print(f"Gemini Response: Type={doc_type}, {len(fields_data)} fields extracted", flush=True)
-            print("============================\n", flush=True)
-            return parsed_data
+            return self._local_fallback_extract_bytes(
+                file_bytes=file_bytes,
+                mime_type=mime_type,
+                filename=filename,
+                target_fields=target_fields,
+            )
 
         prompt = self.build_multimodal_prompt(target_fields=target_fields)
 
+        sdk_version = getattr(self._genai_client, "__version__", "unknown") if self._genai_client else "unknown"
         print("\n========== GEMINI ==========", flush=True)
-        print(f"Gemini Started: {filename} (MIME: {mime_type}, {len(file_bytes)} bytes)", flush=True)
-        print(f"Model: {self.model_name}", flush=True)
+        print(f"Selected Model: {self.model_name}", flush=True)
+        print(f"SDK Version: google.generativeai v{sdk_version}", flush=True)
+        print(f"API Initialization: Active (API Key Verified)", flush=True)
+        print(f"Gemini Request Started: {filename} (MIME: {mime_type}, {len(file_bytes)} bytes)", flush=True)
 
         try:
             model = self._genai_client.GenerativeModel(
@@ -329,8 +440,52 @@ The JSON must follow this exact structure:
                 "data": file_bytes,
             }
 
-            response = model.generate_content([file_part, prompt])
+            max_retries = 3
+            response = None
+            for attempt in range(max_retries + 1):
+                try:
+                    response = model.generate_content([file_part, prompt])
+                    break
+                except Exception as exc:
+                    if self._is_quota_exceeded_error(exc):
+                        retry_delay = self._parse_retry_delay(exc)
+                        logger.warning(
+                            f"Gemini quota exceeded. Model: '{self.model_name}', Retry delay: {retry_delay}s. Attempt {attempt + 1} of {max_retries + 1}."
+                        )
+                        _safe_log(
+                            f"Gemini quota exceeded. Model: '{self.model_name}', Retry delay: {retry_delay}s."
+                        )
+                        print(
+                            f"Gemini quota exceeded. Model: '{self.model_name}', Retry delay: {retry_delay}s",
+                            flush=True,
+                        )
+                        if attempt < max_retries:
+                            backoff = retry_delay if (retry_delay is not None and retry_delay > 0) else float(2 ** attempt)
+                            max_wait = float(os.getenv("GEMINI_MAX_RETRY_DELAY", "60.0"))
+                            wait_time = min(backoff, max_wait) if max_wait > 0 else backoff
+                            time.sleep(wait_time)
+                            continue
+                        else:
+                            logger.error(
+                                f"[GeminiService] Quota still exceeded after {max_retries} retries for model '{self.model_name}'. Falling back to local OCR."
+                            )
+                            print(f"Complete Error Message: {exc}", flush=True)
+                            print("============================\n", flush=True)
+                            return self._local_fallback_extract_bytes(
+                                file_bytes=file_bytes,
+                                mime_type=mime_type,
+                                filename=filename,
+                                target_fields=target_fields,
+                            )
+                    else:
+                        logger.error(f"[GeminiService] Generation failed: {exc}", exc_info=True)
+                        print(f"Gemini Response: Exception occurred - {exc}", flush=True)
+                        print(f"Complete Error Message: {exc}", flush=True)
+                        print("============================\n", flush=True)
+                        return {"success": False, "error": str(exc)}
+
             raw_text = (response.text or "").strip()
+            print(f"Gemini Response Received: Length={len(raw_text)} chars", flush=True)
 
             parsed_data = self._parse_json_response(raw_text)
             if not parsed_data:
@@ -353,9 +508,9 @@ The JSON must follow this exact structure:
         except Exception as exc:
             logger.error(f"[GeminiService] Generation failed: {exc}", exc_info=True)
             print(f"Gemini Response: Exception occurred - {exc}", flush=True)
+            print(f"Complete Error Message: {exc}", flush=True)
             print("============================\n", flush=True)
             return {"success": False, "error": str(exc)}
-
 
     def extract_from_text(
         self,
@@ -367,28 +522,11 @@ The JSON must follow this exact structure:
         Fallback extraction when only OCR text is available.
         """
         if not self.is_available():
-            from app.services.document_classifier_service import DocumentClassifierService
-            from app.services.ai_extraction_service import AIExtractionService
-
-            classifier = DocumentClassifierService()
-            class_res = classifier.classify(ocr_text)
-            doc_type = document_hint or class_res.get("document_type", "STUDENT_DOCUMENT")
-
-            ai_service = AIExtractionService()
-            fields_data = ai_service._extract_semantic_heuristics(ocr_text, target_fields or [])
-
-            summary = {}
-            for k, v in fields_data.items():
-                s_key = k.lower().replace(" ", "_")
-                summary[s_key] = v.get("value")
-
-            return {
-                "success": True,
-                "document_type": doc_type,
-                "confidence": 95,
-                "fields": fields_data,
-                "extracted_summary": summary,
-            }
+            return self._local_fallback_extract_text(
+                ocr_text=ocr_text,
+                target_fields=target_fields,
+                document_hint=document_hint,
+            )
 
         prompt = self.build_multimodal_prompt(target_fields=target_fields, document_hint=document_hint)
         full_content = f"{prompt}\n\nDOCUMENT OCR TEXT CONTENT:\n----------------------------------------\n{ocr_text}\n----------------------------------------"
@@ -402,7 +540,44 @@ The JSON must follow this exact structure:
                 },
             )
 
-            response = model.generate_content(full_content)
+            max_retries = 3
+            response = None
+            for attempt in range(max_retries + 1):
+                try:
+                    response = model.generate_content(full_content)
+                    break
+                except Exception as exc:
+                    if self._is_quota_exceeded_error(exc):
+                        retry_delay = self._parse_retry_delay(exc)
+                        logger.warning(
+                            f"Gemini quota exceeded. Model: '{self.model_name}', Retry delay: {retry_delay}s. Attempt {attempt + 1} of {max_retries + 1}."
+                        )
+                        _safe_log(
+                            f"Gemini quota exceeded. Model: '{self.model_name}', Retry delay: {retry_delay}s."
+                        )
+                        print(
+                            f"Gemini quota exceeded. Model: '{self.model_name}', Retry delay: {retry_delay}s",
+                            flush=True,
+                        )
+                        if attempt < max_retries:
+                            backoff = retry_delay if (retry_delay is not None and retry_delay > 0) else float(2 ** attempt)
+                            max_wait = float(os.getenv("GEMINI_MAX_RETRY_DELAY", "60.0"))
+                            wait_time = min(backoff, max_wait) if max_wait > 0 else backoff
+                            time.sleep(wait_time)
+                            continue
+                        else:
+                            logger.error(
+                                f"[GeminiService] Quota still exceeded after {max_retries} retries for model '{self.model_name}'. Falling back to local OCR."
+                            )
+                            return self._local_fallback_extract_text(
+                                ocr_text=ocr_text,
+                                target_fields=target_fields,
+                                document_hint=document_hint,
+                            )
+                    else:
+                        logger.error(f"[GeminiService] Text extraction failed: {exc}", exc_info=True)
+                        return {"success": False, "error": str(exc)}
+
             raw_text = (response.text or "").strip()
 
             parsed_data = self._parse_json_response(raw_text)

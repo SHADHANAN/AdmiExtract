@@ -322,16 +322,11 @@ def perform_mistral_ocr(file_path: str) -> Dict[str, Any]:
 
 class OCRService:
     """
-<<<<<<< HEAD
     OCR Service wrapper around perform_mistral_ocr with embedded PDF fallback and production banners.
-=======
-    OCR Service wrapper around perform_mistral_ocr.
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
     """
 
     def extract_text(self, file_path: str) -> Dict[str, Any]:
         """
-<<<<<<< HEAD
         Extract text from a file using Mistral OCR API, with embedded PDF fallback.
         """
         filename = Path(file_path).name
@@ -362,7 +357,7 @@ class OCRService:
 
                         reader = pypdf.PdfReader(str(path))
                         if getattr(reader, "is_encrypted", False):
-                            # Attempt decryption with common patterns (e.g. name prefix + birth year)
+                            # Attempt decryption with common patterns
                             passwords_to_try = ["", "SHAD2007", "SRUT2007", "123456", "password"]
                             for p_try in passwords_to_try:
                                 try:
@@ -377,7 +372,7 @@ class OCRService:
                             if t:
                                 pdf_texts.append(t)
                             else:
-                                # Scanned page: extract images and perform RapidOCR
+                                # Scanned page: extract images and perform RapidOCR if available
                                 try:
                                     from rapidocr_onnxruntime import RapidOCR
                                     engine = RapidOCR()
@@ -425,15 +420,6 @@ class OCRService:
             print(f"OCR Success: False ({msg})", flush=True)
             print(f"OCR Text Length: 0 chars", flush=True)
             print("==========================\n", flush=True)
-=======
-        Extract text from a file using Mistral OCR API.
-        """
-        try:
-            return perform_mistral_ocr(file_path)
-        except Exception as exc:
-            msg = str(exc)
-            _log(f"[ERROR] {msg}")
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
             return {
                 "success": False,
                 "text": None,
@@ -441,11 +427,7 @@ class OCRService:
                 "confidence": None,
                 "message": msg,
             }
-<<<<<<< HEAD
 
 
 ocr_service = OCRService()
 
-
-=======
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4

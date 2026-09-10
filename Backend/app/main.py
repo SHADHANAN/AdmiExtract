@@ -1,18 +1,11 @@
 from contextlib import asynccontextmanager
 
-<<<<<<< HEAD
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.db.database import init_db, close_db, is_mongodb_connected
-=======
-from fastapi import FastAPI
-
-from app.core.config import settings
-from app.db.database import init_db
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 from app.api.user import router as user_router
 from app.api.auth import router as auth_router
 from app.api.department import router as department_router
@@ -24,7 +17,6 @@ from app.api.batch_class import router as batch_class_router
 from app.api.upload_link import router as upload_link_router
 
 
-<<<<<<< HEAD
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
@@ -33,20 +25,6 @@ async def lifespan(app: FastAPI):
     await close_db()
 
 
-=======
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    print("Connecting to MongoDB...")
-    await init_db()
-    print("MongoDB Connected!")
-    yield
-    print("Application shutting down...")
-
-
-from fastapi.middleware.cors import CORSMiddleware
-
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
@@ -61,7 +39,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-<<<<<<< HEAD
 
 @app.middleware("http")
 async def check_database_availability(request: Request, call_next):
@@ -89,8 +66,6 @@ async def check_database_availability(request: Request, call_next):
     return await call_next(request)
 
 
-=======
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(department_router)
@@ -105,7 +80,6 @@ app.include_router(excel_template_router)
 app.include_router(doc_config_version_router)
 
 
-<<<<<<< HEAD
 @app.get("/")
 async def root():
     connected = is_mongodb_connected()
@@ -124,12 +98,9 @@ async def root():
             "name": settings.DATABASE_NAME,
         },
         "docs_url": "/docs",
-=======
-
-@app.get("/")
-async def root():
-    return {
-        "status": "healthy",
-        "message": "Automate API is running successfully"
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
     }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host=settings.HOST, port=settings.PORT, reload=True)

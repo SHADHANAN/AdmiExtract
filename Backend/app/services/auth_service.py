@@ -23,31 +23,6 @@ async def register_user(user_in: UserCreate) -> User:
 
 
 async def authenticate_user(identifier: str, password: str) -> User | None:
-<<<<<<< HEAD
-    user_repo = UserRepository()
-
-    print("Identifier:", identifier)
-
-    user = await user_repo.get_user_by_username_or_email(identifier)
-
-    print("User:", user)
-
-    if not user:
-        print("User not found")
-        return None
-
-    print("Stored Hash:", user.password)
-    print("Password Match:", verify_password(password, user.password))
-    print("Is Active:", user.is_active)
-
-    if not user.is_active:
-        return None
-
-    if not verify_password(password, user.password):
-        return None
-
-    return user
-=======
     """
     Authenticate a user by username or email, verifying password and active status.
     Returns the User document if successful and active, otherwise None.
@@ -61,5 +36,3 @@ async def authenticate_user(identifier: str, password: str) -> User | None:
     if not verify_password(password, user.password):
         return None
     return user
-
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4

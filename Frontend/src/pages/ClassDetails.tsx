@@ -5,11 +5,8 @@ import { useStudentStore } from '../store/useStudentStore'
 import { useToastStore } from '../store/useToastStore'
 import { batchClassService } from '../services/batchClass'
 import { excelTemplateService, type ExcelTemplateResponse } from '../services/excelTemplate'
-<<<<<<< HEAD
+import { copyToClipboard } from '../utils/clipboard'
 import type { BatchClass, StudentSubmission, UploadLink } from '../types'
-=======
-import type { BatchClass, DocumentRequirement, StudentSubmission, UploadLink } from '../types'
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Modal } from '../components/ui/Modal'
@@ -19,10 +16,6 @@ import {
   ArrowLeft,
   Users,
   Link as LinkIcon,
-<<<<<<< HEAD
-=======
-  FileText,
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
   FileSpreadsheet,
   CheckSquare,
   Download,
@@ -38,11 +31,6 @@ import {
   ToggleLeft,
   ToggleRight,
   RefreshCw,
-<<<<<<< HEAD
-=======
-  Layers,
-  Info,
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 } from 'lucide-react'
 
 export const ClassDetails: React.FC = () => {
@@ -65,17 +53,6 @@ export const ClassDetails: React.FC = () => {
   const [, setLookupColumn] = useState<string>('Reg No')
   const [isDownloadingExcel, setIsDownloadingExcel] = useState(false)
 
-<<<<<<< HEAD
-=======
-  // Document requirement states for this class
-  const [requirements] = useState<DocumentRequirement[]>([
-    { id: 'req_1', name: 'Aadhaar Card', required: true, allowedTypes: ['PDF', 'JPG', 'PNG'], maxSizeMb: 5, type: 'MANDATORY' },
-    { id: 'req_2', name: 'SSLC Marksheet', required: true, allowedTypes: ['PDF', 'JPG', 'PNG'], maxSizeMb: 5, type: 'MANDATORY' },
-    { id: 'req_3', name: 'HSC Marksheet', required: true, allowedTypes: ['PDF', 'JPG', 'PNG'], maxSizeMb: 5, type: 'MANDATORY' },
-    { id: 'req_4', name: 'Community Certificate', required: false, allowedTypes: ['PDF', 'JPG'], maxSizeMb: 5, type: 'OPTIONAL' },
-  ])
-
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
   // Class settings edit states
   const [editClassName, setEditClassName] = useState('')
   const [editSection, setEditSection] = useState('')
@@ -203,10 +180,15 @@ export const ClassDetails: React.FC = () => {
     }
   }
 
-  const handleCopyLink = (slug: string) => {
+  const handleCopyLink = async (slug: string) => {
     const fullUrl = `${window.location.origin}/upload/${slug}`
-    navigator.clipboard.writeText(fullUrl)
-    addToast('Section Portal URL copied to clipboard!', 'success')
+    try {
+      await copyToClipboard(fullUrl)
+      addToast('Section Portal URL copied to clipboard!', 'success')
+    } catch (err) {
+      console.error('Failed to copy portal URL:', err)
+      addToast('Failed to copy link to clipboard.', 'error')
+    }
   }
 
   if (isLoadingClass) {
@@ -736,9 +718,14 @@ export const ClassDetails: React.FC = () => {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/upload/${qrModalLink.slug || qrModalLink.token}`)
-                  addToast('URL copied to clipboard!', 'success')
+                onClick={async () => {
+                  try {
+                    await copyToClipboard(`${window.location.origin}/upload/${qrModalLink.slug || qrModalLink.token}`)
+                    addToast('URL copied to clipboard!', 'success')
+                  } catch (err) {
+                    console.error('Failed to copy portal URL:', err)
+                    addToast('Failed to copy link to clipboard.', 'error')
+                  }
                 }}
               >
                 <Copy className="h-4 w-4 mr-1" /> Copy URL

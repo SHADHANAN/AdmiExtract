@@ -31,7 +31,6 @@
 }
 
 :root {
-<<<<<<< HEAD
   --background: #050816;
   --foreground: #ffffff;
   
@@ -52,33 +51,10 @@
   
   --accent: #1e1b4b;
   --accent-foreground: #c7d2fe;
-=======
-  --background: #f9fafb;
-  --foreground: #111827;
-  
-  --card: #ffffff;
-  --card-foreground: #111827;
-  
-  --popover: #ffffff;
-  --popover-foreground: #111827;
-  
-  --primary: #4f46e5;
-  --primary-foreground: #ffffff;
-  
-  --secondary: #f3f4f6;
-  --secondary-foreground: #1f2937;
-  
-  --muted: #f3f4f6;
-  --muted-foreground: #6b7280;
-  
-  --accent: #e0e7ff;
-  --accent-foreground: #4338ca;
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
   
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
   
-<<<<<<< HEAD
   --border: rgba(255, 255, 255, 0.08);
   --input: rgba(255, 255, 255, 0.08);
   --ring: #6366f1;
@@ -95,29 +71,10 @@
   
   --popover: #0f172a;
   --popover-foreground: #ffffff;
-=======
-  --border: #e5e7eb;
-  --input: #e5e7eb;
-  --ring: #4f46e5;
-  
-  --radius: 0.5rem;
-}
-
-.dark {
-  --background: #0b0f19;
-  --foreground: #f9fafb;
-  
-  --card: #111827;
-  --card-foreground: #f9fafb;
-  
-  --popover: #111827;
-  --popover-foreground: #f9fafb;
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
   
   --primary: #6366f1;
   --primary-foreground: #ffffff;
   
-<<<<<<< HEAD
   --secondary: #0f172a;
   --secondary-foreground: #ffffff;
   
@@ -126,44 +83,25 @@
   
   --accent: #1e1b4b;
   --accent-foreground: #c7d2fe;
-=======
-  --secondary: #1f2937;
-  --secondary-foreground: #f9fafb;
-  
-  --muted: #1f2937;
-  --muted-foreground: #9ca3af;
-  
-  --accent: #312e81;
-  --accent-foreground: #e0e7ff;
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
   
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
   
-<<<<<<< HEAD
   --border: rgba(255, 255, 255, 0.08);
   --input: rgba(255, 255, 255, 0.08);
-=======
-  --border: #1f2937;
-  --input: #1f2937;
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
   --ring: #6366f1;
 }
 
 * {
   border-color: var(--border);
-<<<<<<< HEAD
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-=======
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-<<<<<<< HEAD
   letter-spacing: -0.01em;
   min-height: 100vh;
 }
@@ -182,6 +120,4 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.25);
-=======
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 }

@@ -1,9 +1,6 @@
 from typing import Any
 import os
-<<<<<<< HEAD
 import re
-=======
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 import shutil
 import asyncio
 from datetime import datetime, timezone
@@ -28,7 +25,6 @@ def _get_batch_lock(batch_id: str) -> asyncio.Lock:
     return _BATCH_LOCKS[batch_id]
 
 
-<<<<<<< HEAD
 def _find_best_worksheet_and_headers(wb: openpyxl.Workbook) -> tuple[Any, int, list[str], dict[str, int]]:
     """
     Intelligently identify the student admission data worksheet and true header row.
@@ -140,12 +136,6 @@ class ExcelTemplateService:
     """
     Production service layer handling Excel template upload, header parsing, cell mapping,
     and non-destructive openpyxl workbook row updating with structured logging.
-=======
-class ExcelTemplateService:
-    """
-    Service layer handling Excel template upload, header parsing, cell mapping,
-    and non-destructive openpyxl workbook row updating.
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
     """
 
     def __init__(self, repository: ExcelTemplateRepository | None = None):
@@ -164,17 +154,11 @@ class ExcelTemplateService:
 
         file_key = f"{batch_id}_{class_id}" if class_id else batch_id
         file_path = os.path.join(UPLOAD_DIR, f"{file_key}.xlsx")
-<<<<<<< HEAD
 
-=======
-        
-        # Save file to disk
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
         contents = await file.read()
         with open(file_path, "wb") as f:
             f.write(contents)
 
-<<<<<<< HEAD
         try:
             wb = openpyxl.load_workbook(file_path, data_only=True)
             sheet, header_row_idx, headers, header_col_map = _find_best_worksheet_and_headers(wb)
@@ -183,43 +167,12 @@ class ExcelTemplateService:
             total_rows = 0
             for row in sheet.iter_rows(min_row=header_row_idx + 1, values_only=True):
                 if any(cell is not None and str(cell).strip() != "" for cell in row):
-=======
-        # Parse Excel headers & rows using openpyxl
-        try:
-            wb = openpyxl.load_workbook(file_path, data_only=True)
-            sheet = wb.active
-            if sheet is None:
-                raise ValueError("Active worksheet not found")
-
-            # Extract header columns from row 1
-            headers: list[str] = []
-            for cell in sheet[1]:
-                val = str(cell.value).strip() if cell.value is not None else ""
-                headers.append(val)
-
-            # Count total non-empty student data rows (starting from row 2)
-            total_rows = 0
-            for row in sheet.iter_rows(min_row=2, values_only=True):
-                if any(cell is not None for cell in row):
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                     total_rows += 1
 
             wb.close()
 
-<<<<<<< HEAD
             lookup_col, _ = _find_lookup_col_index(header_col_map)
 
-=======
-            # Default lookup column guessing
-            lookup_col = "Register Number"
-            for h in headers:
-                h_norm = normalize_register_number(h)
-                if any(k in h_norm for k in ["REG", "REGISTER", "ROLL", "ADM"]):
-                    lookup_col = h
-                    break
-
-            # Fetch the batch to retrieve its department_id
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
             from app.models.batch import AdmissionBatch
             batch_doc = await AdmissionBatch.get(batch_id)
             department_id = batch_doc.department_id if batch_doc else None
@@ -236,7 +189,6 @@ class ExcelTemplateService:
                 updated_count=0,
             )
 
-<<<<<<< HEAD
             print("\n========== EXCEL ==========", flush=True)
             print(f"Workbook Loaded: {file.filename}", flush=True)
             print(f"Worksheet Selected: '{sheet.title}' (Header Row: {header_row_idx})", flush=True)
@@ -245,8 +197,6 @@ class ExcelTemplateService:
             print(f"Total Student Rows: {total_rows}", flush=True)
             print("===========================\n", flush=True)
 
-=======
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
             return await self.repository.save_template(template)
 
         except Exception as e:
@@ -289,42 +239,12 @@ class ExcelTemplateService:
 
         try:
             wb = openpyxl.load_workbook(template.file_path, data_only=True, read_only=True)
-<<<<<<< HEAD
             sheet, header_row_idx, _, header_col_map = _find_best_worksheet_and_headers(wb)
 
             _, lookup_col_idx = _find_lookup_col_index(header_col_map, template.lookup_column)
             target_norm = normalize_register_number(register_number)
 
             for row in sheet.iter_rows(min_row=header_row_idx + 1, values_only=True):
-=======
-            sheet = wb.active
-            if sheet is None:
-                wb.close()
-                return False
-
-            headers: list[str] = [str(cell.value).strip() if cell.value is not None else "" for cell in sheet[1]]
-            
-            lookup_col_idx: int | None = None
-            if template.lookup_column:
-                target_norm = normalize_register_number(template.lookup_column)
-                for col_idx, h in enumerate(headers, start=1):
-                    if normalize_register_number(h) == target_norm:
-                        lookup_col_idx = col_idx
-                        break
-
-            if lookup_col_idx is None:
-                for col_idx, h in enumerate(headers, start=1):
-                    h_norm = normalize_register_number(h)
-                    if any(k in h_norm for k in ["REG", "REGISTER", "ROLL", "ADM"]):
-                        lookup_col_idx = col_idx
-                        break
-
-            if lookup_col_idx is None:
-                lookup_col_idx = 1
-
-            target_norm = normalize_register_number(register_number)
-            for row in sheet.iter_rows(min_row=2, values_only=True):
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                 if lookup_col_idx <= len(row):
                     cell_val = row[lookup_col_idx - 1]
                     if compare_register_numbers(cell_val, target_norm):
@@ -341,16 +261,7 @@ class ExcelTemplateService:
     ) -> tuple[int | None, dict | None, str]:
         """
         Locate the single candidate row in the uploaded Excel workbook.
-<<<<<<< HEAD
         Returns: (row_index, row_record_dict, status_code)
-=======
-        Returns:
-            (row_index, row_record_dict, status_code)
-            Status codes:
-            - "not_found": 0 matching rows found
-            - "duplicate_records": >1 matching rows found
-            - "success": Exactly 1 matching row found
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
         """
         template = await self.repository.get_by_batch_id(batch_id)
         if not template or not os.path.exists(template.file_path):
@@ -358,7 +269,6 @@ class ExcelTemplateService:
 
         try:
             wb = openpyxl.load_workbook(template.file_path, data_only=True, read_only=True)
-<<<<<<< HEAD
             sheet, header_row_idx, headers, header_col_map = _find_best_worksheet_and_headers(wb)
 
             lookup_col_name, lookup_col_idx = _find_lookup_col_index(header_col_map, template.lookup_column)
@@ -373,44 +283,6 @@ class ExcelTemplateService:
                     continue
                 total_data_rows += 1
 
-=======
-            sheet = wb.active
-            if sheet is None:
-                wb.close()
-                return None, None, "not_found"
-
-            sheet_name = sheet.title
-            headers: list[str] = [str(cell.value).strip() if cell.value is not None else "" for cell in sheet[1]]
-
-            lookup_col_idx: int | None = None
-            if template.lookup_column:
-                target_norm = normalize_register_number(template.lookup_column)
-                for col_idx, h in enumerate(headers, start=1):
-                    if normalize_register_number(h) == target_norm:
-                        lookup_col_idx = col_idx
-                        break
-
-            if lookup_col_idx is None:
-                for col_idx, h in enumerate(headers, start=1):
-                    h_norm = normalize_register_number(h)
-                    if any(k in h_norm for k in ["REG", "REGISTER", "ROLL", "ADM"]):
-                        lookup_col_idx = col_idx
-                        break
-
-            if lookup_col_idx is None:
-                lookup_col_idx = 1
-
-            target_norm = normalize_register_number(register_number)
-            loaded_registers: list[str] = []
-            matches: list[tuple[int, dict]] = []
-
-            total_data_rows = 0
-            for row_idx, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), start=2):
-                if not any(cell is not None for cell in row):
-                    continue
-                total_data_rows += 1
-                
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                 cell_val = row[lookup_col_idx - 1] if lookup_col_idx <= len(row) else None
                 norm_cell = normalize_register_number(cell_val)
                 if norm_cell:
@@ -418,20 +290,13 @@ class ExcelTemplateService:
 
                 if compare_register_numbers(cell_val, target_norm):
                     row_dict = {}
-<<<<<<< HEAD
                     for idx, h in enumerate(headers):
                         if idx < len(row) and h:
                             row_dict[h] = row[idx]
-=======
-                    for idx, header in enumerate(headers):
-                        if idx < len(row) and header:
-                            row_dict[header] = row[idx]
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                     matches.append((row_idx, row_dict))
 
             wb.close()
 
-<<<<<<< HEAD
             print("\n========== EXCEL ==========", flush=True)
             print(f"Workbook Loaded: {template.template_filename}", flush=True)
             print(f"Worksheet: '{sheet.title}' | Header Row: {header_row_idx}", flush=True)
@@ -451,46 +316,6 @@ class ExcelTemplateService:
                 matched_row_idx, matched_row_dict = matches[0]
                 print(f"Result: MATCH SUCCESSFUL (Row {matched_row_idx}) [OK]", flush=True)
                 print("===========================\n", flush=True)
-=======
-            # Diagnostic logging output
-            print("\n========================", flush=True)
-            print("EXCEL FILE", flush=True)
-            print(f"Filename   : {template.template_filename}", flush=True)
-            print(f"Sheet Name : {sheet_name}", flush=True)
-            print(f"Total Rows : {total_data_rows}", flush=True)
-            print("========================\n", flush=True)
-
-            print("========================", flush=True)
-            print("LOADED REGISTER NUMBERS", flush=True)
-            for reg in loaded_registers:
-                print(reg, flush=True)
-            print("========================\n", flush=True)
-
-            if len(matches) == 0:
-                print("========================", flush=True)
-                print("NO MATCH FOUND", flush=True)
-                print(f"Student Register: '{register_number}' (Normalized: '{target_norm}')", flush=True)
-                print(f"Difference      : Student register '{register_number}' was not found in admission list.", flush=True)
-                print("========================\n", flush=True)
-                return None, None, "not_found"
-
-            elif len(matches) > 1:
-                print("========================", flush=True)
-                print("DUPLICATE MATCHES FOUND", flush=True)
-                print(f"Student Register: '{register_number}' (Normalized: '{target_norm}')", flush=True)
-                print(f"Matched Row Indices: {[m[0] for m in matches]}", flush=True)
-                print("========================\n", flush=True)
-                return None, None, "duplicate_records"
-
-            else:
-                matched_row_idx, matched_row_dict = matches[0]
-                print("========================", flush=True)
-                print("VERIFICATION MATCH FOUND", flush=True)
-                print(f"Student Register : '{register_number}' (Normalized: '{target_norm}')", flush=True)
-                print(f"Matched Row Index: Row {matched_row_idx}", flush=True)
-                print(f"Status           : MATCH SUCCESSFUL ✅", flush=True)
-                print("========================\n", flush=True)
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                 return matched_row_idx, matched_row_dict, "success"
 
         except Exception as e:
@@ -503,13 +328,8 @@ class ExcelTemplateService:
 
     def _resolve_header_value(self, header: str, data_dict: dict[str, Any]) -> Any:
         """
-<<<<<<< HEAD
         Adaptive semantic field resolver matching any reasonable Excel column header against student data.
         Never returns literal 'NO', 'NULL', 'NONE', 'N/A'. Returns None for blank cells.
-=======
-        Flexible lookup matcher that resolves a value for an Excel column header from student data
-        using priority ordered field aliases. Returns None for missing/placeholder values.
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
         """
         if not header or not data_dict:
             return None
@@ -522,7 +342,6 @@ class ExcelTemplateService:
             if v is None:
                 return None
             v_str = str(v).strip()
-<<<<<<< HEAD
             if not v_str or v_str.upper() in ["NULL", "NONE", "N/A", "NOT DETECTED", "NOT FOUND"]:
                 return None
             if v_str.upper() == "NO":
@@ -533,7 +352,6 @@ class ExcelTemplateService:
                     return "No"
                 return None
             return v
-
 
         h_clean = header.strip()
         h_lower = h_clean.lower()
@@ -609,36 +427,10 @@ class ExcelTemplateService:
                 continue
             k_norm = re.sub(r'[\s_\-\./\(\)]+', '', k.strip().lower())
             if k_norm == h_norm:
-=======
-            if not v_str or v_str.lower() in ["null", "none", "n/a", "not detected"]:
-                return None
-            return v
-
-        from app.utils.field_canonicalizer import get_aliases_for_header
-        aliases = get_aliases_for_header(header)
-
-        # Check aliases in priority order
-        for alias in aliases:
-            alias_lower = alias.lower()
-            for k, raw_v in data_dict.items():
-                if k and k.strip().lower() == alias_lower:
-                    val = _clean_val(raw_v)
-                    if val is not None:
-                        return val
-
-        # Fallback to key or substring matches in data_dict
-        header_lower = header.strip().lower()
-        for k, raw_v in data_dict.items():
-            if not k:
-                continue
-            k_lower = k.strip().lower()
-            if header_lower in k_lower or k_lower in header_lower:
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                 val = _clean_val(raw_v)
                 if val is not None:
                     return val
 
-<<<<<<< HEAD
         # ---------------------------------------------------------
         # Priority 3: Canonical Aliases Dictionary Mapping
         # ---------------------------------------------------------
@@ -733,8 +525,6 @@ class ExcelTemplateService:
                     if val is not None:
                         return val
 
-=======
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
         return None
 
     async def append_or_update_student_row_in_excel(
@@ -746,19 +536,11 @@ class ExcelTemplateService:
     ) -> bool:
         """
         Template-driven Excel output generator:
-<<<<<<< HEAD
         1. Load master Excel template (locating student data sheet and header row).
         2. Look for existing row matching Register Number.
         3. If existing row is found -> update that row safely without erasing existing data.
         4. If not found -> append a NEW row at the end of the sheet.
         5. For every column header, write non-empty matching values from student_data.
-=======
-        1. Load master Excel template (contains column headers in Row 1).
-        2. Look for existing row with matching Register Number.
-        3. If existing row is found -> update that row.
-        4. If not found -> append a NEW row at the end of the sheet.
-        5. For every column header, write matching value from student_data or leave blank.
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
         """
         template = await self.repository.get_by_batch_id(batch_id, class_id=class_id)
         if not template or not os.path.exists(template.file_path):
@@ -774,7 +556,6 @@ class ExcelTemplateService:
 
             try:
                 wb = openpyxl.load_workbook(template.file_path, data_only=False)
-<<<<<<< HEAD
                 sheet, header_row_idx, headers, header_col_map = _find_best_worksheet_and_headers(wb)
 
                 if not header_col_map:
@@ -791,61 +572,17 @@ class ExcelTemplateService:
                     if compare_register_numbers(cell_val, target_norm):
                         target_row = r_idx
                         is_existing_row = True
-=======
-                sheet = wb.active
-                if sheet is None:
-                    raise ValueError("Active worksheet not found in workbook.")
-
-                # Read column headers from Row 1
-                header_col_map: dict[str, int] = {}
-                for col_idx, cell in enumerate(sheet[1], start=1):
-                    val = str(cell.value).strip() if cell.value is not None else ""
-                    if val:
-                        header_col_map[val] = col_idx
-
-                if not header_col_map:
-                    raise ValueError("Excel template contains no header columns in Row 1.")
-
-                # Find lookup column index for Register Number
-                lookup_col_idx = None
-                if template.lookup_column:
-                    lookup_col_idx = header_col_map.get(template.lookup_column)
-
-                if not lookup_col_idx:
-                    for name, idx in header_col_map.items():
-                        n_norm = normalize_register_number(name)
-                        if any(k in n_norm for k in ["REG", "REGISTER", "ROLL", "ADM"]):
-                            lookup_col_idx = idx
-                            break
-
-                if not lookup_col_idx:
-                    lookup_col_idx = 1
-
-                # Search existing rows (from Row 2 onwards) for matching register number
-                target_row = None
-                target_norm = normalize_register_number(register_number)
-
-                for r_idx in range(2, sheet.max_row + 1):
-                    cell_val = sheet.cell(row=r_idx, column=lookup_col_idx).value
-                    if compare_register_numbers(cell_val, target_norm):
-                        target_row = r_idx
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                         break
 
                 # If not found -> Append new row at end of sheet
                 if not target_row:
-<<<<<<< HEAD
                     first_empty_row = header_row_idx + 1
-=======
-                    first_empty_row = 2
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                     while True:
                         row_cells = [sheet.cell(row=first_empty_row, column=c).value for c in range(1, len(header_col_map) + 1)]
                         if not any(v is not None and str(v).strip() != "" for v in row_cells):
                             break
                         first_empty_row += 1
                     target_row = first_empty_row
-<<<<<<< HEAD
                     is_existing_row = False
 
                 written_cells: dict[str, Any] = {}
@@ -921,22 +658,11 @@ class ExcelTemplateService:
                         ):
                             sheet.cell(row=target_row, column=col_idx, value="No")
                             written_cells[header_name] = "No"
-=======
-
-                print(f"[Excel Append/Update] Target Row for '{register_number}': Row {target_row}", flush=True)
-
-                # Write values into target_row for every defined header column
-                for header_name, col_idx in header_col_map.items():
-                    val = self._resolve_header_value(header_name, student_data)
-                    cell = sheet.cell(row=target_row, column=col_idx)
-                    cell.value = val  # openpyxl None creates a truly blank cell
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 
                 wb.save(template.file_path)
                 wb.close()
 
                 await self.repository.increment_updated_count(batch_id, class_id=class_id)
-<<<<<<< HEAD
 
                 print("\n========== EXCEL ==========", flush=True)
                 print(f"Workbook Loaded: {template.template_filename}", flush=True)
@@ -955,13 +681,6 @@ class ExcelTemplateService:
 
             except Exception as e:
                 print(f"\n[Excel Write Error] {str(e)}", flush=True)
-=======
-                print(f"[Excel Append/Update] Successfully saved Row {target_row} to {template.file_path}", flush=True)
-                return True
-
-            except Exception as e:
-                print(f"[Excel Write Error] {str(e)}", flush=True)
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=f"Failed to update Excel workbook: {str(e)}",
@@ -977,7 +696,6 @@ class ExcelTemplateService:
     ) -> bool:
         """
         Locate candidate row in Excel workbook matching register_number using openpyxl,
-<<<<<<< HEAD
         write mapped extracted fields into corresponding row cells, and save updated workbook safely.
         """
         return await self.append_or_update_student_row_in_excel(
@@ -986,95 +704,3 @@ class ExcelTemplateService:
             student_data=extracted_data,
             class_id=class_id,
         )
-=======
-        write mapped extracted fields into corresponding row cells while keeping formatting intact,
-        and save updated workbook safely with concurrency locks and pre-write backups.
-        """
-        template = await self.repository.get_by_batch_id(batch_id, class_id=class_id)
-        if not template or not os.path.exists(template.file_path):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Master Excel file not found for admission batch '{batch_id}'.",
-            )
-
-        lock = _get_batch_lock(f"{batch_id}_{class_id}" if class_id else batch_id)
-
-        async with lock:
-            backup_path = self._create_backup(template.file_path, batch_id)
-
-            try:
-                wb = openpyxl.load_workbook(template.file_path, data_only=False)
-                sheet = wb.active
-                if sheet is None:
-                    raise ValueError("Active worksheet not found in workbook.")
-
-                header_col_map: dict[str, int] = {}
-                for col_idx, cell in enumerate(sheet[1], start=1):
-                    val = str(cell.value).strip() if cell.value is not None else ""
-                    if val:
-                        header_col_map[val] = col_idx
-
-                matched_row_idx = row_index
-
-                if not matched_row_idx:
-                    lookup_col_name = template.lookup_column
-                    lookup_col_idx = header_col_map.get(lookup_col_name)
-
-                    if not lookup_col_idx:
-                        for name, idx in header_col_map.items():
-                            n_norm = normalize_register_number(name)
-                            if any(k in n_norm for k in ["REG", "REGISTER", "ROLL", "ADM"]):
-                                lookup_col_idx = idx
-                                break
-
-                    if not lookup_col_idx:
-                        lookup_col_idx = 1
-
-                    target_norm = normalize_register_number(register_number)
-
-                    for r_idx in range(2, sheet.max_row + 1):
-                        cell_val = sheet.cell(row=r_idx, column=lookup_col_idx).value
-                        if compare_register_numbers(cell_val, target_norm):
-                            matched_row_idx = r_idx
-                            break
-
-                if not matched_row_idx:
-                    wb.close()
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f"Register Number '{register_number}' not found in Excel template data rows. Record flagged for review.",
-                    )
-
-                # Write mapped values into matched row cells
-                mappings = template.field_mappings
-                for ai_field, excel_header in mappings.items():
-                    if excel_header in header_col_map and ai_field in extracted_data:
-                        val_to_write = extracted_data[ai_field]
-                        if val_to_write is not None:
-                            col_idx = header_col_map[excel_header]
-                            sheet.cell(row=matched_row_idx, column=col_idx, value=val_to_write)
-
-                # Direct header matching for student profile fields (Student Name, Register Number, Mobile Number, Email)
-                for header_name, col_idx in header_col_map.items():
-                    if header_name in extracted_data and extracted_data[header_name] is not None:
-                        sheet.cell(row=matched_row_idx, column=col_idx, value=extracted_data[header_name])
-
-                wb.save(template.file_path)
-                wb.close()
-
-                # Increment updated count in database
-                await self.repository.increment_updated_count(batch_id, class_id=class_id)
-                return True
-
-            except HTTPException:
-                raise
-            except Exception as e:
-                # Restore from backup on failure
-                if os.path.exists(backup_path):
-                    shutil.copy2(backup_path, template.file_path)
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Failed to update Excel row (restored from backup): {str(e)}",
-                )
-
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4

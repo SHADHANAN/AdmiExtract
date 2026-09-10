@@ -1,20 +1,15 @@
 import React from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
-<<<<<<< HEAD
 import { Button } from '../components/ui/Button'
 import { CheckSquare, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
-=======
-import { CheckSquare } from 'lucide-react'
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 
 export const VerificationPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <PageHeader
         title="Admissions Verification Queue"
-<<<<<<< HEAD
         description="Review student OCR metadata classifications, verify extracted attributes, and approve candidate dossiers."
       />
 
@@ -30,15 +25,6 @@ export const VerificationPage: React.FC = () => {
             </Button>
           </Link>
         }
-=======
-        description="Verify student OCR classifications, check confidence ratings, and approve applications."
-      />
-
-      <EmptyState
-        title="Queue is Empty"
-        description="There are currently no document verification tasks pending counselor review."
-        icon={<CheckSquare className="h-12 w-12 text-muted-foreground/60" />}
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
       />
     </div>
   )

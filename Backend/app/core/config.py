@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """
 Application Configuration Module
 =================================
@@ -52,7 +51,7 @@ class Settings(BaseSettings):
     APP_ENV: Literal["development", "staging", "production", "testing"] = "development"
 
     # 2. Server Network Settings
-    HOST: str = "127.0.0.1"
+    HOST: str = "0.0.0.0"
     PORT: int = 8000
 
     # 3. Database Settings (MongoDB)
@@ -66,7 +65,7 @@ class Settings(BaseSettings):
 
     # 5. AI & OCR Service Settings (Gemini AI & Mistral AI)
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-3.6-flash"
     MISTRAL_API_KEY: str = ""
 
     model_config = SettingsConfigDict(
@@ -113,32 +112,5 @@ class Settings(BaseSettings):
             raise ValueError(f"ACCESS_TOKEN_EXPIRE_MINUTES must be positive, received: {v}")
         return v
 
-=======
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class Settings(BaseSettings):
-    APP_NAME: str
-    APP_VERSION: str = "1.0.0"
-    APP_ENV: str
-
-    HOST: str
-    PORT: int
-
-    MONGODB_URI: str
-    DATABASE_NAME: str
-
-    SECRET_KEY: str
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-
-    MISTRAL_API_KEY: str = ""
-
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        extra="ignore"
-    )
-
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 
 settings = Settings()

@@ -183,13 +183,8 @@ class OCRPreprocessor:
         if enrolment_match:
             results["Enrolment Number"] = {"value": enrolment_match.group(1).strip(), "confidence": 100}
 
-<<<<<<< HEAD
         # 8. EMIS ID (Explicitly labeled numeric identifier, commonly 8-16 digits)
-        emis_match = re.search(r"\bEMIS\s*(?:ID)?\s*(?:NO\.?)?[\s:\.\-]*(\d{8,16})\b", text, re.IGNORECASE)
-=======
-        # 8. EMIS ID (Explicitly labeled numeric identifier, commonly 9-11 digits)
-        emis_match = re.search(r"\bEMIS\s*(?:ID|NO|Number)?\s*[:\-]?\s*(\d{8,12})\b", text, re.IGNORECASE)
->>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
+        emis_match = re.search(r"\bEMIS\s*(?:ID|NO|Number)?\s*(?:NO\.?)?[\s:\.\-]*(\d{8,16})\b", text, re.IGNORECASE)
         if emis_match:
             results["EMIS ID"] = {"value": emis_match.group(1).strip(), "confidence": 100}
 
