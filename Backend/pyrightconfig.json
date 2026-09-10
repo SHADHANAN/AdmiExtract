@@ -1,0 +1,9 @@
+{
+  "venvPath": "d:/Projects/Automate/Backend",
+  "venv": "venv",
+  "extraPaths": [
+    "d:/Projects/Automate/Backend",
+    "d:/Projects/Automate/Backend/venv/Lib/site-packages"
+  ]
+}
+
