@@ -199,6 +199,7 @@ CLEAN OCR TEXT:
         _log(prompt)
 
         # Initialize Mistral client
+<<<<<<< HEAD
         client = None
         try:
             client = get_mistral_client()
@@ -254,6 +255,61 @@ CLEAN OCR TEXT:
                 else:
                     final_extracted[f] = {"value": "NO", "confidence": 0}
         else:
+=======
+        try:
+            client = get_mistral_client()
+        except ValueError as val_err:
+            _log(f"[ERROR] Mistral Client configuration error: {val_err}")
+            for f in llm_needed_fields:
+                final_extracted[f] = {"value": "NO", "confidence": 0}
+            return final_extracted
+
+        parsed_llm_result: Optional[Dict[str, Any]] = None
+
+        for attempt in range(1, 3):
+            try:
+                chat_response = client.chat.complete(
+                    model="mistral-small-latest",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a strict Admission Document Extraction AI. "
+                                "Return valid JSON containing ONLY requested fields. "
+                                "Extract ONLY explicitly visible text. If a field is not present, set 'value' to 'NO' and 'confidence' to 0. Do not hallucinate."
+                            ),
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    response_format={"type": "json_object"},
+                )
+
+                raw_response_content = (
+                    chat_response.choices[0].message.content or ""
+                ).strip()
+                _log(f"\n================ RAW LLM RESPONSE ================")
+                _log(f"\n================ AI RESPONSE ================")
+                _log(raw_response_content)
+
+                validated_data = self._validate_and_format_json(
+                    raw_response_content, llm_needed_fields
+                )
+                if validated_data is not None:
+                    parsed_llm_result = validated_data
+                    break
+                else:
+                    _log(f"[WARNING] Validation failed on attempt {attempt}.")
+
+            except Exception as exc:
+                _log(f"[ERROR] API call failed on attempt {attempt}: {exc}")
+
+        if parsed_llm_result is None:
+            _log("[ERROR] LLM Extraction failed after retries. Using fallback NO values.")
+            for f in llm_needed_fields:
+                final_extracted[f] = {"value": "NO", "confidence": 0}
+        else:
+            # CRITICAL: Merge LLM-extracted fields into final result
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
             final_extracted.update(parsed_llm_result)
             _log("\n" + "=" * 24)
             _log("LLM MERGED INTO FINAL")
@@ -353,6 +409,7 @@ CLEAN OCR TEXT:
                             "confidence": 80,
                         }
 
+<<<<<<< HEAD
         return formatted
 
     def _extract_semantic_heuristics(self, clean_ocr_text: str, needed_fields: List[str]) -> Dict[str, Any]:
@@ -562,3 +619,6 @@ CLEAN OCR TEXT:
                     results[field] = {"value": m.group(1), "confidence": 90}
 
         return results
+=======
+        return formatted
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4

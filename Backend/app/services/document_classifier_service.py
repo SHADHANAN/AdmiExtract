@@ -143,6 +143,7 @@ class DocumentClassifierService:
             return {"success": True, "document_type": "COMMUNITY"}
         if "transfer" in fn or "tc" in fn:
             return {"success": True, "document_type": "TRANSFER_CERTIFICATE"}
+<<<<<<< HEAD
         if "aadhaar" in fn or "aadhar" in fn or "adhar" in fn:
             return {"success": True, "document_type": "AADHAAR"}
         if "sslc" in fn or "10th" in fn:
@@ -159,4 +160,11 @@ class DocumentClassifierService:
             "success": True,
             "document_type": "STUDENT_DOCUMENT",
             "message": "Classified as student document"
+=======
+
+        return {
+            "success": False,
+            "document_type": "UNKNOWN",
+            "message": "Unable to identify document type"
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
         }

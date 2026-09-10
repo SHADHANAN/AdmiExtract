@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import React, { useState } from 'react'
+=======
+import React, { useState, useEffect } from 'react'
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'

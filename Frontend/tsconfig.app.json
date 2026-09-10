@@ -21,7 +21,10 @@
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
+<<<<<<< HEAD
     "ignoreDeprecations": "6.0",
+=======
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]

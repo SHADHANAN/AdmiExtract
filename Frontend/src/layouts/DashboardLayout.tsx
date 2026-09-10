@@ -5,6 +5,7 @@ import { Navbar } from '../components/Navbar'
 
 export const DashboardLayout: React.FC = () => {
   return (
+<<<<<<< HEAD
     <div className="relative min-h-screen bg-background text-foreground flex overflow-x-hidden selection:bg-indigo-500/30 selection:text-white">
       {/* Subtle ambient lighting orbs */}
       <div className="pointer-events-none fixed -top-40 -left-40 h-[500px] w-[500px] rounded-full bg-indigo-600/10 blur-[140px]" />
@@ -15,6 +16,13 @@ export const DashboardLayout: React.FC = () => {
       <div className="pl-64 flex flex-col min-h-screen w-full relative z-10">
         <Navbar />
         <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto">
+=======
+    <div className="min-h-screen bg-background">
+      <Sidebar />
+      <div className="pl-64 flex flex-col min-h-screen">
+        <Navbar />
+        <main className="flex-1 p-8 overflow-y-auto">
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
           <Outlet />
         </main>
       </div>

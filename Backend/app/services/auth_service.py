@@ -23,6 +23,7 @@ async def register_user(user_in: UserCreate) -> User:
 
 
 async def authenticate_user(identifier: str, password: str) -> User | None:
+<<<<<<< HEAD
     user_repo = UserRepository()
 
     print("Identifier:", identifier)
@@ -46,3 +47,19 @@ async def authenticate_user(identifier: str, password: str) -> User | None:
         return None
 
     return user
+=======
+    """
+    Authenticate a user by username or email, verifying password and active status.
+    Returns the User document if successful and active, otherwise None.
+    """
+    user_repo = UserRepository()
+    user = await user_repo.get_user_by_username_or_email(identifier)
+    if not user:
+        return None
+    if not user.is_active:
+        return None
+    if not verify_password(password, user.password):
+        return None
+    return user
+
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4

@@ -250,6 +250,7 @@ def is_yes_no_question_field(name: str) -> bool:
     return False
 
 
+<<<<<<< HEAD
 def is_name_conflict(header: str, candidate_key: str) -> bool:
     """
     Check if matching candidate_key to header violates person name semantic boundaries:
@@ -404,6 +405,8 @@ def is_address_conflict(header: str, candidate_key: str) -> bool:
     return False
 
 
+=======
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 def normalize_yes_no_value(raw_val: Any) -> Any:
     """
     Normalize raw LLM or string value strictly to 'Yes', 'No', or None.
@@ -459,6 +462,7 @@ FIELD_ALIASES: Dict[str, list[str]] = {
         "Caste",
         "Community Certificate",
     ],
+<<<<<<< HEAD
     "Caste": [
         "Community Category",
         "Community Name",
@@ -476,6 +480,8 @@ FIELD_ALIASES: Dict[str, list[str]] = {
         "Caste Category",
         "Caste",
     ],
+=======
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
     "Community Category": [
         "Community Category",
         "Community",
@@ -487,6 +493,7 @@ FIELD_ALIASES: Dict[str, list[str]] = {
         "Caste",
         "Community Certificate",
     ],
+<<<<<<< HEAD
     "Community Name": [
         "Community Name",
         "Community Category",
@@ -495,6 +502,8 @@ FIELD_ALIASES: Dict[str, list[str]] = {
         "Caste Category",
         "Caste",
     ],
+=======
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
     "Aadhaar Number": [
         "Aadhaar Number",
         "Aadhaar Card Number",
@@ -1096,7 +1105,11 @@ def get_allowed_sources_for_field(field_name: str) -> list[str]:
 
 def is_document_authorized_for_field(doc_type: str, field_name: str) -> bool:
     """
+<<<<<<< HEAD
     Document-Field Alignment Rule:
+=======
+    Strict Document-Field Alignment Rule:
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
     - Return True ONLY if doc_type is a valid allowed source for field_name.
     - UNKNOWN document types return False.
     """
@@ -1107,8 +1120,11 @@ def is_document_authorized_for_field(doc_type: str, field_name: str) -> bool:
     return doc_type in allowed_sources
 
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 def get_doc_type_for_requirement(doc_name: str) -> str:
     """
     Map document requirement name (e.g., 'Income Certificate', 'Aadhaar Card')

@@ -16,6 +16,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     except Exception:
         return False
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 def get_password_hash(password: str) -> str:
     """Generate a hashed representation of a password."""
     hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())

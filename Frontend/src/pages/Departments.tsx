@@ -155,16 +155,28 @@ export const Departments: React.FC = () => {
           {filteredDepts.length > 0 ? (
             <div className="grid gap-6 md:grid-cols-3">
               {filteredDepts.map((dept) => (
+<<<<<<< HEAD
                 <Card key={dept.id} className="relative hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-300 flex flex-col justify-between overflow-hidden border border-white/[0.08] bg-[#111827]">
                   <div className="h-1.5 w-full bg-gradient-to-r from-indigo-500 via-indigo-600 to-purple-600" />
                   
                   <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 mt-2">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-400 border border-indigo-500/25 shadow-xs">
+=======
+                <Card key={dept.id} className="relative hover:shadow-md transition-shadow flex flex-col justify-between overflow-hidden">
+                  <div className="h-1 w-full bg-indigo-500" />
+                  
+                  <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 mt-2">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600">
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                       <Building2 className="h-5 w-5" />
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+<<<<<<< HEAD
                         dept.is_active ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+=======
+                        dept.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                       }`}>
                         {dept.is_active ? 'Active' : 'Inactive'}
                       </span>
@@ -172,12 +184,18 @@ export const Departments: React.FC = () => {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div>
+<<<<<<< HEAD
                       <CardTitle className="text-lg font-bold text-white">{dept.name} ({dept.code})</CardTitle>
                       <CardDescription className="mt-1.5 line-clamp-2 text-slate-400">
+=======
+                      <CardTitle className="text-lg font-bold">{dept.name} ({dept.code})</CardTitle>
+                      <CardDescription className="mt-1.5 line-clamp-2">
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                         {dept.description || 'No description provided.'}
                       </CardDescription>
                     </div>
 
+<<<<<<< HEAD
                     <div className="border-t border-white/[0.08] pt-4 flex flex-col gap-2 text-xs text-slate-400">
                       <div className="flex items-center gap-1.5">
                         <ShieldCheck className="h-3.5 w-3.5 text-indigo-400" /> Created by: {dept.created_by}
@@ -185,12 +203,22 @@ export const Departments: React.FC = () => {
                       <div className="flex items-center gap-1.5 justify-between">
                         <span className="flex items-center gap-1.5">
                           <Calendar className="h-3.5 w-3.5 text-indigo-400" /> Date: {new Date(dept.created_at).toLocaleDateString()}
+=======
+                    <div className="border-t border-border pt-4 flex flex-col gap-2 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1.5">
+                        <ShieldCheck className="h-3.5 w-3.5 text-indigo-500" /> Created by: {dept.created_by}
+                      </div>
+                      <div className="flex items-center gap-1.5 justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <Calendar className="h-3.5 w-3.5" /> Date: {new Date(dept.created_at).toLocaleDateString()}
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                         </span>
                         
                         {/* Action buttons */}
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => handleEditClick(dept)}
+<<<<<<< HEAD
                             className="p-1 hover:bg-white/[0.08] rounded text-slate-400 hover:text-white cursor-pointer transition-colors"
                             title="Edit"
                           >
@@ -202,6 +230,19 @@ export const Departments: React.FC = () => {
                             title="Delete"
                           >
                             <Trash2 className="h-4 w-4" />
+=======
+                            className="p-1 hover:bg-secondary rounded text-muted-foreground hover:text-foreground cursor-pointer"
+                            title="Edit"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteClick(dept.id)}
+                            className="p-1 hover:bg-destructive/10 rounded text-destructive cursor-pointer"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
                           </button>
                         </div>
                       </div>

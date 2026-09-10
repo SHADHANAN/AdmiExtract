@@ -1,5 +1,9 @@
 import re
+<<<<<<< HEAD
 from typing import Any, Optional, Dict, List, Tuple
+=======
+from typing import Any
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 
 
 def normalize_register_number(val: Any) -> str:
@@ -23,13 +27,18 @@ def normalize_register_number(val: Any) -> str:
 def compare_register_numbers(reg1: Any, reg2: Any) -> bool:
     """
     Normalized comparison between two register numbers:
+<<<<<<< HEAD
     Returns True if normalize_register_number(reg1) == normalize_register_number(reg2),
     with zero-padding tolerance for numeric identifiers (e.g. '002401' == '2401').
+=======
+    Returns True if normalize_register_number(reg1) == normalize_register_number(reg2).
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
     """
     norm1 = normalize_register_number(reg1)
     norm2 = normalize_register_number(reg2)
     if not norm1 or not norm2:
         return False
+<<<<<<< HEAD
     if norm1 == norm2:
         return True
     # Numeric zero-padding tolerance
@@ -243,3 +252,6 @@ def normalize_name(val: Any) -> Optional[str]:
     return s.upper()
 
 
+=======
+    return norm1 == norm2
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4

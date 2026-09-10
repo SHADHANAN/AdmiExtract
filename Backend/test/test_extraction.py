@@ -26,7 +26,10 @@ async def setup_test_db():
     import app.db.database
     app.db.database.client = test_client
     app.db.database.db = test_db
+<<<<<<< HEAD
     app.db.database._is_connected = True
+=======
+>>>>>>> 0a5dfd9cad8747310b83a8ec85613028abb6d2b4
 
     await init_beanie(
         database=cast(Any, test_db),
