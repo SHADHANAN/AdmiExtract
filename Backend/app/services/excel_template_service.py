@@ -344,13 +344,30 @@ class ExcelTemplateService:
             v_str = str(v).strip()
             if not v_str or v_str.upper() in ["NULL", "NONE", "N/A", "NOT DETECTED", "NOT FOUND"]:
                 return None
-            if v_str.upper() == "NO":
-                if (
-                    any(q in header.lower() for q in ["yes/no", "(yes/no)", "yes / no", "same as", "did ", "whether", "income", "orphan", "quota", "abled"])
-                    or header.lower().startswith("is ")
-                ):
-                    return "No"
+            
+            from app.utils.field_canonicalizer import is_yes_no_question_field
+            h_low = header.lower().strip()
+            is_bool_header = (
+                is_yes_no_question_field(header)
+                or any(q in h_low for q in ["yes/no", "(yes/no)", "yes / no", "same as", "did ", "whether", "income", "orphan", "quota", "abled"])
+                or h_low.startswith("is ")
+            )
+
+            # Address, Names, DOB, EMIS, Aadhaar, Gender must NEVER accept boolean Yes/No unless it is an explicit boolean question
+            if any(k in h_low for k in ["address", "name", "dob", "birth", "emis", "aadhaar", "aadhar", "gender", "sex"]):
+                if not any(q in h_low for q in ["is ", "same as", "yes/no", "?"]):
+                    if v_str.lower() in ["yes", "no", "true", "false", "y", "n"]:
+                        return None
+
+            if v_str.upper() in ["NO", "N", "FALSE", "0"]:
+                return "No" if is_bool_header else None
+            if v_str.upper() in ["YES", "Y", "TRUE", "1"]:
+                return "Yes" if is_bool_header else None
+
+            # If not a boolean question header, reject boolean text
+            if not is_bool_header and v_str.lower() in ["yes", "no", "true", "false", "y", "n"]:
                 return None
+
             return v
 
         h_clean = header.strip()
@@ -381,14 +398,25 @@ class ExcelTemplateService:
         reg_indicators = [
             "register number", "register no", "reg no", "reg. no", "reg_no",
             "registration number", "registration no", "roll number", "roll no",
-            "roll_no", "roll. no", "regno", "rollno", "admission number", "admission no",
-            "adm no", "adm. no",
+            "roll_no", "roll. no", "regno", "rollno",
         ]
         if any(h_norm == re.sub(r'[\s_\-\./\(\)]+', '', ind) for ind in reg_indicators) or (
             any(r in h_lower for r in ["register", "roll", "reg no", "reg. no"])
+            and not any(neg in h_lower for neg in ["quota", "year", "date", "fee", "status", "admission", "adm"])
+        ):
+            for k in ["Register Number", "register_number", "Reg No", "Registration Number", "Roll No", "Roll Number", "reg_no"]:
+                if k in data_dict:
+                    val = _clean_val(data_dict[k])
+                    if val is not None:
+                        return val
+
+        # Admission Number (Distinct from Register Number)
+        adm_indicators = ["admission number", "admission no", "adm no", "adm. no"]
+        if any(h_norm == re.sub(r'[\s_\-\./\(\)]+', '', ind) for ind in adm_indicators) or (
+            any(r in h_lower for r in ["admission no", "admission number", "adm no"])
             and not any(neg in h_lower for neg in ["quota", "year", "date", "fee", "status"])
         ):
-            for k in ["Register Number", "register_number", "Reg No", "Registration Number", "Roll No", "Roll Number", "Admission Number", "reg_no"]:
+            for k in ["Admission Number", "admission_number", "Admission No", "admission_no", "adm no"]:
                 if k in data_dict:
                     val = _clean_val(data_dict[k])
                     if val is not None:
@@ -503,28 +531,7 @@ class ExcelTemplateService:
         except Exception:
             pass
 
-        # ---------------------------------------------------------
-        # Priority 6: Substring Fallback (Context-Guarded)
-        # ---------------------------------------------------------
-        from app.utils.field_canonicalizer import is_yes_no_question_field
-        is_h_q = is_yes_no_question_field(h_clean)
-        for k, raw_v in data_dict.items():
-            if not k or _has_conflict(h_clean, k):
-                continue
-            if not is_h_q and is_yes_no_question_field(k):
-                continue
-            if is_h_q and not is_yes_no_question_field(k):
-                continue
-            k_lower = k.strip().lower()
-            # Guard against generic keywords
-            if h_lower in ["name", "number", "code", "mark", "id", "date"] or k_lower in ["name", "number", "code", "mark", "id", "date"]:
-                continue
-            if len(h_lower) >= 5 and len(k_lower) >= 5:
-                if h_lower in k_lower or k_lower in h_lower:
-                    val = _clean_val(raw_v)
-                    if val is not None:
-                        return val
-
+        # Not found -> Return None, NEVER write literal 'NO' for non-boolean columns
         return None
 
     async def append_or_update_student_row_in_excel(
@@ -590,6 +597,7 @@ class ExcelTemplateService:
                 # Write values into target_row for every defined header column non-destructively
                 from app.utils.normalization import (
                     clean_text_noise,
+                    is_explicit_negative,
                     validate_and_normalize_aadhaar,
                     validate_and_normalize_mobile,
                     validate_and_normalize_dob,
@@ -598,16 +606,37 @@ class ExcelTemplateService:
                     validate_and_normalize_ifsc,
                     validate_and_normalize_community,
                     validate_and_normalize_pincode,
+                    validate_and_normalize_person_name,
+                    validate_and_normalize_state,
+                    validate_and_normalize_nationality,
+                    validate_and_normalize_religion,
+                    validate_and_normalize_emis,
+                    validate_and_normalize_code_field,
+                    validate_boolean_yes_no,
                 )
 
                 for header_name, col_idx in header_col_map.items():
                     val = self._resolve_header_value(header_name, student_data)
-                    if val is not None:
+                    hn_lower = header_name.lower().strip()
+                    is_bool_q = (
+                        any(q in hn_lower for q in ["yes/no", "(yes/no)", "yes / no", "same as", "did ", "whether"])
+                        or hn_lower.startswith("is ")
+                        or hn_lower.endswith("?")
+                    )
+
+                    if val is not None and not is_explicit_negative(val):
                         val_str = str(val).strip()
-                        if val_str.upper() not in ["NO", "NULL", "NONE", "N/A", "NOT DETECTED", "NOT FOUND"]:
-                            hn_lower = header_name.lower()
-                            # Field-level validation and normalization
-                            if "aadhaar" in hn_lower or "aadhar" in hn_lower:
+                        if val_str.upper() not in ["NO", "NULL", "NONE", "N/A", "NOT DETECTED", "NOT FOUND", ""]:
+                            # Strict field-level semantic validation before Excel write
+                            if not is_bool_q and val_str.lower() in ["yes", "no", "true", "false", "y", "n"]:
+                                continue
+
+                            if is_bool_q:
+                                v_norm = validate_boolean_yes_no(val)
+                                if not v_norm:
+                                    v_norm = "No"
+                                val = v_norm
+                            elif "aadhaar" in hn_lower or "aadhar" in hn_lower:
                                 without_space = "without space" in hn_lower or "nospace" in hn_lower
                                 v_norm = validate_and_normalize_aadhaar(val, without_space=without_space)
                                 if not v_norm:
@@ -628,6 +657,39 @@ class ExcelTemplateService:
                                 if not v_norm:
                                     continue
                                 val = v_norm
+                            elif any(k in hn_lower for k in ["father", "mother", "guardian", "student name", "candidate name", "applicant name"]) and not any(k in hn_lower for k in ["occupation", "mobile", "phone", "aadhaar", "address"]):
+                                v_norm = validate_and_normalize_person_name(val, role=header_name)
+                                if not v_norm:
+                                    continue
+                                if v_norm.upper() == str(val).strip().upper():
+                                    val = str(val).strip()
+                                else:
+                                    val = v_norm
+                            elif "state" in hn_lower:
+                                v_norm = validate_and_normalize_state(val)
+                                if not v_norm:
+                                    continue
+                                val = v_norm
+                            elif "nationality" in hn_lower:
+                                v_norm = validate_and_normalize_nationality(val)
+                                if not v_norm:
+                                    continue
+                                val = v_norm
+                            elif "religion" in hn_lower:
+                                v_norm = validate_and_normalize_religion(val)
+                                if not v_norm:
+                                    continue
+                                val = v_norm
+                            elif "emis" in hn_lower:
+                                v_norm = validate_and_normalize_emis(val)
+                                if not v_norm:
+                                    continue
+                                val = v_norm
+                            elif hn_lower.endswith("code") or "code" in hn_lower.split():
+                                v_norm = validate_and_normalize_code_field(header_name, val)
+                                if not v_norm:
+                                    continue
+                                val = v_norm
                             elif "email" in hn_lower:
                                 v_norm = validate_and_normalize_email(val)
                                 if not v_norm:
@@ -643,21 +705,26 @@ class ExcelTemplateService:
                                 if not v_norm:
                                     continue
                                 val = v_norm
-                            elif "community" in hn_lower:
+                            elif "community" in hn_lower or "caste" in hn_lower:
                                 v_norm = validate_and_normalize_community(val)
-                                if v_norm:
-                                    val = v_norm
-                            elif "address" in hn_lower:
-                                val = clean_text_noise(val)
+                                if not v_norm:
+                                    continue
+                                val = v_norm
+                            elif "address" in hn_lower and not any(comp in hn_lower for comp in ["email", "mail"]):
+                                from app.utils.normalization import validate_and_normalize_address
+                                v_norm = validate_and_normalize_address(val)
+                                if not v_norm:
+                                    continue
+                                val = v_norm
 
                             sheet.cell(row=target_row, column=col_idx, value=val)
                             written_cells[header_name] = val
-                        elif (
-                            any(q in header_name.lower() for q in ["yes/no", "(yes/no)", "yes / no", "same as", "did ", "whether"])
-                            or header_name.lower().startswith("is ")
-                        ):
+                        elif is_bool_q:
                             sheet.cell(row=target_row, column=col_idx, value="No")
                             written_cells[header_name] = "No"
+                    elif is_bool_q:
+                        sheet.cell(row=target_row, column=col_idx, value="No")
+                        written_cells[header_name] = "No"
 
                 wb.save(template.file_path)
                 wb.close()

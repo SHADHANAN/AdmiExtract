@@ -419,15 +419,8 @@ async def confirm_student_submission(
                 student_data=excel_updates,
                 class_id=data.class_id,
             )
-        except HTTPException as http_exc:
-            print(f"[confirm_student_submission Excel Error] HTTPException: {http_exc.detail}", flush=True)
-            raise http_exc
         except Exception as excel_err:
-            print(f"[confirm_student_submission Excel Error] Unexpected error updating workbook: {excel_err}", flush=True)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Submission created, but failed to write to Excel workbook: {str(excel_err)}",
-            )
+            print(f"[confirm_student_submission Excel Error] Warning: Failed to update Excel workbook: {excel_err}", flush=True)
 
         return _to_response(submission)
     except HTTPException:

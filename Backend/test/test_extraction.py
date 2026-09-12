@@ -72,7 +72,7 @@ async def test_extract_logging_pipeline_development(client_async: AsyncClient, c
         
         # Create a mock doc config version for the batch
         doc_config = DocumentConfigurationVersion(
-            batch_id=str(batch.id),
+            batch_id=batch.id,
             version=1,
             documents=[
                 DocumentRequirementItem(id="doc-1", name="Aadhaar Card", required=True, allowed_types=["pdf"], max_size_mb=5, type="aadhaar"),
@@ -86,7 +86,7 @@ async def test_extract_logging_pipeline_development(client_async: AsyncClient, c
             ("files", ("test.pdf", b"pdf content", "application/pdf"))
         ]
         data = {
-            "batch_id": str(batch.id),
+            "batch_id": batch.id,
             "register_number": "REG123",
             "student_name": "John Doe"
         }
@@ -143,7 +143,7 @@ async def test_extract_logging_pipeline_production(client_async: AsyncClient, ca
         
         # Create a mock doc config version for the batch
         doc_config = DocumentConfigurationVersion(
-            batch_id=str(batch.id),
+            batch_id=batch.id,
             version=1,
             documents=[
                 DocumentRequirementItem(id="doc-1", name="Aadhaar Card", required=True, allowed_types=["pdf"], max_size_mb=5, type="aadhaar")
@@ -156,7 +156,7 @@ async def test_extract_logging_pipeline_production(client_async: AsyncClient, ca
             ("files", ("test.pdf", b"pdf content", "application/pdf"))
         ]
         data = {
-            "batch_id": str(batch.id),
+            "batch_id": batch.id,
             "register_number": "REG456",
             "student_name": "Jane Doe"
         }
@@ -592,6 +592,7 @@ def test_strict_non_hallucination_and_no_return_rules():
     # 2. Validation of missing / empty / null / ungrounded fields returns {"value": "NO", "confidence": 0}
     raw_llm_json = '{"Occupation": {"value": null, "confidence": 0}, "EMIS ID": {"value": "NOT DETECTED", "confidence": 0}, "Caste": "N/A"}'
     validated = ai_service._validate_and_format_json(raw_llm_json, ["Occupation", "EMIS ID", "Caste", "Mother Name"])
+    assert validated is not None
 
     assert validated["Occupation"] == {"value": "NO", "confidence": 0}
     assert validated["EMIS ID"] == {"value": "NO", "confidence": 0}

@@ -20,6 +20,7 @@ async def setup_test_db():
     import app.db.database
     app.db.database.client = test_client
     app.db.database.db = test_db
+    app.db.database._is_connected = True
 
     await init_beanie(database=cast(Any, test_db), document_models=[User])
     await User.find_all().delete()

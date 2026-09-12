@@ -23,17 +23,20 @@ async def setup_test_db():
     import app.db.database
     app.db.database.client = test_client
     app.db.database.db = test_db
+    app.db.database._is_connected = True
 
     from app.models.batch import AdmissionBatch
     from app.models.student_submission import StudentSubmission
     from app.models.doc_config_version import DocumentConfigurationVersion
+    from app.models.excel_template import ExcelBatchTemplate
 
-    await init_beanie(database=cast(Any, test_db), document_models=[User, AdmissionBatch, StudentSubmission, DocumentConfigurationVersion])
+    await init_beanie(database=cast(Any, test_db), document_models=[User, AdmissionBatch, StudentSubmission, DocumentConfigurationVersion, ExcelBatchTemplate])
     # Ensure clear collection
     await User.find_all().delete()
     await AdmissionBatch.find_all().delete()
     await StudentSubmission.find_all().delete()
     await DocumentConfigurationVersion.find_all().delete()
+    await ExcelBatchTemplate.find_all().delete()
     
     yield
     
@@ -393,6 +396,7 @@ async def test_append_or_update_student_row_in_excel_unit(tmp_path):
     template_file = tmp_path / "template.xlsx"
     wb = openpyxl.Workbook()
     ws = wb.active
+    assert ws is not None
     ws.append(["Student Name", "Register Number", "Mobile Number", "Aadhaar Card", "Community"])
     wb.save(template_file)
     wb.close()
@@ -427,6 +431,7 @@ async def test_append_or_update_student_row_in_excel_unit(tmp_path):
     # Read back saved file
     wb_read = openpyxl.load_workbook(template_file, data_only=True)
     ws_read = wb_read.active
+    assert ws_read is not None
     row2 = [cell.value for cell in ws_read[2]]
     assert row2[0] == "Praveen"
     assert row2[1] == "24AM076"
@@ -448,6 +453,7 @@ async def test_append_or_update_student_row_in_excel_unit(tmp_path):
 
     wb_read2 = openpyxl.load_workbook(template_file, data_only=True)
     ws_read2 = wb_read2.active
+    assert ws_read2 is not None
     assert ws_read2.max_row == 2  # No new row created, updated Row 2!
     row2_updated = [cell.value for cell in ws_read2[2]]
     assert row2_updated[0] == "Praveen Kumar"

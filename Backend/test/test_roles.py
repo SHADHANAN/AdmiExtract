@@ -39,6 +39,7 @@ async def setup_test_db():
     import app.db.database
     app.db.database.client = test_client
     app.db.database.db = test_db
+    app.db.database._is_connected = True
 
     await init_beanie(database=cast(Any, test_db), document_models=[User])
     await User.find_all().delete()
@@ -56,16 +57,22 @@ async def client_async():
 
 
 async def get_token_for_user(client_async: AsyncClient, username: str, name: str, email: str, role: UserRole) -> str:
+    import uuid
+    uniq = uuid.uuid4().hex[:6]
+    u = f"{username}_{uniq}"
+    e = f"{username}_{uniq}@example.com"
     # Register user with role
-    await client_async.post(
+    reg = await client_async.post(
         "/auth/register",
-        json={"username": username, "name": name, "email": email, "password": "password123", "role": role}
+        json={"username": u, "name": name, "email": e, "password": "password123", "role": role.value if hasattr(role, "value") else str(role)}
     )
     # Login user
     response = await client_async.post(
         "/auth/login",
-        data={"username": username, "password": "password123"}
+        data={"username": u, "password": "password123"}
     )
+    if "access_token" not in response.json():
+        raise RuntimeError(f"Login failed: reg={reg.status_code} {reg.text} | login={response.status_code} {response.text}")
     return response.json()["access_token"]
 
 

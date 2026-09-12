@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 import bcrypt
-from jose import jwt, JWTError
+from jose import jwt, JWTError  # type: ignore
 
 from app.core.config import settings
 
@@ -40,6 +40,6 @@ def decode_access_token(token: str) -> dict[str, Any] | None:
     """Decode and validate a JWT access token."""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        return payload
+        return cast(dict[str, Any], payload)
     except JWTError:
         return None

@@ -12,40 +12,107 @@ from typing import Any, Dict, Optional
 
 # Alias to Canonical Field Mapping
 CANONICAL_FIELD_MAP: Dict[str, str] = {
-    # Aadhaar Number
-    "aadhaar": "Aadhaar Card",
+    # Aadhaar Number -> "Aadhaar Number (without space)" and "Aadhaar Card"
+    "aadhaar": "Aadhaar Number (without space)",
     "aadhaar card": "Aadhaar Card",
     "aadhaar number": "Aadhaar Card",
     "aadhaar card number": "Aadhaar Card",
     "aadhaar no": "Aadhaar Card",
     "aadhaar no.": "Aadhaar Card",
     "aadhaar id": "Aadhaar Card",
-    "aadhar": "Aadhaar Card",
+    "aadhar": "Aadhaar Number (without space)",
     "aadhar card": "Aadhaar Card",
     "aadhar number": "Aadhaar Card",
-    "aadhaar_number": "Aadhaar Card",
+    "aadhaar_number": "Aadhaar Number (without space)",
     "aadhaar_card": "Aadhaar Card",
+    "aadhaar number (without space)": "Aadhaar Number (without space)",
+    "aadhaar number without space": "Aadhaar Number (without space)",
 
-    # Community Details
-    "community certificate": "Community Certificate",
-    "caste certificate": "Community Certificate",
-    "community_certificate": "Community Certificate",
+    # Date of Birth -> "Student Date of Birth(DD.MM.YYYY)"
+    "student date of birth": "Student Date of Birth(DD.MM.YYYY)",
+    "dob": "Student Date of Birth(DD.MM.YYYY)",
+    "date of birth": "Student Date of Birth(DD.MM.YYYY)",
+    "student date of birth(dd.mm.yyyy)": "Student Date of Birth(DD.MM.YYYY)",
+    "birth date": "Student Date of Birth(DD.MM.YYYY)",
+    "d.o.b": "Student Date of Birth(DD.MM.YYYY)",
+    "d.o.b.": "Student Date of Birth(DD.MM.YYYY)",
+
+    # Gender -> "Gender"
+    "gender": "Gender",
+    "sex": "Gender",
+
+    # EMIS ID -> "EMIS ID"
+    "emis": "EMIS ID",
+    "emis id": "EMIS ID",
+    "emis_id": "EMIS ID",
+    "emis number": "EMIS ID",
+    "emis no": "EMIS ID",
+    "student emis id": "EMIS ID",
+
+    # Parents -> "Father's Name" / "Mother's Name"
+    "father name": "Father's Name",
+    "father's name": "Father's Name",
+    "father": "Father's Name",
+    "father_name": "Father's Name",
+    "name of father": "Father's Name",
+    "father / guardian name": "Father's Name",
+    "father/guardian name": "Father's Name",
+    "mother name": "Mother's Name",
+    "mother's name": "Mother's Name",
+    "mother": "Mother's Name",
+    "mother_name": "Mother's Name",
+    "name of mother": "Mother's Name",
+    "guardian name": "Guardian's Name",
+    "guardian's name": "Guardian's Name",
+    "guardian": "Guardian's Name",
+
+    # Nationality -> "Nationality"
+    "nationality": "Nationality",
+    "nation": "Nationality",
+
+    # Community -> "Community" / "Community Category"
     "community": "Community Category",
-
-    "community code": "Community Code",
-    "community_code": "Community Code",
-    "caste code": "Community Code",
-
-    "community name": "Community Name",
-    "community_name": "Community Name",
-    "caste":"Community Name",
-    "caste name": "Community Name",
-    "sub caste": "Community Name",
-    "sub_caste": "Community Name",
-
     "community category": "Community Category",
     "community_category": "Community Category",
     "caste category": "Community Category",
+    "category": "Community Category",
+    "social status": "Community Category",
+    "reservation category": "Community Category",
+
+    # Caste -> "Caste" / "Community Name"
+    "caste": "Caste",
+    "caste name": "Caste",
+    "sub caste": "Caste",
+    "sub_caste": "Caste",
+    "subcaste": "Caste",
+    "community name": "Community Name",
+    "community_name": "Community Name",
+    "name of the caste": "Caste",
+
+    # Address -> "Permanent Address" / "Communication address"
+    "address": "Permanent Address",
+    "full address": "Permanent Address",
+    "full_address": "Permanent Address",
+    "permanent address": "Permanent Address",
+    "permanent_address": "Permanent Address",
+    "residential address": "Permanent Address",
+    "postal address": "Permanent Address",
+    "home address": "Permanent Address",
+    "native address": "Permanent Address",
+    "communication address": "Communication address",
+    "communication_address": "Communication address",
+    "address for communication": "Communication address",
+    "temporary address": "Communication address",
+    "present address": "Communication address",
+    "current address": "Communication address",
+
+    # Community Certificate
+    "community certificate": "Community Certificate",
+    "caste certificate": "Community Certificate",
+    "community_certificate": "Community Certificate",
+    "community code": "Community Code",
+    "community_code": "Community Code",
+    "caste code": "Community Code",
 
     # Student Name
     "student name": "Student Name",
@@ -59,10 +126,8 @@ CANONICAL_FIELD_MAP: Dict[str, str] = {
     "reg no": "Register Number",
     "register no": "Register Number",
     "register_number": "Register Number",
-
-    #collage reg
-    "Collage Register No":"register_number",
-    "collage register no":"register_number",
+    "Collage Register No": "Register Number",
+    "collage register no": "Register Number",
 
     # Mobile Number
     "mobile": "Mobile Number",
@@ -70,13 +135,6 @@ CANONICAL_FIELD_MAP: Dict[str, str] = {
     "mobile number": "Mobile Number",
     "phone number": "Mobile Number",
     "mobile_number": "Mobile Number",
-
-    # Address
-    "address": "Address",
-    "full address": "Address",
-    "permanent address": "Address",
-    "postal address": "Address",
-    "communication address": "Address",
 
     # Bank Details
     "ifsc": "IFSC Code",
@@ -250,38 +308,53 @@ def is_yes_no_question_field(name: str) -> bool:
     return False
 
 
+is_boolean_question = is_yes_no_question_field
+
+
 def is_name_conflict(header: str, candidate_key: str) -> bool:
     """
     Check if matching candidate_key to header violates person name semantic boundaries:
-    - Student Name cannot match Father/Mother/Guardian/School Name
-    - Father Name cannot match Mother/Student Name
-    - Mother Name cannot match Father/Student Name
+    - Student Name cannot match Father/Mother/Guardian/School Name/Caste/Gender/Address
+    - Father Name cannot match Mother/Student/Guardian/Caste/Gender/Address/Boilerplate
+    - Mother Name cannot match Father/Student/Guardian/Caste/Gender/Address/Boilerplate
+    - Guardian Name cannot match Father/Mother/Student/Caste/Gender/Address/Boilerplate
     """
     if not header or not candidate_key:
         return False
     h = header.lower().strip()
     c = candidate_key.lower().strip()
 
+    # Any person name header must NEVER match non-person domains
+    is_h_person = any(k in h for k in ["name", "father", "mother", "guardian", "candidate", "student", "applicant"]) and not any(k in h for k in ["school", "college", "bank", "branch", "community", "caste"])
+    if is_h_person:
+        non_person_terms = [
+            "caste", "community", "gender", "sex", "address", "state", "district", "taluk",
+            "village", "pincode", "religion", "nationality", "refer", "mark", "emis", "aadhaar",
+            "code", "quota", "medium", "course", "stream", "income"
+        ]
+        if any(bad in c for bad in non_person_terms):
+            return True
+
     # Student Name header
     if any(k in h for k in ["student name", "candidate name", "applicant name", "name of candidate", "name of student", "name of the student"]) or (
-        "name" in h and not any(p in h for p in ["father", "mother", "parent", "guardian", "spouse", "school", "college", "bank", "branch"])
+        "name" in h and not any(p in h for p in ["father", "mother", "parent", "guardian", "spouse", "school", "college", "bank", "branch", "community", "caste"])
     ):
-        if any(bad in c for bad in ["father", "mother", "guardian", "spouse", "school", "college", "bank", "branch"]):
+        if any(bad in c for bad in ["father", "mother", "guardian", "spouse", "school", "college", "bank", "branch", "caste", "community"]):
             return True
 
     # Father's Name header
     if "father" in h:
-        if any(bad in c for bad in ["mother", "student name", "candidate name", "applicant name"]):
+        if any(bad in c for bad in ["mother", "student name", "candidate name", "applicant name", "guardian", "spouse", "caste", "community", "gender"]):
             return True
 
     # Mother's Name header
     if "mother" in h:
-        if any(bad in c for bad in ["father", "student name", "candidate name", "applicant name", "guardian"]):
+        if any(bad in c for bad in ["father", "student name", "candidate name", "applicant name", "guardian", "spouse", "caste", "community", "gender"]):
             return True
 
     # Guardian / Spouse Name header
     if "guardian" in h or "spouse" in h:
-        if "mother" in c:
+        if any(bad in c for bad in ["father name", "father's name", "mother", "student name", "candidate name", "applicant name", "caste", "community", "gender", "address"]):
             return True
 
     return False
@@ -290,7 +363,7 @@ def is_name_conflict(header: str, candidate_key: str) -> bool:
 def is_number_conflict(header: str, candidate_key: str) -> bool:
     """
     Check if matching candidate_key to header violates identifier semantic boundaries:
-    - Register/Roll No vs Aadhaar vs EMIS vs Serial No (SL.NO) vs Mobile
+    - Register/Roll No vs Aadhaar vs EMIS vs Serial No (SL.NO) vs Mobile vs Admission No vs Certificate No
     """
     if not header or not candidate_key:
         return False
@@ -299,7 +372,7 @@ def is_number_conflict(header: str, candidate_key: str) -> bool:
 
     # Aadhaar Number
     if "aadhaar" in h or "aadhar" in h:
-        if any(bad in c for bad in ["emis", "register", "roll", "sl.no", "serial", "tc no", "mobile", "phone"]):
+        if any(bad in c for bad in ["emis", "register", "roll", "sl.no", "serial", "tc no", "mobile", "phone", "admission"]):
             return True
     elif "aadhaar" in c or "aadhar" in c:
         if not ("aadhaar" in h or "aadhar" in h):
@@ -307,7 +380,7 @@ def is_number_conflict(header: str, candidate_key: str) -> bool:
 
     # EMIS ID
     if "emis" in h:
-        if any(bad in c for bad in ["aadhaar", "aadhar", "register", "roll", "mobile", "phone", "sl.no"]):
+        if any(bad in c for bad in ["aadhaar", "aadhar", "register", "roll", "mobile", "phone", "sl.no", "serial", "admission"]):
             return True
     elif "emis" in c:
         if not ("emis" in h):
@@ -315,15 +388,30 @@ def is_number_conflict(header: str, candidate_key: str) -> bool:
 
     # Register / Roll Number
     if any(k in h for k in ["register number", "registration number", "roll number", "reg no", "roll no"]):
-        if any(bad in c for bad in ["aadhaar", "aadhar", "emis", "mobile", "phone", "sl.no", "serial no"]):
+        if any(bad in c for bad in ["aadhaar", "aadhar", "emis", "mobile", "phone", "sl.no", "sl no", "s.no", "serial no", "serial", "admission no", "admission number", "tc no"]):
+            return True
+    if any(k in c for k in ["register number", "registration number", "roll number", "reg no", "roll no"]):
+        if any(bad in h for bad in ["aadhaar", "aadhar", "emis", "mobile", "phone", "sl.no", "sl no", "s.no", "serial no", "serial", "admission no", "admission number", "tc no"]):
             return True
 
-    # SL.NO / Serial Number
-    if any(k in h for k in ["sl.no", "sl no", "s.no", "serial no"]):
-        if any(bad in c for bad in ["register", "registration", "roll", "aadhaar", "emis"]):
+    # Admission Number
+    if any(k in h for k in ["admission no", "admission number", "adm no"]):
+        if any(bad in c for bad in ["register", "registration", "roll", "aadhaar", "aadhar", "emis", "sl.no", "serial"]):
+            return True
+    if any(k in c for k in ["admission no", "admission number", "adm no"]):
+        if any(bad in h for bad in ["register", "registration", "roll", "aadhaar", "aadhar", "emis", "sl.no", "serial"]):
+            return True
+
+    # SL.NO / Serial Number / Certificate Number
+    if any(k in h for k in ["sl.no", "sl no", "s.no", "serial no", "serial number", "certificate no", "certificate number"]):
+        if any(bad in c for bad in ["register", "registration", "roll", "aadhaar", "aadhar", "emis", "admission"]):
+            return True
+    if any(k in c for k in ["sl.no", "sl no", "s.no", "serial no", "serial number", "certificate no", "certificate number"]):
+        if any(bad in h for bad in ["register", "registration", "roll", "aadhaar", "aadhar", "emis", "admission"]):
             return True
 
     return False
+
 
 
 def is_category_conflict(header: str, candidate_key: str) -> bool:
@@ -382,12 +470,24 @@ def is_phone_conflict(header: str, candidate_key: str) -> bool:
 def is_address_conflict(header: str, candidate_key: str) -> bool:
     """
     Prevent full address text from matching single-word components (District, State, Taluk, Village, Pincode),
-    and vice versa.
+    boolean address questions, or cross-matching Permanent vs Communication address.
     """
     if not header or not candidate_key:
         return False
     h = header.lower().strip()
     c = candidate_key.lower().strip()
+
+    # Boolean questions vs actual address fields
+    h_is_bool = is_yes_no_question_field(h)
+    c_is_bool = is_yes_no_question_field(c)
+    if h_is_bool != c_is_bool:
+        return True
+
+    # Permanent Address vs Communication Address differentiation
+    if "permanent" in h and "communication" in c and "permanent" not in c:
+        return True
+    if "communication" in h and "permanent" in c and "communication" not in c:
+        return True
 
     single_components = ["district", "taluk", "village", "state", "pincode", "pin code", "block", "country"]
     is_h_single = any(comp == h or comp in h.split() for comp in single_components)
@@ -1106,6 +1206,234 @@ def is_document_authorized_for_field(doc_type: str, field_name: str) -> bool:
     return doc_type in allowed_sources
 
 
+DOCUMENT_FIELD_AUTHORITY: dict[str, dict[str, int]] = {
+    # EMIS ID: TC > SSLC > HSC > others
+    "EMIS ID": {
+        "TRANSFER_CERTIFICATE": 200,
+        "SSLC": 150,
+        "HSC": 120,
+        "OTHER": 50,
+    },
+    "Is EMIS ID Available": {
+        "TRANSFER_CERTIFICATE": 200,
+        "SSLC": 150,
+        "HSC": 120,
+        "OTHER": 50,
+    },
+    # Guardian: TC > Community > Aadhaar > others
+    "Guardian Name": {
+        "TRANSFER_CERTIFICATE": 200,
+        "COMMUNITY": 140,
+        "AADHAAR": 100,
+        "OTHER": 50,
+    },
+    "Guardian's / Spouse's Name": {
+        "TRANSFER_CERTIFICATE": 200,
+        "COMMUNITY": 140,
+        "AADHAAR": 100,
+        "OTHER": 50,
+    },
+    # Community / Caste: Community Certificate > TC
+    "Community": {
+        "COMMUNITY": 200,
+        "TRANSFER_CERTIFICATE": 120,
+    },
+    "Community Category": {
+        "COMMUNITY": 200,
+        "TRANSFER_CERTIFICATE": 120,
+    },
+    "Community Name": {
+        "COMMUNITY": 200,
+        "TRANSFER_CERTIFICATE": 120,
+    },
+    "Caste": {
+        "COMMUNITY": 200,
+        "TRANSFER_CERTIFICATE": 120,
+    },
+    # Address: Aadhaar > Residence / Nativity > Community > TC
+    "Permanent Address": {
+        "AADHAAR": 200,
+        "RESIDENCE": 180,
+        "NATIVITY": 170,
+        "COMMUNITY": 140,
+        "TRANSFER_CERTIFICATE": 100,
+    },
+    "Address": {
+        "AADHAAR": 200,
+        "RESIDENCE": 180,
+        "NATIVITY": 170,
+        "COMMUNITY": 140,
+        "TRANSFER_CERTIFICATE": 100,
+    },
+    "Communication Address": {
+        "AADHAAR": 200,
+        "RESIDENCE": 180,
+        "NATIVITY": 170,
+        "COMMUNITY": 140,
+        "TRANSFER_CERTIFICATE": 100,
+    },
+    "Communication address": {
+        "AADHAAR": 200,
+        "RESIDENCE": 180,
+        "NATIVITY": 170,
+        "COMMUNITY": 140,
+        "TRANSFER_CERTIFICATE": 100,
+    },
+    # Nationality: TC = Aadhaar = Nativity > Community
+    "Nationality": {
+        "TRANSFER_CERTIFICATE": 200,
+        "AADHAAR": 200,
+        "NATIVITY": 200,
+        "COMMUNITY": 100,
+    },
+    # Religion: Community = TC
+    "Religion": {
+        "COMMUNITY": 200,
+        "TRANSFER_CERTIFICATE": 180,
+        "NATIVITY": 120,
+    },
+    # Date of Birth: Aadhaar > TC > SSLC > HSC > Community
+    "Date of Birth": {
+        "AADHAAR": 250,
+        "TRANSFER_CERTIFICATE": 190,
+        "SSLC": 160,
+        "HSC": 140,
+        "COMMUNITY": 100,
+    },
+    "Student Date of Birth(DD.MM.YYYY)": {
+        "AADHAAR": 250,
+        "TRANSFER_CERTIFICATE": 190,
+        "SSLC": 160,
+        "HSC": 140,
+        "COMMUNITY": 100,
+    },
+    "DOB": {
+        "AADHAAR": 250,
+        "TRANSFER_CERTIFICATE": 190,
+        "SSLC": 160,
+        "HSC": 140,
+        "COMMUNITY": 100,
+    },
+    # Aadhaar: Aadhaar document is highest
+    "Aadhaar Number": {
+        "AADHAAR": 250,
+        "OTHER": 100,
+    },
+    "Aadhaar Number (without space)": {
+        "AADHAAR": 250,
+        "OTHER": 100,
+    },
+    "Aadhaar Card": {
+        "AADHAAR": 250,
+        "OTHER": 100,
+    },
+    # Gender: Aadhaar > TC > SSLC > HSC
+    "Gender": {
+        "AADHAAR": 200,
+        "TRANSFER_CERTIFICATE": 180,
+        "SSLC": 150,
+        "HSC": 150,
+        "COMMUNITY": 100,
+    },
+    # Parents: Aadhaar = Community > TC > SSLC = HSC
+    "Father's Name": {
+        "AADHAAR": 180,
+        "COMMUNITY": 180,
+        "TRANSFER_CERTIFICATE": 160,
+        "SSLC": 140,
+        "HSC": 140,
+    },
+    "Father Name": {
+        "AADHAAR": 180,
+        "COMMUNITY": 180,
+        "TRANSFER_CERTIFICATE": 160,
+        "SSLC": 140,
+        "HSC": 140,
+    },
+    "Mother's Name": {
+        "AADHAAR": 180,
+        "COMMUNITY": 180,
+        "TRANSFER_CERTIFICATE": 160,
+        "SSLC": 140,
+        "HSC": 140,
+    },
+    "Mother Name": {
+        "AADHAAR": 180,
+        "COMMUNITY": 180,
+        "TRANSFER_CERTIFICATE": 160,
+        "SSLC": 140,
+        "HSC": 140,
+    },
+    # Register Number / Marks
+    "SSLC Mark Percentage": {"SSLC": 200},
+    "SSLC Marks": {"SSLC": 200},
+    "10th Mark": {"SSLC": 200},
+    "HSC Mark Percentage": {"HSC": 200},
+    "HSC Marks": {"HSC": 200},
+    "12th Mark": {"HSC": 200},
+    "TC Number": {"TRANSFER_CERTIFICATE": 200},
+    "Admission Number": {"TRANSFER_CERTIFICATE": 200},
+}
+
+
+def normalize_doc_type_canonical(doc_type: str) -> str:
+    """Normalize any document type string or variant to standard authority key."""
+    if not doc_type:
+        return "UNKNOWN"
+    dt = doc_type.upper().replace("_", " ").strip()
+    if any(k in dt for k in ["TRANSFER", "TC"]):
+        return "TRANSFER_CERTIFICATE"
+    if any(k in dt for k in ["10TH", "SSLC", "SECONDARY"]):
+        return "SSLC"
+    if any(k in dt for k in ["12TH", "HSC", "HIGHER SECONDARY"]):
+        return "HSC"
+    if any(k in dt for k in ["COMMUNITY", "CASTE"]):
+        return "COMMUNITY"
+    if any(k in dt for k in ["AADHAAR", "AADHAR", "UID"]):
+        return "AADHAAR"
+    if any(k in dt for k in ["NATIVITY", "RESIDENCE"]):
+        return "NATIVITY"
+    return dt.replace(" ", "_")
+
+
+def get_document_field_authority_weight(field_name: str, doc_type: str) -> int:
+    """
+    Returns numeric authority score for doc_type given field_name.
+    Higher score = higher authority. Default is 50 for recognized docs, 0 for UNKNOWN.
+    """
+    if not doc_type or doc_type == "UNKNOWN":
+        return 0
+    d_norm = normalize_doc_type_canonical(doc_type)
+    fn_clean = field_name.strip()
+    if fn_clean in DOCUMENT_FIELD_AUTHORITY:
+        return DOCUMENT_FIELD_AUTHORITY[fn_clean].get(d_norm, 50)
+    fn_lower = fn_clean.lower()
+    for k, v in DOCUMENT_FIELD_AUTHORITY.items():
+        if k.lower() == fn_lower:
+            return v.get(d_norm, 50)
+    if "emis" in fn_lower:
+        return DOCUMENT_FIELD_AUTHORITY["EMIS ID"].get(d_norm, 50)
+    if "guardian" in fn_lower:
+        return DOCUMENT_FIELD_AUTHORITY["Guardian Name"].get(d_norm, 50)
+    if "community" in fn_lower or "caste" in fn_lower:
+        return DOCUMENT_FIELD_AUTHORITY["Community"].get(d_norm, 50)
+    if "address" in fn_lower:
+        return DOCUMENT_FIELD_AUTHORITY["Address"].get(d_norm, 50)
+    if "nationality" in fn_lower:
+        return DOCUMENT_FIELD_AUTHORITY["Nationality"].get(d_norm, 50)
+    if "father" in fn_lower:
+        return DOCUMENT_FIELD_AUTHORITY["Father's Name"].get(d_norm, 50)
+    if "mother" in fn_lower:
+        return DOCUMENT_FIELD_AUTHORITY["Mother's Name"].get(d_norm, 50)
+    if "dob" in fn_lower or "birth" in fn_lower:
+        return DOCUMENT_FIELD_AUTHORITY["Date of Birth"].get(d_norm, 50)
+    if "gender" in fn_lower or "sex" in fn_lower:
+        return DOCUMENT_FIELD_AUTHORITY["Gender"].get(d_norm, 50)
+
+    return 60 if is_document_authorized_for_field(doc_type, field_name) else 40
+
+
+
 def get_doc_type_for_requirement(doc_name: str) -> str:
     """
     Map document requirement name (e.g., 'Income Certificate', 'Aadhaar Card')
@@ -1365,7 +1693,7 @@ def infer_gender_from_salutation(
     candidates_to_check: list[str] = []
 
     if salutation_val:
-        candidates_to_check.append(str(salutation_val).strip())
+        candidates_to_check.append(salutation_val.strip())
 
     if all_extracted and isinstance(all_extracted, dict):
         for k in ["Salutation", "Title", "Student Name", "Name", "Father's Name", "Mother's Name"]:
@@ -1376,7 +1704,7 @@ def infer_gender_from_salutation(
                     candidates_to_check.append(str(val_str).strip())
 
     if name_val:
-        candidates_to_check.append(str(name_val).strip())
+        candidates_to_check.append(name_val.strip())
 
     for text in candidates_to_check:
         if not text:

@@ -1,12 +1,12 @@
 {
-  "python-interpreter": "d:/Projects/Automate/Backend/venv/Scripts/python.exe",
-  "python_interpreter": "d:/Projects/Automate/Backend/venv/Scripts/python.exe",
+  "python-interpreter": "d:/Projects/AdmiExtract-main/AdmiExtract/Backend/venv/Scripts/python.exe",
+  "python_interpreter": "d:/Projects/AdmiExtract-main/AdmiExtract/Backend/venv/Scripts/python.exe",
   "search-path": [
-    "d:/Projects/Automate/Backend",
-    "d:/Projects/Automate/Backend/venv/Lib/site-packages"
+    "d:/Projects/AdmiExtract-main/AdmiExtract/Backend",
+    "d:/Projects/AdmiExtract-main/AdmiExtract/Backend/venv/Lib/site-packages"
   ],
   "search_path": [
-    "d:/Projects/Automate/Backend",
-    "d:/Projects/Automate/Backend/venv/Lib/site-packages"
+    "d:/Projects/AdmiExtract-main/AdmiExtract/Backend",
+    "d:/Projects/AdmiExtract-main/AdmiExtract/Backend/venv/Lib/site-packages"
   ]
 }

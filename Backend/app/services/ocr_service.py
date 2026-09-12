@@ -353,7 +353,7 @@ class OCRService:
                     try:
                         import io
                         import pypdf
-                        from PIL import Image
+                        from PIL import Image  # type: ignore
 
                         reader = pypdf.PdfReader(str(path))
                         if getattr(reader, "is_encrypted", False):
@@ -374,7 +374,7 @@ class OCRService:
                             else:
                                 # Scanned page: extract images and perform RapidOCR if available
                                 try:
-                                    from rapidocr_onnxruntime import RapidOCR
+                                    from rapidocr_onnxruntime import RapidOCR  # type: ignore
                                     engine = RapidOCR()
                                     for img_obj in page.images:
                                         img = Image.open(io.BytesIO(img_obj.data))
@@ -395,8 +395,8 @@ class OCRService:
 
                 elif path.suffix.lower() in [".jpg", ".jpeg", ".png"]:
                     try:
-                        from PIL import Image
-                        from rapidocr_onnxruntime import RapidOCR
+                        from PIL import Image  # type: ignore
+                        from rapidocr_onnxruntime import RapidOCR  # type: ignore
                         engine = RapidOCR()
                         img = Image.open(str(path))
                         ocr_res, _ = engine(img)

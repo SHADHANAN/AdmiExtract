@@ -36,7 +36,6 @@ PROFILE_HEADER_ALIASES = {
     "register_number": [
         "register number", "register no", "reg no", "reg. no", "reg. no.", "reg_no",
         "registration number", "registration no", "roll no", "roll number", "roll_no",
-        "admission no", "admission number", "adm no", "adm. no", "sno", "s.no",
     ],
     "mobile_number": [
         "mobile number", "mobile no", "mobile", "phone number", "phone no", "phone",
@@ -111,8 +110,21 @@ CANONICAL_EXCEL_ALIASES: Dict[str, List[str]] = {
     # Address & Location
     "Permanent Address": [
         "permanent address", "address", "full address", "residential address",
-        "postal address", "communication address", "address for communication",
-        "home address", "native address",
+        "postal address", "home address", "native address", "address (permanent)",
+    ],
+    "Communication Address": [
+        "communication address", "address for communication", "temporary address",
+        "present address", "current address", "address (communication)",
+    ],
+    "Is Communication Address Same as Permanent Address": [
+        "is communication address same as permanent address",
+        "is communication address same as permanent",
+        "is permanent address same as communication address",
+        "same as permanent address", "same as permanent",
+    ],
+    "Is EMIS ID Available": [
+        "is emis id available", "is emis available", "emis id available", "emis available",
+        "whether emis id is available",
     ],
     "Village": [
         "village", "village / town", "village/town", "town", "vtc", "city / village",
@@ -311,7 +323,9 @@ class FieldMappingService:
             if self._normalize_key(k) == self._normalize_key(header_clean):
                 val, conf = self._extract_value_and_confidence(v)
                 if self._is_valid_value(val) and conf >= 50:
-                    return val, conf, "Direct Match"
+                    validated = self.validate_resolved_candidate(header_clean, val)
+                    if validated is not None:
+                        return validated, conf, "Direct Match"
 
         # Step 3: Canonical alias resolution
         canonical_target = self.find_best_canonical_match(header_clean)
@@ -327,30 +341,37 @@ class FieldMappingService:
                     val, conf = self._extract_value_and_confidence(v)
                     if self._is_valid_value(val) and conf >= 50:
                         formatted_val = self._format_special_field(header_clean, val)
-                        return formatted_val, conf, f"Canonical Match ({canonical_target})"
+                        validated = self.validate_resolved_candidate(header_clean, formatted_val)
+                        if validated is not None:
+                            return validated, conf, f"Canonical Match ({canonical_target})"
 
-        # Step 4: Fuzzy substring matching in pool
-        norm_h = self._normalize_key(header_clean)
-        for k, v in extracted_data_pool.items():
-            if _has_conflict(header_clean, k):
-                continue
-            if not self._is_boolean_question(header_clean) and self._is_boolean_question(k):
-                continue
-            if self._is_boolean_question(header_clean) and not self._is_boolean_question(k):
-                continue
-            norm_k = self._normalize_key(k)
-            # Prevent generic word matches like 'name', 'number', 'mark', 'code'
-            if norm_h in ["name", "number", "code", "mark", "id", "date"] or norm_k in ["name", "number", "code", "mark", "id", "date"]:
-                continue
-            if len(norm_h) >= 5 and len(norm_k) >= 5:
-                if norm_h in norm_k or norm_k in norm_h:
-                    val, conf = self._extract_value_and_confidence(v)
-                    if self._is_valid_value(val) and conf >= 60:
-                        return val, max(75, conf), "Substring Match"
-
-        # Step 5: Boolean / Yes-No question check
+        # Step 4: Boolean / Yes-No question check
         if self._is_boolean_question(header_clean):
-            # If an affirmative value exists
+            h_low = header_clean.lower()
+            # Requirement 2: "Is EMIS ID Available" must be Yes only when a valid EMIS ID is actually accepted
+            if "emis" in h_low:
+                from app.utils.normalization import validate_and_normalize_emis
+                has_valid_emis = False
+                for k, v in extracted_data_pool.items():
+                    if "emis" in k.lower() and not self._is_boolean_question(k):
+                        c_val, _ = self._extract_value_and_confidence(v)
+                        if c_val and validate_and_normalize_emis(c_val):
+                            has_valid_emis = True
+                            break
+                return ("Yes", 95, "Valid EMIS Verified") if has_valid_emis else ("No", 95, "No Valid EMIS")
+
+            # Requirement 7: Communication Address Same boolean only Yes/No
+            if "same as" in h_low or "communication address same" in h_low:
+                from app.utils.normalization import validate_boolean_yes_no
+                for k, v in extracted_data_pool.items():
+                    if "same as" in k.lower():
+                        c_val, conf = self._extract_value_and_confidence(v)
+                        b_val = validate_boolean_yes_no(c_val)
+                        if b_val:
+                            return b_val, max(90, conf), "Document Inferred"
+                return "Yes", 80, "Default Same Address"
+
+            # If an affirmative value exists for other boolean questions
             if canonical_target:
                 for k, v in extracted_data_pool.items():
                     if canonical_target.lower() in k.lower():
@@ -358,8 +379,118 @@ class FieldMappingService:
                         if self._is_valid_value(val):
                             return "Yes", 95, "Inferred Boolean"
 
+        # Fallback for Communication Address: if not separately specified, inherit validated Permanent Address
+        if ("communication address" in header_clean.lower() or "address for communication" in header_clean.lower()) and not self._is_boolean_question(header_clean):
+            for perm_key in ["Permanent Address", "Permanent address", "Address", "full_address"]:
+                if perm_key in extracted_data_pool:
+                    p_val, p_conf = self._extract_value_and_confidence(extracted_data_pool[perm_key])
+                    if p_val and str(p_val).strip().lower() not in ["yes", "no", "true", "false"]:
+                        val_addr = self.validate_resolved_candidate(header_clean, p_val)
+                        if val_addr:
+                            return val_addr, p_conf, "Same as Permanent Address"
+
         # Not found -> Return None, NEVER write literal "NO"
         return None, 0, "Not Found"
+
+    def validate_resolved_candidate(self, header: str, val: Any) -> Optional[str]:
+        """
+        Production Safety Validator:
+        Ensures a value is never assigned to an Excel header unless it strictly passes
+        that column's semantic type, context, and bounds validation.
+        """
+        if val is None:
+            return None
+        from app.utils.normalization import (
+            is_explicit_negative,
+            validate_and_normalize_person_name,
+            validate_and_normalize_gender,
+            validate_and_normalize_state,
+            validate_and_normalize_nationality,
+            validate_and_normalize_religion,
+            validate_and_normalize_emis,
+            validate_and_normalize_code_field,
+            validate_boolean_yes_no,
+            validate_and_normalize_aadhaar,
+            validate_and_normalize_mobile,
+            validate_and_normalize_dob,
+            validate_and_normalize_community,
+            validate_and_normalize_address,
+            clean_text_noise,
+        )
+
+        if is_explicit_negative(val):
+            return None
+
+        h_lower = header.lower().strip()
+
+        # 1. Boolean Questions
+        if self._is_boolean_question(header):
+            return validate_boolean_yes_no(val)
+
+        # Rejection of boolean values for non-boolean columns
+        val_str_lower = str(val).strip().lower()
+        if val_str_lower in ["yes", "no", "true", "false", "y", "n"]:
+            return None
+
+        # 2. Address (Permanent Address, Communication Address)
+        if "address" in h_lower and not any(comp in h_lower for comp in ["email", "mail"]):
+            return validate_and_normalize_address(val)
+
+        # 3. Person Names (Student, Father, Mother, Guardian)
+        if any(k in h_lower for k in ["father", "mother", "guardian", "student name", "candidate name", "applicant name"]) and not any(k in h_lower for k in ["occupation", "mobile", "phone", "aadhaar", "address"]):
+            return validate_and_normalize_person_name(val, role=header)
+
+        # 4. Gender
+        if "gender" in h_lower or "sex" in h_lower:
+            return validate_and_normalize_gender(val)
+
+        # 5. State
+        if "state" in h_lower:
+            return validate_and_normalize_state(val)
+
+        # 6. Nationality
+        if "nationality" in h_lower:
+            return validate_and_normalize_nationality(val)
+
+        # 7. Religion
+        if "religion" in h_lower:
+            return validate_and_normalize_religion(val)
+
+        # 8. EMIS ID
+        if "emis" in h_lower:
+            return validate_and_normalize_emis(val)
+
+        # 9. Code fields (e.g. Taluk Code, Village Panchayat Code)
+        if h_lower.endswith("code") or "code" in h_lower.split():
+            return validate_and_normalize_code_field(header, val)
+
+        # 10. Aadhaar
+        if "aadhaar" in h_lower or "aadhar" in h_lower:
+            without_space = "without space" in h_lower or "nospace" in h_lower
+            return validate_and_normalize_aadhaar(val, without_space=without_space)
+
+        # 11. Mobile
+        if any(m in h_lower for m in ["mobile", "phone", "cell"]):
+            return validate_and_normalize_mobile(val)
+
+        # 12. Date of Birth
+        if any(d in h_lower for d in ["dob", "birth"]):
+            return validate_and_normalize_dob(val)
+
+        # 12. Community Category
+        if "community" in h_lower or "caste" in h_lower:
+            return validate_and_normalize_community(val)
+
+        # 13. Register Number Protection (Reject Aadhaar 12-digit numbers from Registration Number)
+        if any(r in h_lower for r in ["register number", "register no", "reg no", "reg. no", "registration number", "roll no"]):
+            val_str = str(val).strip()
+            digits = re.sub(r'\D', '', val_str)
+            if len(digits) == 12 and (re.match(r'^\d{4}\s+\d{4}\s+\d{4}$', val_str) or val_str.isdigit()):
+                return None
+
+        # Default: clean noise
+        clean = clean_text_noise(val)
+        return clean if clean and not is_explicit_negative(clean) else None
 
     def map_all_excel_headers(
         self,
@@ -412,25 +543,25 @@ class FieldMappingService:
     ) -> Dict[str, Any]:
         """
         Extract clean write values for openpyxl row updating.
-        Values are non-destructive: None represents empty cell, preserving existing cell content.
+        Re-validates each field before writing; invalid fields are set to None (left blank).
         """
         write_dict: Dict[str, Any] = {}
         for h in excel_headers:
             item = mapped_fields.get(h)
             if item and item.get("value") is not None:
                 val = item["value"]
-                # Guard: Never write literal placeholder words
-                if str(val).strip().upper() in ["NO", "NULL", "NONE", "N/A", "NOT DETECTED", "NOT FOUND"]:
-                    # Check if header itself is a Yes/No question
-                    if self._is_boolean_question(h):
-                        write_dict[h] = "No"
-                    else:
-                        write_dict[h] = None
+                # Re-run semantic validation to guarantee zero wrong-column contamination
+                valid_val = self.validate_resolved_candidate(h, val)
+                if valid_val is not None:
+                    write_dict[h] = valid_val
+                elif self._is_boolean_question(h):
+                    write_dict[h] = "No"
                 else:
-                    write_dict[h] = val
+                    write_dict[h] = None
             else:
-                write_dict[h] = None
+                write_dict[h] = "No" if self._is_boolean_question(h) else None
         return write_dict
+
 
     @staticmethod
     def _extract_value_and_confidence(v: Any) -> Tuple[Optional[Any], int]:
@@ -499,3 +630,20 @@ class FieldMappingService:
                 return digits[2:]
 
         return val
+
+
+_default_service = FieldMappingService()
+
+
+def validate_resolved_candidate(header: str, val: Any) -> Optional[Any]:
+    return _default_service.validate_resolved_candidate(header, val)
+
+
+def format_for_excel_write(header: str, val: Any) -> Any:
+    valid_val = _default_service.validate_resolved_candidate(header, val)
+    if valid_val is not None:
+        return valid_val
+    if _default_service._is_boolean_question(header):
+        return "No"
+    return None
+
