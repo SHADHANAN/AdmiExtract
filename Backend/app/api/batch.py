@@ -1,3 +1,5 @@
+from typing import Optional
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.dependencies import get_current_user, RoleChecker
 from app.models.user import User, UserRole
@@ -146,38 +148,68 @@ async def get_public_batch(
 from app.schemas.doc_config_version import DocConfigVersionResponse, DocRequirementSchema
 
 @public_router.get("/{batchId}/doc-versions/current", response_model=DocConfigVersionResponse)
-async def get_public_current_doc_version(batchId: str):
+async def get_public_current_doc_version(
+    batchId: str,
+    classId: Optional[str] = None,
+):
     """
     Public lookup for a batch's active document configuration requirements version.
+    Single source of truth is DocumentFieldConfiguration.
     """
     try:
-        from app.services.doc_config_version_service import DocConfigVersionService
-        doc_config_service = DocConfigVersionService()
-        v = await doc_config_service.get_or_create_current_version(batchId)
+        from app.services.wanted_field_service import WantedFieldService
+        wanted_service = WantedFieldService()
+        reqs = await wanted_service.get_student_document_requirements(batchId, class_id=classId)
         return DocConfigVersionResponse(
-            id=str(v.id),
-            batch_id=v.batch_id,
-            version=v.version,
+            id=batchId,
+            batch_id=batchId,
+            version=1,
             documents=[
                 DocRequirementSchema(
-                    id=d.id,
-                    name=d.name,
-                    required=d.required,
-                    allowed_types=d.allowed_types,
-                    max_size_mb=d.max_size_mb,
-                    description=d.description,
-                    type=d.type,
+                    id=d["id"],
+                    name=d["name"],
+                    required=d["required"],
+                    allowed_types=d["allowed_types"],
+                    max_size_mb=d["max_size_mb"],
+                    description=d.get("description"),
+                    type=d["type"],
+                    extraction_fields=d.get("wanted_fields", []),
                 )
-                for d in v.documents
+                for d in reqs
             ],
-            is_current=v.is_current,
-            change_summary=v.change_summary,
-            created_by=v.created_by,
-            created_at=v.created_at,
+            is_current=True,
+            change_summary="Admin Document Configuration",
+            created_by="Admin",
+            created_at=datetime.now(timezone.utc),
         )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No document configuration found for batch '{batchId}': {str(e)}",
+        )
+
+
+@public_router.get("/{batchId}/document-configurations")
+async def get_public_document_configurations(
+    batchId: str,
+    classId: Optional[str] = None,
+):
+    """
+    Public clean endpoint returning active configured document types for Student Portal.
+    """
+    try:
+        from app.services.wanted_field_service import WantedFieldService
+        wanted_service = WantedFieldService()
+        reqs = await wanted_service.get_student_document_requirements(batchId, class_id=classId)
+        return {
+            "batch_id": batchId,
+            "class_id": classId,
+            "count": len(reqs),
+            "documents": reqs,
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Failed to load document configurations for batch '{batchId}': {str(e)}",
         )
 

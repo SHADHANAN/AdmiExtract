@@ -96,25 +96,92 @@ def validate_verhoeff(digits: str) -> bool:
     return c == 0
 
 
-def validate_and_normalize_aadhaar(val: Any, without_space: bool = False) -> Optional[str]:
+AADHAAR_CONTEXT_LABELS = [
+    "ஆதார் எண்",
+    "ஆதார்",
+    "aadhaar number",
+    "aadhaar no",
+    "aadhaar no.",
+    "your aadhaar no",
+    "your aadhaar no.",
+    "aadhaar",
+    "aadhar number",
+    "aadhar no",
+    "aadhar no.",
+    "aadhar",
+    "uidai",
+    "uid",
+]
+
+
+def correct_aadhaar_ocr_confusion(val: str) -> str:
     """
-    Validate and normalize 12-digit Indian Aadhaar number.
-    - Fixes OCR common confusion: O->0, o->0, I->1, l->1
-    - Enforces strict 12 digits
-    - Validates via Verhoeff checksum algorithm
+    Handle common OCR character confusion ONLY within an Aadhaar contextual candidate.
+    Potential OCR confusion:
+    O <-> 0
+    I/l <-> 1
+    S <-> 5
+    B <-> 8
+    G <-> 6
+    DO NOT globally replace characters across other text.
+    Never invent digits.
+    """
+    if not val:
+        return ""
+    s = str(val).strip()
+    # Normalize newline and whitespace/hyphen separators
+    s = re.sub(r'[\r\n\t]+', ' ', s)
+    # Remove label prefix if candidate contains label (e.g. "Aadhaar No: 1234 5678 9012" or "ஆதார் எண் : ...")
+    prefix_pat = r'^(?:(?:ஆதார்\s*எண்|ஆதார்|Aadhaar\s*(?:No\.?|Number|Card)?|Aadhar\s*(?:No\.?|Number|Card)?|Your\s+Aadhaar\s+No\.?|UIDAI|UID)\s*[:\-\.]?\s*)'
+    s = re.sub(prefix_pat, '', s, flags=re.IGNORECASE).strip()
+
+    # Contextual character replacement inside Aadhaar candidate
+    trans = str.maketrans({
+        'O': '0', 'o': '0',
+        'I': '1', 'l': '1', 'i': '1', '|': '1',
+        'S': '5', 's': '5',
+        'B': '8',
+        'G': '6',
+    })
+    return s.translate(trans)
+
+
+def normalize_aadhaar_digits(val: Any) -> Optional[str]:
+    """
+    Canonical internal representation: 12 digits only.
+    Normalizes whitespace, newline and separators before validation.
+    Example transformation:
+    1234 5678 9012 -> 123456789012
+    1234-5678-9012 -> 123456789012
+    1234 5678\\n9012 -> 123456789012
     """
     if val is None:
         return None
     s = str(val).strip()
-    # Correct common OCR number confusions
-    s = s.replace("O", "0").replace("o", "0").replace("I", "1").replace("l", "1")
+    s = correct_aadhaar_ocr_confusion(s)
     digits = re.sub(r'[^0-9]', '', s)
     if len(digits) != 12:
         return None
-    # Reject trivial invalid sequences
     if digits in {"000000000000", "111111111111"}:
         return None
     if not validate_verhoeff(digits):
+        return None
+    return digits
+
+
+def validate_and_normalize_aadhaar(val: Any, without_space: bool = False) -> Optional[str]:
+    """
+    Validate and normalize 12-digit Indian Aadhaar number.
+    Order of validation:
+    1. normalize candidate (whitespace, newline, hyphens, contextual OCR confusion)
+    2. exactly 12 digits? (reject 10-digit mobile, 11-digit numbers, etc.)
+    3. reject obvious invalid patterns
+    4. run Verhoeff checksum
+    5. if valid -> return canonical 12-digit or formatted 4-4-4 string
+    6. if checksum invalid -> reject (return None)
+    """
+    digits = normalize_aadhaar_digits(val)
+    if not digits:
         return None
     if without_space:
         return digits
@@ -639,6 +706,133 @@ def normalize_name(val: Any) -> Optional[str]:
     if len(s) < 2:
         return None
     return s.upper()
+
+
+def validate_and_normalize_location_name(val: Any, location_type: str = "Location") -> Optional[str]:
+    """
+    Validate location name (District, Taluk, Village).
+    - Ensures location string only.
+    - Rejects full addresses (door numbers, streets, pincodes, commas).
+    - Rejects person names, booleans, and codes (e.g. '01', '32').
+    """
+    if val is None:
+        return None
+    s = clean_text_noise(val).strip()
+    if not s or is_explicit_negative(s):
+        return None
+    s_upper = s.upper()
+
+    # Reject booleans / generic negative tokens
+    if s_upper in ["YES", "NO", "TRUE", "FALSE", "Y", "N", "NA", "NONE", "NULL", "UNKNOWN"]:
+        return None
+
+    # Reject full address patterns (door numbers, slashes, street markers, pincodes)
+    if any(m in s_upper for m in ["DOOR", "D.NO", "STREET", "ROAD", "NAGAR", "COLONY", "PINCODE", "PIN CODE"]):
+        return None
+    if re.search(r'#|\b\d{1,4}/\d{1,4}\b', s):
+        return None
+    if re.search(r'\b\d{6}\b', s):  # Pincode
+        return None
+
+    # If it has more than 2 commas, it is an address block, not a single location entity
+    if s.count(",") >= 2:
+        return None
+
+    # Reject pure numbers or short codes (e.g. Taluk Code)
+    digits_only = re.sub(r'\D', '', s)
+    if digits_only and len(digits_only) == len(s.replace(" ", "")):
+        return None
+
+    # Strip prefixes like 'District:', 'Taluk:', 'Village:'
+    s_clean = re.sub(r'^(?:DISTRICT|TALUK|VILLAGE|TK|DT)\s*[:\-]\s*', '', s_upper).strip()
+    if len(s_clean) < 2 or len(s_clean) > 50:
+        return None
+
+    return s_clean.title()
+
+
+def validate_and_normalize_village_panchayat(val: Any) -> Optional[str]:
+    """
+    Validate Village Panchayat.
+    - ONLY a value explicitly identified or validated as a Village Panchayat name.
+    - NEVER accepts full address text, door numbers, street, or multi-component addresses.
+    """
+    if val is None:
+        return None
+    s = clean_text_noise(val).strip()
+    if not s or is_explicit_negative(s):
+        return None
+    s_upper = s.upper()
+
+    # Reject booleans / generic negative tokens
+    if s_upper in ["YES", "NO", "TRUE", "FALSE", "NA", "NONE", "NULL", "UNKNOWN"]:
+        return None
+
+    # Never accept full address blocks
+    if s.count(",") >= 1 or any(m in s_upper for m in ["DOOR", "D.NO", "STREET", "ROAD", "NAGAR", "PINCODE", "PIN CODE", "/"]):
+        return None
+
+    # Must be concise name
+    if len(s) < 2 or len(s) > 40:
+        return None
+
+    s_clean = re.sub(r'^(?:VILLAGE\s+PANCHAYAT|PANCHAYAT)\s*[:\-]\s*', '', s_upper).strip()
+    return s_clean.title()
+
+
+def validate_and_normalize_occupation(val: Any) -> Optional[str]:
+    """
+    Validate occupation string (Father's Occupation, Mother's Occupation).
+    - NEVER accepts human person names (e.g. 'PRIYA G', 'SARAVANAKUMAR', 'SARAVANAN K').
+    - NEVER accepts addresses, dates, or Aadhaar numbers.
+    - Accepts legitimate occupations (Agriculture, Business, Private, Government, Farmer, etc.).
+    """
+    if val is None:
+        return None
+    s = clean_text_noise(val).strip()
+    if not s or is_explicit_negative(s):
+        return None
+    s_upper = s.upper()
+
+    # Reject numbers, addresses, dates
+    if re.search(r'\d', s):
+        return None
+    if any(m in s_upper for m in ["STREET", "ROAD", "DOOR", "VILLAGE", "TALUK", "DISTRICT", "TAMIL NADU", "COMMUNITY", "CASTE", "CERTIFICATE"]):
+        return None
+
+    # Reject booleans
+    if s_upper in ["YES", "NO", "TRUE", "FALSE", "NA", "NONE", "NULL", "UNKNOWN"]:
+        return None
+
+    # Check length
+    if len(s) < 3 or len(s) > 40:
+        return None
+
+    # Reject person names ending or starting with single letter initial
+    if re.search(r'(?:^[A-Z]\s+|\s+[A-Z]$|\b[A-Z]\.[A-Z]\b)', s_upper):
+        return None
+
+    # Reject common Indian name endings
+    if any(s_upper.endswith(suffix) for suffix in ["KUMAR", "PRASAD", "PATEL", "SHARMA", "SINGH", "REDDY", "NAIDU", "GOUNDER", "DEVI", "AMMAL"]):
+        return None
+
+    known_occupations = [
+        "AGRICULTURE", "FARMER", "BUSINESS", "COOLIE", "EMPLOYEE", "GOVERNMENT",
+        "GOVT", "PRIVATE", "TEACHER", "DRIVER", "DOCTOR", "ENGINEER", "HOUSEWIFE",
+        "HOMEMAKER", "ADVOCATE", "TAILOR", "LABOUR", "LABORER", "DAILY WAGES",
+        "SERVICE", "SELF EMPLOYED", "RETIRED", "OFFICE ASSISTANT", "CLERK", "MANAGER",
+        "POLICE", "PROFESSOR", "CARPENTER", "MASON", "ELECTRICIAN", "PLUMBER", "NURSE"
+    ]
+    if any(occ in s_upper for occ in known_occupations):
+        return s_upper.title()
+
+    # If two or more capitalized words without matching occupation, reject as personal name
+    words = s.split()
+    if len(words) >= 2 and not any(occ in s_upper for occ in known_occupations):
+        return None
+
+    return s_upper.title()
+
 
 
 

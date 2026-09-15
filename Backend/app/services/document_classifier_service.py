@@ -71,18 +71,34 @@ class DocumentClassifierService:
             "scheduled caste",
             "scheduled tribe",
         ]
-        if any(k in text for k in community_keywords) or any(k in fn for k in ["community", "caste"]):
+        if any(k in text for k in community_keywords) or any(k in fn for k in ["community", "caste", "commity"]):
             return {
                 "success": True,
                 "document_type": "COMMUNITY"
             }
-        if ("community" in text or "caste" in text) and "refer community" not in text:
+        if ("community" in text or "caste" in text or "commity" in text) and "refer community" not in text:
             return {
                 "success": True,
                 "document_type": "COMMUNITY"
             }
 
-        # 4. INCOME CERTIFICATE
+        # 4. ALLOTMENT ORDER / ADMISSION ALLOTMENT
+        allotment_keywords = [
+            "allotment order",
+            "provisional allotment",
+            "tnea",
+            "directorate of technical education",
+            "tamil nadu engineering admissions",
+            "admission allotment",
+            "allotment letter",
+        ]
+        if any(k in text for k in allotment_keywords) or any(k in fn for k in ["allotment", "provisional", "tnea"]):
+            return {
+                "success": True,
+                "document_type": "ALLOTMENT_ORDER"
+            }
+
+        # 5. INCOME CERTIFICATE
         if (
             "income certificate" in text
             or "annual income" in text
@@ -94,7 +110,7 @@ class DocumentClassifierService:
                 "document_type": "INCOME"
             }
 
-        # 5. NATIVITY CERTIFICATE
+        # 6. NATIVITY CERTIFICATE
         if (
             "nativity certificate" in text
             or "native of" in text
@@ -106,14 +122,14 @@ class DocumentClassifierService:
                 "document_type": "NATIVITY"
             }
 
-        # 6. BONAFIDE CERTIFICATE
+        # 7. BONAFIDE CERTIFICATE
         if "bonafide certificate" in text or "bonafide" in text or "bonafide" in fn:
             return {
                 "success": True,
                 "document_type": "BONAFIDE"
             }
 
-        # 7. SSLC / HSC MARKSHEET
+        # 8. SSLC / HSC MARKSHEET
         if (
             "secondary school leaving certificate" in text
             or "sslc" in text
@@ -139,8 +155,10 @@ class DocumentClassifierService:
             }
 
         # Fallback keyword match on filename
-        if "community" in fn or "caste" in fn:
+        if "community" in fn or "caste" in fn or "commity" in fn:
             return {"success": True, "document_type": "COMMUNITY"}
+        if "allotment" in fn or "provisional" in fn or "tnea" in fn:
+            return {"success": True, "document_type": "ALLOTMENT_ORDER"}
         if "transfer" in fn or "tc" in fn:
             return {"success": True, "document_type": "TRANSFER_CERTIFICATE"}
         if "aadhaar" in fn or "aadhar" in fn or "adhar" in fn:

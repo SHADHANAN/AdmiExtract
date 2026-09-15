@@ -10,6 +10,7 @@ class StudentIdentityVerifyRequest(BaseModel):
     student_name: str
     register_number: str
     mobile_number: str
+    email: str | None = None
 
 
 class StudentIdentityVerifyResponse(BaseModel):

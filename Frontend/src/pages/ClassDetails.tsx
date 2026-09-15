@@ -6,6 +6,7 @@ import { useToastStore } from '../store/useToastStore'
 import { batchClassService } from '../services/batchClass'
 import { excelTemplateService, type ExcelTemplateResponse } from '../services/excelTemplate'
 import { copyToClipboard } from '../utils/clipboard'
+import { getStudentUploadUrl } from '../utils/studentPortalUrl'
 import type { BatchClass, StudentSubmission, UploadLink } from '../types'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
@@ -181,7 +182,7 @@ export const ClassDetails: React.FC = () => {
   }
 
   const handleCopyLink = async (slug: string) => {
-    const fullUrl = `${window.location.origin}/upload/${slug}`
+    const fullUrl = getStudentUploadUrl(slug)
     try {
       await copyToClipboard(fullUrl)
       addToast('Section Portal URL copied to clipboard!', 'success')
@@ -390,7 +391,9 @@ export const ClassDetails: React.FC = () => {
                         <TableRow key={link.id}>
                           <TableCell className="font-semibold text-foreground">{link.title}</TableCell>
                           <TableCell className="text-xs font-bold text-primary">{classDoc.class_name}</TableCell>
-                          <TableCell className="font-mono text-xs text-muted-foreground">/upload/{slug}</TableCell>
+                          <TableCell className="font-mono text-xs text-muted-foreground break-all max-w-[220px] truncate" title={getStudentUploadUrl(slug)}>
+                            {getStudentUploadUrl(slug)}
+                          </TableCell>
                           <TableCell>
                             <span
                               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
@@ -706,13 +709,13 @@ export const ClassDetails: React.FC = () => {
           <div className="flex flex-col items-center justify-center p-4 space-y-4 text-center">
             <div className="p-3 bg-white border border-border rounded-xl shadow-md">
               <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${window.location.origin}/upload/${qrModalLink.slug || qrModalLink.token}`)}`}
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(getStudentUploadUrl(qrModalLink.slug || qrModalLink.token))}`}
                 alt="QR Code"
                 className="w-48 h-48 object-contain"
               />
             </div>
             <p className="font-mono text-xs text-muted-foreground break-all max-w-sm">
-              {`${window.location.origin}/upload/${qrModalLink.slug || qrModalLink.token}`}
+              {getStudentUploadUrl(qrModalLink.slug || qrModalLink.token)}
             </p>
             <div className="flex gap-2">
               <Button
@@ -720,7 +723,7 @@ export const ClassDetails: React.FC = () => {
                 size="sm"
                 onClick={async () => {
                   try {
-                    await copyToClipboard(`${window.location.origin}/upload/${qrModalLink.slug || qrModalLink.token}`)
+                    await copyToClipboard(getStudentUploadUrl(qrModalLink.slug || qrModalLink.token))
                     addToast('URL copied to clipboard!', 'success')
                   } catch (err) {
                     console.error('Failed to copy portal URL:', err)

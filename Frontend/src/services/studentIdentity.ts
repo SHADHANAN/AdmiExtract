@@ -5,6 +5,7 @@ export interface VerifyIdentityPayload {
   student_name: string
   register_number: string
   mobile_number: string
+  email?: string
 }
 
 export interface VerifyIdentityResponse {
@@ -25,6 +26,7 @@ export interface StudentSubmissionSession {
   register_number: string
   student_name: string
   mobile_number: string
+  email?: string
 }
 
 /**

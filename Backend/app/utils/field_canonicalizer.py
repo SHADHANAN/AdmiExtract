@@ -136,6 +136,27 @@ CANONICAL_FIELD_MAP: Dict[str, str] = {
     "phone number": "Mobile Number",
     "mobile_number": "Mobile Number",
 
+    # Location Components
+    "district": "District",
+    "district name": "District",
+    "taluk": "Taluk",
+    "taluk name": "Taluk",
+    "village": "Village",
+    "village name": "Village",
+    "village panchayat": "Village Panchayat",
+    "village_panchayat": "Village Panchayat",
+    "state": "State",
+    "state name": "State",
+    "pincode": "Pincode",
+    "pin code": "Pincode",
+    "postal code": "Pincode",
+
+    # Occupations
+    "father's occupation": "Father's Occupation",
+    "father occupation": "Father's Occupation",
+    "mother's occupation": "Mother's Occupation",
+    "mother occupation": "Mother's Occupation",
+
     # Bank Details
     "ifsc": "IFSC Code",
     "ifsc code": "IFSC Code",
@@ -372,7 +393,7 @@ def is_number_conflict(header: str, candidate_key: str) -> bool:
 
     # Aadhaar Number
     if "aadhaar" in h or "aadhar" in h:
-        if any(bad in c for bad in ["emis", "register", "roll", "sl.no", "serial", "tc no", "mobile", "phone", "admission"]):
+        if any(bad in c for bad in ["emis", "register", "roll", "sl.no", "serial", "tc no", "mobile", "phone", "admission", "application", "account", "ifsc", "district", "taluk", "village"]):
             return True
     elif "aadhaar" in c or "aadhar" in c:
         if not ("aadhaar" in h or "aadhar" in h):
@@ -1052,15 +1073,15 @@ FIELD_SOURCE_RULES: Dict[str, list[str]] = {
     "Nationality": ["AADHAAR", "COMMUNITY", "NATIVITY", "TRANSFER_CERTIFICATE"],
     "Religion": ["COMMUNITY", "TRANSFER_CERTIFICATE", "NATIVITY"],
 
-    # Community & Caste
-    "Community": ["COMMUNITY", "TRANSFER_CERTIFICATE"],
+    # Community & Caste (Strict to COMMUNITY)
+    "Community": ["COMMUNITY"],
     "Community Category": ["COMMUNITY"],
     "Community Code": ["COMMUNITY"],
     "Community Name": ["COMMUNITY"],
     "Caste Category": ["COMMUNITY"],
     "Caste Name": ["COMMUNITY"],
     "Caste Code": ["COMMUNITY"],
-    "Caste": ["COMMUNITY", "TRANSFER_CERTIFICATE"],
+    "Caste": ["COMMUNITY"],
     "Community Certificate": ["COMMUNITY"],
 
     # Parent & Guardian Details
@@ -1120,9 +1141,9 @@ FIELD_SOURCE_RULES: Dict[str, list[str]] = {
     "University": ["MIGRATION"],
     "Year": ["MIGRATION"],
     "Bonafide": ["BONAFIDE"],
-    "Date of Birth": ["AADHAAR", "TRANSFER_CERTIFICATE", "SSLC", "HSC", "COMMUNITY", "NATIVITY"],
-    "Student Date of Birth(DD.MM.YYYY)": ["AADHAAR", "TRANSFER_CERTIFICATE", "SSLC", "HSC", "COMMUNITY", "NATIVITY"],
-    "DOB": ["AADHAAR", "TRANSFER_CERTIFICATE", "SSLC", "HSC", "COMMUNITY", "NATIVITY"],
+    "Date of Birth": ["AADHAAR"],
+    "Student Date of Birth(DD.MM.YYYY)": ["AADHAAR"],
+    "DOB": ["AADHAAR"],
     "Is the student the first graduate in the family?": ["BONAFIDE", "TRANSFER_CERTIFICATE", "INCOME"],
     "First Graduate Number": ["BONAFIDE", "TRANSFER_CERTIFICATE", "INCOME"],
     "Did you come under any special admission Quota?": ["TRANSFER_CERTIFICATE", "BONAFIDE"],
@@ -1167,7 +1188,7 @@ def get_allowed_sources_for_field(field_name: str) -> list[str]:
         return ["AADHAAR", "COMMUNITY", "NATIVITY", "TRANSFER_CERTIFICATE"]
 
     if any(c in fn_lower for c in ["community", "caste"]):
-        return ["COMMUNITY", "TRANSFER_CERTIFICATE"]
+        return ["COMMUNITY"]
     if any(c in fn_lower for c in ["transfer certificate", "emis id", "leaving date", "admission number", "tc no", "tc number"]):
         return ["TRANSFER_CERTIFICATE"]
     if any(c in fn_lower for c in ["bank", "ifsc", "account"]):
@@ -1187,7 +1208,7 @@ def get_allowed_sources_for_field(field_name: str) -> list[str]:
     if "bonafide" in fn_lower:
         return ["BONAFIDE"]
     if "dob" in fn_lower or "birth" in fn_lower:
-        return ["AADHAAR", "TRANSFER_CERTIFICATE", "SSLC", "HSC", "COMMUNITY", "NATIVITY"]
+        return ["AADHAAR"]
 
     # For any unrecognized custom field, allow searching across known document types (excluding UNKNOWN)
     return ["AADHAAR", "TRANSFER_CERTIFICATE", "COMMUNITY", "INCOME", "NATIVITY", "SSLC", "HSC", "BONAFIDE", "MIGRATION"]
@@ -1202,8 +1223,10 @@ def is_document_authorized_for_field(doc_type: str, field_name: str) -> bool:
     if not doc_type or doc_type == "UNKNOWN":
         return False
 
-    allowed_sources = get_allowed_sources_for_field(field_name)
-    return doc_type in allowed_sources
+    from app.services.field_source_rules import normalize_document_type
+    doc_norm = normalize_document_type(doc_type)
+    allowed_sources = [normalize_document_type(s) for s in get_allowed_sources_for_field(field_name)]
+    return doc_norm in allowed_sources
 
 
 DOCUMENT_FIELD_AUTHORITY: dict[str, dict[str, int]] = {
@@ -1233,22 +1256,18 @@ DOCUMENT_FIELD_AUTHORITY: dict[str, dict[str, int]] = {
         "AADHAAR": 100,
         "OTHER": 50,
     },
-    # Community / Caste: Community Certificate > TC
+    # Community / Caste: Community Certificate ONLY
     "Community": {
         "COMMUNITY": 200,
-        "TRANSFER_CERTIFICATE": 120,
     },
     "Community Category": {
         "COMMUNITY": 200,
-        "TRANSFER_CERTIFICATE": 120,
     },
     "Community Name": {
         "COMMUNITY": 200,
-        "TRANSFER_CERTIFICATE": 120,
     },
     "Caste": {
         "COMMUNITY": 200,
-        "TRANSFER_CERTIFICATE": 120,
     },
     # Address: Aadhaar > Residence / Nativity > Community > TC
     "Permanent Address": {
@@ -1292,27 +1311,15 @@ DOCUMENT_FIELD_AUTHORITY: dict[str, dict[str, int]] = {
         "TRANSFER_CERTIFICATE": 180,
         "NATIVITY": 120,
     },
-    # Date of Birth: Aadhaar > TC > SSLC > HSC > Community
+    # Date of Birth: Aadhaar ONLY
     "Date of Birth": {
         "AADHAAR": 250,
-        "TRANSFER_CERTIFICATE": 190,
-        "SSLC": 160,
-        "HSC": 140,
-        "COMMUNITY": 100,
     },
     "Student Date of Birth(DD.MM.YYYY)": {
         "AADHAAR": 250,
-        "TRANSFER_CERTIFICATE": 190,
-        "SSLC": 160,
-        "HSC": 140,
-        "COMMUNITY": 100,
     },
     "DOB": {
         "AADHAAR": 250,
-        "TRANSFER_CERTIFICATE": 190,
-        "SSLC": 160,
-        "HSC": 140,
-        "COMMUNITY": 100,
     },
     # Aadhaar: Aadhaar document is highest
     "Aadhaar Number": {
@@ -1378,30 +1385,18 @@ DOCUMENT_FIELD_AUTHORITY: dict[str, dict[str, int]] = {
 
 def normalize_doc_type_canonical(doc_type: str) -> str:
     """Normalize any document type string or variant to standard authority key."""
-    if not doc_type:
-        return "UNKNOWN"
-    dt = doc_type.upper().replace("_", " ").strip()
-    if any(k in dt for k in ["TRANSFER", "TC"]):
-        return "TRANSFER_CERTIFICATE"
-    if any(k in dt for k in ["10TH", "SSLC", "SECONDARY"]):
-        return "SSLC"
-    if any(k in dt for k in ["12TH", "HSC", "HIGHER SECONDARY"]):
-        return "HSC"
-    if any(k in dt for k in ["COMMUNITY", "CASTE"]):
-        return "COMMUNITY"
-    if any(k in dt for k in ["AADHAAR", "AADHAR", "UID"]):
-        return "AADHAAR"
-    if any(k in dt for k in ["NATIVITY", "RESIDENCE"]):
-        return "NATIVITY"
-    return dt.replace(" ", "_")
+    from app.services.field_source_rules import normalize_document_type
+    return normalize_document_type(doc_type)
 
 
 def get_document_field_authority_weight(field_name: str, doc_type: str) -> int:
     """
     Returns numeric authority score for doc_type given field_name.
-    Higher score = higher authority. Default is 50 for recognized docs, 0 for UNKNOWN.
+    Higher score = higher authority. Returns 0 for UNKNOWN or unauthorized document types.
     """
     if not doc_type or doc_type == "UNKNOWN":
+        return 0
+    if not is_document_authorized_for_field(doc_type, field_name):
         return 0
     d_norm = normalize_doc_type_canonical(doc_type)
     fn_clean = field_name.strip()
@@ -1430,7 +1425,7 @@ def get_document_field_authority_weight(field_name: str, doc_type: str) -> int:
     if "gender" in fn_lower or "sex" in fn_lower:
         return DOCUMENT_FIELD_AUTHORITY["Gender"].get(d_norm, 50)
 
-    return 60 if is_document_authorized_for_field(doc_type, field_name) else 40
+    return 60
 
 
 

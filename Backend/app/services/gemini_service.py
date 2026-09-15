@@ -25,6 +25,8 @@ import logging
 import os
 import re
 import time
+import threading
+import hashlib
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -76,6 +78,10 @@ class GeminiService:
         self.model_name = configured_model
         self.fallback_models = ["gemini-3.6-flash", "gemini-3.1-flash-lite", "gemini-3.7-flash", "gemini-3.8-flash"]
         self._genai_client = None
+        self._model_cache: Dict[str, Any] = {}
+        self._response_cache: Dict[str, Dict[str, Any]] = {}
+        self._exhausted_models: Dict[str, float] = {}
+        self._cache_lock = threading.Lock()
         self._initialize_client()
 
     def _initialize_client(self) -> None:
@@ -109,11 +115,54 @@ class GeminiService:
         """
         Construct a comprehensive multimodal extraction prompt for Indian admission certificates.
         """
-        target_fields_str = ""
-        if target_fields:
-            target_fields_str = "PRIORITY TARGET EXCEL FIELDS TO LOCATE AND POPULATE:\n" + "\n".join(
-                [f"  - {f}" for f in target_fields]
+        summary_keys_str = ""
+        if target_fields and len(target_fields) > 0:
+            target_fields_str = (
+                "CRITICAL INSTRUCTION: You must ONLY extract the following WANTED FIELDS for this document.\n"
+                "Do NOT extract, populate, or guess any fields not listed here:\n"
+                + "\n".join([f"  - {f}" for f in target_fields])
             )
+            summary_lines = []
+            has_aadhaar = any("aadhaar" in f.lower() or "aadhar" in f.lower() for f in target_fields)
+            seen_keys = set()
+            for f in target_fields:
+                k = re.sub(r'[^a-z0-9]+', '_', f.lower()).strip('_')
+                if k and k not in seen_keys:
+                    summary_lines.append(f'    "{k}": "string or null"')
+                    seen_keys.add(k)
+            if has_aadhaar and "aadhaar_number" not in seen_keys:
+                summary_lines.append('    "aadhaar_number": "string or null"')
+                seen_keys.add("aadhaar_number")
+            summary_keys_str = ",\n".join(summary_lines)
+        else:
+            target_fields_str = ""
+            summary_keys_str = """    "student_name": "string or null",
+    "register_number": "string or null",
+    "dob": "string or null",
+    "gender": "string or null",
+    "nationality": "string or null",
+    "religion": "string or null",
+    "aadhaar_number": "string or null",
+    "mobile_number": "string or null",
+    "email": "string or null",
+    "father_name": "string or null",
+    "mother_name": "string or null",
+    "full_address": "string or null",
+    "village": "string or null",
+    "taluk": "string or null",
+    "district": "string or null",
+    "state": "string or null",
+    "pincode": "string or null",
+    "community_category": "string or null",
+    "community_name": "string or null",
+    "annual_income": "string or null",
+    "emis_id": "string or null",
+    "sslc_total_marks": "string or null",
+    "sslc_percentage": "string or null",
+    "hsc_total_marks": "string or null",
+    "hsc_percentage": "string or null",
+    "tc_number": "string or null",
+    "school_name": "string or null\""""
 
         prompt = f"""You are a high-precision, production-grade Admission Document Extraction AI specializing in Indian Educational, Identity, and Government Certificates.
 
@@ -123,7 +172,7 @@ Carefully inspect the provided document image or PDF pages. Analyze visual layou
 
 TASK & DISAMBIGUATION RULES:
 1. Classify the document type:
-   Options: 'AADHAAR', 'SSLC', 'HSC', 'COMMUNITY', 'TRANSFER_CERTIFICATE', 'INCOME', 'NATIVITY', 'BONAFIDE', 'MIGRATION', 'OTHER'
+   Options: 'AADHAAR', 'SSLC', 'HSC', 'COMMUNITY', 'TRANSFER_CERTIFICATE', 'INCOME', 'NATIVITY', 'BONAFIDE', 'MIGRATION', 'ALLOTMENT_ORDER', 'OTHER'
 2. Strict Person Disambiguation:
    - 'student_name' is ONLY the candidate/applicant. NEVER assign father's name, mother's name, or guardian's name as student_name.
    - 'father_name' is strictly the father/guardian named in S/O, D/O, or 'Father's Name' labels.
@@ -131,7 +180,10 @@ TASK & DISAMBIGUATION RULES:
 3. Strict Identifier Disambiguation:
    - 'register_number' is the official Board/University exam or registration number (e.g. 714024247103, 1625624).
    - NEVER confuse register_number with Certificate Serial No (e.g. SL.NO, SEC No), EMIS ID, or Aadhaar Number.
-   - 'aadhaar_number' must be strictly 12 digits (format 'XXXX XXXX XXXX' or 'XXXXXXXXXXXX').
+   - 'aadhaar_number': Extract 12-digit Aadhaar number ONLY when visibly stated in the document.
+     Preserve all 12 digits (format 'XXXX XXXX XXXX' or 'XXXXXXXXXXXX').
+     Do NOT infer, invent, or guess missing digits. Return null if not visible.
+     Do NOT confuse other 12-digit identifiers (such as bank accounts, application numbers, or exam register numbers) with Aadhaar.
    - 'emis_id' is the 9-16 digit educational management identifier found on TC or school marksheets.
 4. Category & Cultural Disambiguation:
    - 'community_category': MUST be strictly one of ['BC', 'MBC', 'SC', 'ST', 'OC', 'BCM', 'MBC/DNC', 'DNC'].
@@ -163,33 +215,7 @@ The JSON must follow this exact structure:
     }}
   }},
   "extracted_summary": {{
-    "student_name": "string or null",
-    "register_number": "string or null",
-    "dob": "string or null",
-    "gender": "string or null",
-    "nationality": "string or null",
-    "religion": "string or null",
-    "aadhaar_number": "string or null",
-    "mobile_number": "string or null",
-    "email": "string or null",
-    "father_name": "string or null",
-    "mother_name": "string or null",
-    "full_address": "string or null",
-    "village": "string or null",
-    "taluk": "string or null",
-    "district": "string or null",
-    "state": "string or null",
-    "pincode": "string or null",
-    "community_category": "string or null",
-    "community_name": "string or null",
-    "annual_income": "string or null",
-    "emis_id": "string or null",
-    "sslc_total_marks": "string or null",
-    "sslc_percentage": "string or null",
-    "hsc_total_marks": "string or null",
-    "hsc_percentage": "string or null",
-    "tc_number": "string or null",
-    "school_name": "string or null"
+{summary_keys_str}
   }}
 }}
 """
@@ -199,6 +225,7 @@ The JSON must follow this exact structure:
         self,
         file_path: str,
         target_fields: Optional[List[str]] = None,
+        bypass_cache: bool = False,
     ) -> Dict[str, Any]:
         """
         Perform native multimodal extraction from a PDF or image file on disk.
@@ -228,6 +255,7 @@ The JSON must follow this exact structure:
                 mime_type=mime_type,
                 filename=path.name,
                 target_fields=target_fields,
+                bypass_cache=bypass_cache,
             )
         except Exception as exc:
             logger.error(f"[GeminiService] Failed reading {file_path}: {exc}", exc_info=True)
@@ -358,6 +386,12 @@ The JSON must follow this exact structure:
             if len(digits) >= 5:
                 if digits in grounding_digits:
                     validated_fields[k] = v
+                elif len(digits) == 12 and ("aadhaar" in k.lower() or "aadhar" in k.lower()):
+                    if digits[:8] in grounding_digits or digits[4:] in grounding_digits or digits[:4] in grounding_digits:
+                        validated_fields[k] = v
+                    else:
+                        logger.warning(f"[Hallucination Guard] Rejected ungrounded identifier for '{k}': '{val_str}'")
+                        continue
                 else:
                     logger.warning(f"[Hallucination Guard] Rejected ungrounded identifier for '{k}': '{val_str}'")
                     continue
@@ -516,6 +550,7 @@ The JSON must follow this exact structure:
         mime_type: str,
         filename: str = "document.pdf",
         target_fields: Optional[List[str]] = None,
+        bypass_cache: bool = False,
     ) -> Dict[str, Any]:
         """
         Perform multimodal extraction using file bytes and mime type with resilient model fallback.
@@ -528,6 +563,30 @@ The JSON must follow this exact structure:
                 target_fields=target_fields,
             )
 
+        import hashlib, copy
+        doc_hash = hashlib.sha256(file_bytes).hexdigest()
+        fields_hash = hashlib.sha256(json.dumps(sorted(target_fields or [])).encode("utf-8")).hexdigest()[:16]
+        schema_version = "v3_aadhaar_canonical"
+        content_key = f"{len(file_bytes)}_{doc_hash}_{fields_hash}_{schema_version}_{self.model_name}"
+
+        is_bypass = bypass_cache or getattr(settings, "EXTRACTION_BYPASS_CACHE", False)
+
+        with self._cache_lock:
+            if not is_bypass and content_key in self._response_cache:
+                print(f"[EXTRACTION_CACHE] document={doc_hash} cache_hit=true", flush=True)
+                cached = copy.deepcopy(self._response_cache[content_key])
+                cached["timing_metrics"] = {
+                    "gemini_ms": 0.1,
+                    "gemini_request_ms": 0.0,
+                    "gemini_retry_wait_ms": 0.0,
+                    "json_parsing_ms": 0.0,
+                    "gemini_queue_wait_ms": 0.0,
+                    "cache_hit": True,
+                }
+                return cached
+            else:
+                print(f"[EXTRACTION_CACHE] document={doc_hash} cache_hit=false", flush=True)
+
         prompt = self.build_multimodal_prompt(target_fields=target_fields)
         sdk_version = getattr(self._genai_client, "__version__", "unknown") if self._genai_client else "unknown"
 
@@ -536,13 +595,24 @@ The JSON must follow this exact structure:
             if fb_m not in models_to_try:
                 models_to_try.append(fb_m)
 
+        # Prioritize fresh models over ones currently in 429 quota cooldown
+        now = time.time()
+        available_models = [m for m in models_to_try if self._exhausted_models.get(m, 0) <= now]
+        cooldown_models = [m for m in models_to_try if self._exhausted_models.get(m, 0) > now]
+        ordered_models = available_models if available_models else cooldown_models
+
         file_part = {
             "mime_type": mime_type,
             "data": file_bytes,
         }
 
+        t_gemini_start = time.perf_counter()
+        gemini_retry_wait_ms = 0.0
+        gemini_request_ms = 0.0
+        json_parsing_ms = 0.0
         last_error = None
-        for cur_model in models_to_try:
+
+        for cur_model in ordered_models:
             print("\n========== GEMINI CALL ==========", flush=True)
             print(f"Document Filename: {filename}", flush=True)
             print(f"MIME Type: {mime_type} ({len(file_bytes)} bytes)", flush=True)
@@ -551,19 +621,24 @@ The JSON must follow this exact structure:
             print(f"Request Started: True", flush=True)
 
             try:
-                model_inst = self._genai_client.GenerativeModel(
-                    model_name=cur_model,
-                    generation_config={
-                        "response_mime_type": "application/json",
-                        "temperature": 0.1,
-                    },
-                )
+                with self._cache_lock:
+                    if cur_model not in self._model_cache:
+                        self._model_cache[cur_model] = self._genai_client.GenerativeModel(
+                            model_name=cur_model,
+                            generation_config={
+                                "response_mime_type": "application/json",
+                                "temperature": 0.1,
+                            },
+                        )
+                    model_inst = self._model_cache[cur_model]
 
                 response = None
                 max_retries = 1
                 for attempt in range(max_retries + 1):
                     try:
+                        t_req_0 = time.perf_counter()
                         response = model_inst.generate_content([file_part, prompt], request_options={"timeout": 60.0})
+                        gemini_request_ms += (time.perf_counter() - t_req_0) * 1000.0
                         break
                     except Exception as exc:
                         is_429, is_transient, retry_delay = self._classify_429_error(exc)
@@ -571,10 +646,13 @@ The JSON must follow this exact structure:
                             if is_transient and attempt == 0:
                                 wait_time = min(retry_delay or 2.0, 3.0)
                                 logger.warning(f"[GeminiService] Transient rate limit on '{cur_model}'. Retrying in {wait_time}s.")
+                                gemini_retry_wait_ms += wait_time * 1000.0
                                 time.sleep(wait_time)
                                 continue
                             else:
                                 logger.warning(f"[GeminiService] Model '{cur_model}' hit 429 quota. Trying next fallback model...")
+                                with self._cache_lock:
+                                    self._exhausted_models[cur_model] = time.time() + 300.0
                                 last_error = exc
                                 response = None
                                 break
@@ -592,7 +670,9 @@ The JSON must follow this exact structure:
                 print(f"Response Length: {len(raw_text)} chars", flush=True)
                 print(f"HTTP/API Status: 200 OK", flush=True)
 
+                t_json_0 = time.perf_counter()
                 parsed_data = self._parse_json_response(raw_text)
+                json_parsing_ms += (time.perf_counter() - t_json_0) * 1000.0
                 json_success = bool(parsed_data)
                 print(f"JSON Parsing Succeeded: {json_success}", flush=True)
 
@@ -601,7 +681,7 @@ The JSON must follow this exact structure:
                     print("=================================\n", flush=True)
                     continue
 
-                # Stage 3 Structured Diagnostic: Inspect critical fields
+                # Stage 3 Structured Diagnostic: Inspect critical fields (Zero raw PII logging)
                 print("\n========== GEMINI JSON PARSER ==========", flush=True)
                 print(f"Inspecting parsed output for: {filename}", flush=True)
                 extracted_fields = parsed_data.get("fields", {})
@@ -622,9 +702,19 @@ The JSON must follow this exact structure:
                             if cf.replace("_", "") in fk.lower().replace(" ", "").replace("_", ""):
                                 val = fv.get("value") if isinstance(fv, dict) else fv
                                 break
-                    status_str = f"'{val}'" if val is not None else "Not Found"
+                    status_str = "FOUND" if val is not None and str(val).strip() else "Not Found"
                     print(f"  * {cf.upper()}: {status_str}", flush=True)
                 print("========================================\n", flush=True)
+
+                latency_ms = (time.perf_counter() - t_gemini_start) * 1000.0
+                print(
+                    f"[GEMINI_EXTRACTION_METRICS] gemini_success=true "
+                    f"field_count={len(extracted_fields)} "
+                    f"json_valid=true "
+                    f"model={cur_model} "
+                    f"latency_ms={latency_ms:.2f}",
+                    flush=True
+                )
 
                 # Hallucination protection only if ground-truth text is available
                 doc_text = ""
@@ -641,6 +731,18 @@ The JSON must follow this exact structure:
                     parsed_data["fields"] = self._filter_hallucinated_fields(parsed_data["fields"], doc_text)
 
                 parsed_data["success"] = True
+                parsed_data["timing_metrics"] = {
+                    "gemini_ms": latency_ms,
+                    "gemini_request_ms": gemini_request_ms,
+                    "gemini_retry_wait_ms": gemini_retry_wait_ms,
+                    "json_parsing_ms": json_parsing_ms,
+                    "gemini_queue_wait_ms": 0.0,
+                }
+                with self._cache_lock:
+                    if len(self._response_cache) >= 200:
+                        self._response_cache.pop(next(iter(self._response_cache)))
+                    self._response_cache[content_key] = copy.deepcopy(parsed_data)
+
                 return parsed_data
 
             except Exception as exc:
@@ -742,6 +844,72 @@ The JSON must follow this exact structure:
             logger.error(f"[GeminiService] Text extraction failed: {exc}", exc_info=True)
             return {"success": False, "error": str(exc)}
 
+    @staticmethod
+    def _canonicalize_aadhaar_aliases(data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Section 8: JSON Parser Alias Canonicalization.
+        Support possible labels:
+        aadhaar_number, aadhaar, aadhaar_no, aadhaar_number_without_space,
+        Aadhaar Number, Aadhaar Number (without space), Aadhaar Card, aadhaar_card, aadhar, aadhar_no.
+        Canonicalize all valid aliases to: aadhaar_number.
+        """
+        if not data or not isinstance(data, dict):
+            return data
+
+        extracted_fields = data.get("fields")
+        if not isinstance(extracted_fields, dict):
+            extracted_fields = {}
+            data["fields"] = extracted_fields
+        extracted_summary = data.get("extracted_summary")
+        if not isinstance(extracted_summary, dict):
+            extracted_summary = {}
+            data["extracted_summary"] = extracted_summary
+
+        aadhaar_val = None
+        aadhaar_alias_keys = [
+            "aadhaar_number", "aadhaar", "aadhaar_no",
+            "aadhaar_number_without_space", "Aadhaar Number",
+            "Aadhaar Number (without space)", "aadhaar card", "Aadhaar Card",
+            "aadhar", "aadhar_number", "aadhar_no", "aadhaar_card"
+        ]
+        # 1. Search summary
+        for ak in aadhaar_alias_keys:
+            if ak in extracted_summary and extracted_summary[ak]:
+                sv = str(extracted_summary[ak]).strip()
+                if sv and sv.lower() not in ["null", "none", "n/a", ""]:
+                    aadhaar_val = sv
+                    break
+        # 2. Search fields
+        if not aadhaar_val:
+            for ak in aadhaar_alias_keys:
+                if ak in extracted_fields:
+                    fv = extracted_fields[ak]
+                    val = fv.get("value") if isinstance(fv, dict) else fv
+                    if val and str(val).strip().lower() not in ["null", "none", "n/a", ""]:
+                        aadhaar_val = str(val).strip()
+                        break
+
+        if aadhaar_val:
+            from app.utils.normalization import normalize_aadhaar_digits
+            norm_aadh = normalize_aadhaar_digits(aadhaar_val)
+            if norm_aadh:
+                extracted_summary["aadhaar_number"] = norm_aadh
+                if "aadhaar_number" not in extracted_fields:
+                    extracted_fields["aadhaar_number"] = {
+                        "value": norm_aadh,
+                        "confidence": 95,
+                        "source_text": str(aadhaar_val),
+                    }
+                else:
+                    if isinstance(extracted_fields["aadhaar_number"], dict):
+                        extracted_fields["aadhaar_number"]["value"] = norm_aadh
+                    else:
+                        extracted_fields["aadhaar_number"] = {"value": norm_aadh, "confidence": 95}
+                data["fields"] = extracted_fields
+                data["extracted_summary"] = extracted_summary
+
+        return data
+
     def _parse_json_response(self, text: str) -> Optional[Dict[str, Any]]:
         """Safely parse JSON response, stripping code fences if present."""
         if not text:
@@ -757,7 +925,7 @@ The JSON must follow this exact structure:
         try:
             data = json.loads(clean_text)
             if isinstance(data, dict):
-                return data
+                return self._canonicalize_aadhaar_aliases(data)
         except json.JSONDecodeError as err:
             logger.warning(f"[GeminiService] JSON decode error: {err}")
             # Try finding first { and last }
@@ -765,7 +933,9 @@ The JSON must follow this exact structure:
             last_brace = clean_text.rfind("}")
             if first_brace != -1 and last_brace > first_brace:
                 try:
-                    return json.loads(clean_text[first_brace : last_brace + 1])
+                    data = json.loads(clean_text[first_brace : last_brace + 1])
+                    if isinstance(data, dict):
+                        return self._canonicalize_aadhaar_aliases(data)
                 except Exception:
                     pass
 

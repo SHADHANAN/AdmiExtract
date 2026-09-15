@@ -542,12 +542,30 @@ CLEAN OCR TEXT:
 
             # Aadhaar Number
             elif "aadhaar" in f_norm or "aadhar" in f_norm:
-                m = re.search(r"\b(\d{4}\s\d{4}\s\d{4})\b", text)
-                if m:
-                    a_val = m.group(1)
-                    if "without space" in f_norm:
-                        a_val = a_val.replace(" ", "")
-                    results[field] = {"value": a_val, "confidence": 95}
+                from app.utils.normalization import normalize_aadhaar_digits
+                cand_val = None
+                # Look for labelled context first (Tamil + English)
+                context_match = re.search(
+                    r"(?:ஆதார்\s*எண்|ஆதார்|Aadhaar\s*(?:No\.?|Number|Card)?|Aadhar\s*(?:No\.?|Number|Card)?|Your\s+Aadhaar\s+No\.?|UIDAI|UID)\s*[:\-\.]?\s*[\n\r]*([0-9OIlSBG]{4}[\s\-\n\r]+[0-9OIlSBG]{4}[\s\-\n\r]+[0-9OIlSBG]{4}|[0-9OIlSBG]{12})",
+                    text,
+                    re.IGNORECASE,
+                )
+                if context_match:
+                    cand_val = normalize_aadhaar_digits(context_match.group(1))
+                if not cand_val:
+                    for rm in re.findall(r"\b([2-9][0-9OIlSBG]{3}[\s\-\n\r]+[0-9OIlSBG]{4}[\s\-\n\r]+[0-9OIlSBG]{4})\b", text):
+                        norm = normalize_aadhaar_digits(rm)
+                        if norm:
+                            cand_val = norm
+                            break
+                if not cand_val:
+                    for cm in re.findall(r"\b([2-9]\d{11})\b", text):
+                        norm = normalize_aadhaar_digits(cm)
+                        if norm:
+                            cand_val = norm
+                            break
+                if cand_val:
+                    results[field] = {"value": cand_val, "confidence": 95}
 
             # Mobile Number
             elif any(k in f_norm for k in ["mobile", "phone"]):

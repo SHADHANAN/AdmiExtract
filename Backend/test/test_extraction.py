@@ -28,9 +28,11 @@ async def setup_test_db():
     app.db.database.db = test_db
     app.db.database._is_connected = True
 
+    from app.models.wanted_field_config import DocumentFieldConfiguration
+
     await init_beanie(
         database=cast(Any, test_db),
-        document_models=[User, Department, AdmissionBatch, BatchClass, DocumentConfigurationVersion, StudentSubmission, ExcelBatchTemplate]
+        document_models=[User, Department, AdmissionBatch, BatchClass, DocumentConfigurationVersion, StudentSubmission, ExcelBatchTemplate, DocumentFieldConfiguration]
     )
     await User.find_all().delete()
     await Department.find_all().delete()
@@ -39,6 +41,7 @@ async def setup_test_db():
     await DocumentConfigurationVersion.find_all().delete()
     await StudentSubmission.find_all().delete()
     await ExcelBatchTemplate.find_all().delete()
+    await DocumentFieldConfiguration.find_all().delete()
     
     yield
     

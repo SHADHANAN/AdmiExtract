@@ -51,6 +51,7 @@ async def _run_db_setup():
     from app.models.doc_config_version import DocumentConfigurationVersion
     from app.models.batch import AdmissionBatch
     from app.models.batch_class import BatchClass
+    from app.models.wanted_field_config import DocumentFieldConfiguration
     from app.core.security import get_password_hash
 
     # Clean up legacy user documents with missing or null username to allow unique index creation
@@ -88,6 +89,7 @@ async def _run_db_setup():
             DocumentConfigurationVersion,
             AdmissionBatch,
             BatchClass,
+            DocumentFieldConfiguration,
         ],
         allow_index_dropping=True,
     )

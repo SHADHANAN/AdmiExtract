@@ -29,14 +29,18 @@ async def setup_test_db():
     from app.models.student_submission import StudentSubmission
     from app.models.doc_config_version import DocumentConfigurationVersion
     from app.models.excel_template import ExcelBatchTemplate
+    from app.models.wanted_field_config import DocumentFieldConfiguration
+    from app.models.department import Department
+    from app.models.batch_class import BatchClass
 
-    await init_beanie(database=cast(Any, test_db), document_models=[User, AdmissionBatch, StudentSubmission, DocumentConfigurationVersion, ExcelBatchTemplate])
+    await init_beanie(database=cast(Any, test_db), document_models=[User, AdmissionBatch, StudentSubmission, DocumentConfigurationVersion, ExcelBatchTemplate, DocumentFieldConfiguration, Department, BatchClass])
     # Ensure clear collection
     await User.find_all().delete()
     await AdmissionBatch.find_all().delete()
     await StudentSubmission.find_all().delete()
     await DocumentConfigurationVersion.find_all().delete()
     await ExcelBatchTemplate.find_all().delete()
+    await DocumentFieldConfiguration.find_all().delete()
     
     yield
     

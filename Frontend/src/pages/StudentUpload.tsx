@@ -113,6 +113,11 @@ export const StudentUpload: React.FC = () => {
     if (!registerNum.trim()) errors.register = 'Register number is required.'
     if (!mobileNum.trim() || mobileNum.trim().length < 10)
       errors.mobile = 'Enter a valid 10-digit mobile number.'
+    if (!email.trim()) {
+      errors.email = 'Email address is required.'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      errors.email = 'Enter a valid email address.'
+    }
     setFieldErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -129,6 +134,7 @@ export const StudentUpload: React.FC = () => {
         student_name: studentName.trim(),
         register_number: registerNum.trim(),
         mobile_number: mobileNum.trim(),
+        email: email.trim(),
       })
  
       // Write temporary submission session to sessionStorage (no JWT, no login)
@@ -140,6 +146,7 @@ export const StudentUpload: React.FC = () => {
         register_number: registerNum.trim(),
         student_name: studentName.trim(),
         mobile_number: mobileNum.trim(),
+        email: email.trim(),
       })
  
       const batchId = result.batch_id
@@ -149,7 +156,8 @@ export const StudentUpload: React.FC = () => {
       }
 
       // Navigate to documents upload page
-      navigate(`/upload/${batchId}/documents`)
+      const isStudentPrefix = window.location.pathname.startsWith('/student')
+      navigate(isStudentPrefix ? `/student/${batchId}/documents` : `/upload/${batchId}/documents`)
     } catch (err: any) {
       const message: string =
         err?.message ||
@@ -243,7 +251,7 @@ export const StudentUpload: React.FC = () => {
               <UserCheck className="h-7 w-7" />
             </div>
             <CardTitle className="text-2xl font-black text-foreground">
-              Student Identification
+              Student Details
             </CardTitle>
             <CardDescription className="mt-1.5 leading-relaxed">
               {portalTitle || 'Document Upload Portal'}
@@ -274,11 +282,11 @@ export const StudentUpload: React.FC = () => {
             </div>
 
             <form onSubmit={handleContinue} className="space-y-5" noValidate>
-              {/* Student Name */}
+              {/* Name */}
               <div className="space-y-1.5">
                 <Input
                   id="student-name"
-                  label="Student Name"
+                  label="Name *"
                   type="text"
                   placeholder="e.g. Rahul Sharma"
                   value={studentName}
@@ -305,7 +313,7 @@ export const StudentUpload: React.FC = () => {
               <div className="space-y-1.5">
                 <Input
                   id="register-number"
-                  label="Register Number"
+                  label="Register Number *"
                   type="text"
                   placeholder="e.g. 24AM076"
                   value={registerNum}
@@ -334,7 +342,7 @@ export const StudentUpload: React.FC = () => {
               <div className="space-y-1.5">
                 <Input
                   id="mobile-number"
-                  label="Mobile Number"
+                  label="Mobile Number *"
                   type="tel"
                   placeholder="e.g. 9876543210"
                   value={mobileNum}
@@ -359,25 +367,34 @@ export const StudentUpload: React.FC = () => {
                 )}
               </div>
 
-              {/* Email (Read Only if present/pre-filled) */}
-              {(email || isPreFilled) && (
-                <div className="space-y-1.5">
-                  <Input
-                    id="email-address"
-                    label="Email"
-                    type="email"
-                    placeholder="student@example.com"
-                    value={email}
-                    readOnly={isPreFilled}
-                    onChange={(e) => {
-                      if (isPreFilled) return
-                      setEmail(e.target.value)
-                    }}
-                    helperText="Automatically populated from logged-in profile (Read Only)"
-                    className={isPreFilled ? 'bg-muted/40 cursor-not-allowed font-medium text-foreground' : ''}
-                  />
-                </div>
-              )}
+              {/* Email Address */}
+              <div className="space-y-1.5">
+                <Input
+                  id="email-address"
+                  label="Email Address *"
+                  type="email"
+                  placeholder="e.g. student@example.com"
+                  value={email}
+                  readOnly={isPreFilled}
+                  onChange={(e) => {
+                    if (isPreFilled) return
+                    setEmail(e.target.value)
+                    if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: '' }))
+                  }}
+                  helperText={
+                    isPreFilled
+                      ? 'Automatically populated from logged-in profile (Read Only)'
+                      : 'Active email address for application updates.'
+                  }
+                  required
+                  className={isPreFilled ? 'bg-muted/40 cursor-not-allowed font-medium text-foreground' : ''}
+                />
+                {fieldErrors.email && (
+                  <p className="text-xs text-destructive font-medium pl-1">
+                    {fieldErrors.email}
+                  </p>
+                )}
+              </div>
 
               <Button
                 id="continue-btn"

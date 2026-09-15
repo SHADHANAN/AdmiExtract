@@ -189,7 +189,10 @@ CANONICAL_EXCEL_ALIASES: Dict[str, List[str]] = {
         "institution name", "name of school",
     ],
     "Date of Leaving": [
-        "date of leaving", "leaving date", "tc date", "tc issue date",
+        "date of leaving", "leaving date", "tc leaving date", "date of tc",
+    ],
+    "Issue Date": [
+        "issue date", "tc issue date", "date of issue", "certificate issue date", "tc date of issue",
     ],
 
     # Personal & Quotas
@@ -326,6 +329,17 @@ class FieldMappingService:
                     validated = self.validate_resolved_candidate(header_clean, val)
                     if validated is not None:
                         return validated, conf, "Direct Match"
+
+        # Step 2.5: Dedicated Aadhaar Column Resolution
+        if "aadhaar" in header_clean.lower() or "aadhar" in header_clean.lower():
+            for a_key in ["aadhaar_number", "Aadhaar Number (without space)", "Aadhaar Number", "Aadhaar Card", "aadhaar", "aadhar"]:
+                if a_key in extracted_data_pool:
+                    v = extracted_data_pool[a_key]
+                    val, conf = self._extract_value_and_confidence(v)
+                    if self._is_valid_value(val) and conf >= 50:
+                        validated = self.validate_resolved_candidate(header_clean, val)
+                        if validated is not None:
+                            return validated, conf, f"Aadhaar Match ({a_key})"
 
         # Step 3: Canonical alias resolution
         canonical_target = self.find_best_canonical_match(header_clean)
@@ -488,6 +502,19 @@ class FieldMappingService:
             if len(digits) == 12 and (re.match(r'^\d{4}\s+\d{4}\s+\d{4}$', val_str) or val_str.isdigit()):
                 return None
 
+        # 14. Location Protection (Reject 12-digit Aadhaar from District, Taluk, Village)
+        if any(loc in h_lower for loc in ["district", "taluk", "village"]):
+            val_digits = re.sub(r'\D', '', str(val).strip())
+            if len(val_digits) == 12:
+                return None
+
+        # 15. Bank Account Protection (Reject valid Aadhaar numbers from Bank Account Number)
+        if "account" in h_lower:
+            val_str = str(val).strip()
+            digits = re.sub(r'\D', '', val_str)
+            if len(digits) == 12 and validate_and_normalize_aadhaar(val_str):
+                return None
+
         # Default: clean noise
         clean = clean_text_noise(val)
         return clean if clean and not is_explicit_negative(clean) else None
@@ -526,12 +553,21 @@ class FieldMappingService:
             )
 
             is_prof, _ = self.is_profile_header(header_clean)
+            pool_item = extracted_data_pool.get(header_clean) or extracted_data_pool.get(self.find_best_canonical_match(header_clean) or "") or {}
+            source_type = "PROFILE_SOURCE" if is_prof else pool_item.get("source_type", "DOCUMENT_SOURCE")
+            source_doc = "Student Profile" if is_prof else pool_item.get("source_document", pool_item.get("source_file", src))
+            auth_prio = 100 if is_prof else pool_item.get("authority", 50)
+            src_rule = "AUTHENTICATED_LOGIN_SESSION" if is_prof else pool_item.get("source_rule", "DEFAULT")
 
             mapping_result[header_clean] = {
                 "value": val,
                 "confidence": conf,
                 "source": src,
                 "is_profile": is_prof,
+                "source_type": source_type,
+                "source_document": source_doc,
+                "authority": auth_prio,
+                "source_rule": src_rule,
             }
 
         return mapping_result
@@ -646,4 +682,342 @@ def format_for_excel_write(header: str, val: Any) -> Any:
     if _default_service._is_boolean_question(header):
         return "No"
     return None
+
+
+# ==============================================================================
+# Deterministic Semantic Domains & Mapping Hardening Engine
+# ==============================================================================
+
+DOMAIN_IDENTIFICATION_AADHAAR = "IDENTIFICATION_AADHAAR"
+DOMAIN_IDENTIFICATION_EMIS = "IDENTIFICATION_EMIS"
+DOMAIN_IDENTIFICATION_TC = "IDENTIFICATION_TC"
+DOMAIN_IDENTIFICATION_REGISTER = "IDENTIFICATION_REGISTER"
+DOMAIN_IDENTIFICATION_ADMISSION = "IDENTIFICATION_ADMISSION"
+DOMAIN_IDENTIFICATION_CERTIFICATE = "IDENTIFICATION_CERTIFICATE"
+
+DOMAIN_IDENTITY_STUDENT_NAME = "IDENTITY_STUDENT_NAME"
+DOMAIN_IDENTITY_FATHER_NAME = "IDENTITY_FATHER_NAME"
+DOMAIN_IDENTITY_MOTHER_NAME = "IDENTITY_MOTHER_NAME"
+DOMAIN_IDENTITY_GUARDIAN_NAME = "IDENTITY_GUARDIAN_NAME"
+
+DOMAIN_DATE_DOB = "DATE_DOB"
+DOMAIN_DATE_ISSUE = "DATE_ISSUE"
+DOMAIN_DATE_LEAVING = "DATE_LEAVING"
+DOMAIN_DATE_ADMISSION = "DATE_ADMISSION"
+
+DOMAIN_CONTACT_MOBILE = "CONTACT_MOBILE"
+DOMAIN_CONTACT_EMAIL = "CONTACT_EMAIL"
+
+DOMAIN_COMMUNITY_CATEGORY = "COMMUNITY_CATEGORY"
+DOMAIN_COMMUNITY_CASTE = "COMMUNITY_CASTE"
+
+DOMAIN_FINANCIAL_INCOME = "FINANCIAL_INCOME"
+
+DOMAIN_ADDRESS_TALUK = "ADDRESS_TALUK"
+DOMAIN_ADDRESS_DISTRICT = "ADDRESS_DISTRICT"
+DOMAIN_ADDRESS_STATE = "ADDRESS_STATE"
+DOMAIN_ADDRESS_VILLAGE = "ADDRESS_VILLAGE"
+DOMAIN_ADDRESS_PINCODE = "ADDRESS_PINCODE"
+DOMAIN_ADDRESS_FULL = "ADDRESS_FULL"
+
+DOMAIN_ACADEMIC_10TH = "ACADEMIC_10TH"
+DOMAIN_ACADEMIC_12TH = "ACADEMIC_12TH"
+DOMAIN_ACADEMIC_INSTITUTION = "ACADEMIC_INSTITUTION"
+DOMAIN_ACADEMIC_PASSING_YEAR = "ACADEMIC_PASSING_YEAR"
+
+DOMAIN_PERSONAL_GENDER = "PERSONAL_GENDER"
+DOMAIN_PERSONAL_BLOOD_GROUP = "PERSONAL_BLOOD_GROUP"
+DOMAIN_PERSONAL_NATIONALITY = "PERSONAL_NATIONALITY"
+DOMAIN_PERSONAL_RELIGION = "PERSONAL_RELIGION"
+
+# Map known canonical fields directly to their domain
+CANONICAL_FIELD_DOMAINS: Dict[str, str] = {
+    "Aadhaar Number": DOMAIN_IDENTIFICATION_AADHAAR,
+    "Aadhaar Number (without space)": DOMAIN_IDENTIFICATION_AADHAAR,
+    "Community Category": DOMAIN_COMMUNITY_CATEGORY,
+    "Community Name": DOMAIN_COMMUNITY_CASTE,
+    "Community Code": DOMAIN_COMMUNITY_CASTE,
+    "Community Certificate Number": DOMAIN_IDENTIFICATION_CERTIFICATE,
+    "Date of Birth": DOMAIN_DATE_DOB,
+    "Gender": DOMAIN_PERSONAL_GENDER,
+    "Father's Name": DOMAIN_IDENTITY_FATHER_NAME,
+    "Mother's Name": DOMAIN_IDENTITY_MOTHER_NAME,
+    "Guardian's Name": DOMAIN_IDENTITY_GUARDIAN_NAME,
+    "Annual Family Income": DOMAIN_FINANCIAL_INCOME,
+    "Permanent Address": DOMAIN_ADDRESS_FULL,
+    "Communication Address": DOMAIN_ADDRESS_FULL,
+    "Village": DOMAIN_ADDRESS_VILLAGE,
+    "Taluk": DOMAIN_ADDRESS_TALUK,
+    "District": DOMAIN_ADDRESS_DISTRICT,
+    "State": DOMAIN_ADDRESS_STATE,
+    "Pincode": DOMAIN_ADDRESS_PINCODE,
+    "SSLC Total Marks": DOMAIN_ACADEMIC_10TH,
+    "SSLC Mark Percentage": DOMAIN_ACADEMIC_10TH,
+    "SSLC Register Number": DOMAIN_ACADEMIC_10TH,
+    "SSLC Year of Passing": DOMAIN_ACADEMIC_PASSING_YEAR,
+    "HSC Total Marks": DOMAIN_ACADEMIC_12TH,
+    "HSC Mark Percentage": DOMAIN_ACADEMIC_12TH,
+    "HSC Register Number": DOMAIN_ACADEMIC_12TH,
+    "HSC Cutoff": DOMAIN_ACADEMIC_12TH,
+    "EMIS ID": DOMAIN_IDENTIFICATION_EMIS,
+    "Transfer Certificate Number": DOMAIN_IDENTIFICATION_TC,
+    "School Name": DOMAIN_ACADEMIC_INSTITUTION,
+    "Date of Leaving": DOMAIN_DATE_LEAVING,
+    "Issue Date": DOMAIN_DATE_ISSUE,
+    "Blood Group": DOMAIN_PERSONAL_BLOOD_GROUP,
+    "Nationality": DOMAIN_PERSONAL_NATIONALITY,
+    "Religion": DOMAIN_PERSONAL_RELIGION,
+    "Student Name": DOMAIN_IDENTITY_STUDENT_NAME,
+    "Register Number": DOMAIN_IDENTIFICATION_REGISTER,
+    "Admission Number": DOMAIN_IDENTIFICATION_ADMISSION,
+    "Mobile Number": DOMAIN_CONTACT_MOBILE,
+    "Email": DOMAIN_CONTACT_EMAIL,
+}
+
+
+def classify_field_domain(name: str) -> Optional[str]:
+    """
+    Deterministically classify any AI field or Excel column header into a semantic domain.
+    """
+    if not name:
+        return None
+
+    norm = re.sub(r"[^a-z0-9]", "", name.lower().strip())
+    raw_lower = name.lower().strip()
+
+    # 1. Direct canonical lookup through inverted alias index
+    canonical = _default_service._alias_to_canonical.get(norm)
+    if canonical and canonical in CANONICAL_FIELD_DOMAINS:
+        return CANONICAL_FIELD_DOMAINS[canonical]
+
+    # 2. Check profile aliases
+    for p_key, aliases in PROFILE_HEADER_ALIASES.items():
+        if any(norm == _default_service._normalize_key(a) for a in aliases):
+            if p_key == "student_name":
+                return DOMAIN_IDENTITY_STUDENT_NAME
+            if p_key == "register_number":
+                return DOMAIN_IDENTIFICATION_REGISTER
+            if p_key == "mobile_number":
+                return DOMAIN_CONTACT_MOBILE
+            if p_key == "email":
+                return DOMAIN_CONTACT_EMAIL
+
+    # 3. Deterministic keyword heuristics
+    # Aadhaar
+    if any(k in norm for k in ["aadhaar", "aadhar", "uidai"]):
+        return DOMAIN_IDENTIFICATION_AADHAAR
+
+    # EMIS
+    if "emis" in norm:
+        return DOMAIN_IDENTIFICATION_EMIS
+
+    # Academic: SSLC / 10th
+    if any(k in raw_lower for k in ["sslc", "10th"]):
+        if any(m in raw_lower for m in ["mark", "total", "%", "percentage", "cgpa"]):
+            return DOMAIN_ACADEMIC_10TH
+        if any(y in raw_lower for y in ["year", "passing"]):
+            return DOMAIN_ACADEMIC_PASSING_YEAR
+        return DOMAIN_ACADEMIC_10TH
+
+    # Academic: HSC / 12th / +2
+    if any(k in raw_lower for k in ["hsc", "12th", "+2", "plus two"]):
+        if any(m in raw_lower for m in ["mark", "total", "%", "percentage", "cutoff", "cut off"]):
+            return DOMAIN_ACADEMIC_12TH
+        if any(y in raw_lower for y in ["year", "passing"]):
+            return DOMAIN_ACADEMIC_PASSING_YEAR
+        return DOMAIN_ACADEMIC_12TH
+
+    # Academic Institution
+    if any(k in raw_lower for k in ["school", "college", "institution"]) and any(n in raw_lower for n in ["name", "last studied"]):
+        return DOMAIN_ACADEMIC_INSTITUTION
+
+    # TC / Transfer Certificate
+    if ("transfer" in raw_lower or "tc" in raw_lower.split() or "tc_" in raw_lower or raw_lower.startswith("tc ")) and any(
+        n in raw_lower for n in ["no", "num", "number", "cert"]
+    ):
+        return DOMAIN_IDENTIFICATION_TC
+
+    # Admission Number
+    if "admission" in raw_lower and any(n in raw_lower for n in ["no", "num", "number", "id"]):
+        return DOMAIN_IDENTIFICATION_ADMISSION
+
+    # Register Number / Roll Number
+    if any(k in norm for k in ["registernumber", "registerno", "regno", "rollnumber", "rollno"]):
+        return DOMAIN_IDENTIFICATION_REGISTER
+
+    # Dates
+    if any(k in raw_lower for k in ["issue date", "date of issue", "tc issue date", "tc date"]):
+        return DOMAIN_DATE_ISSUE
+    if any(k in raw_lower for k in ["leaving date", "date of leaving", "tc leaving date"]):
+        return DOMAIN_DATE_LEAVING
+    if any(k in raw_lower for k in ["admission date", "date of admission"]):
+        return DOMAIN_DATE_ADMISSION
+    if any(k in raw_lower for k in ["dob", "birth date", "date of birth"]):
+        return DOMAIN_DATE_DOB
+
+    # Personal Names
+    if "father" in raw_lower:
+        return DOMAIN_IDENTITY_FATHER_NAME
+    if "mother" in raw_lower:
+        return DOMAIN_IDENTITY_MOTHER_NAME
+    if "guardian" in raw_lower:
+        return DOMAIN_IDENTITY_GUARDIAN_NAME
+    if any(s in raw_lower for s in ["student", "candidate", "applicant"]) and "name" in raw_lower:
+        return DOMAIN_IDENTITY_STUDENT_NAME
+    if norm == "name" or raw_lower == "student's name":
+        return DOMAIN_IDENTITY_STUDENT_NAME
+
+    # Contact
+    if any(k in raw_lower for k in ["mobile", "phone", "cell", "contact no"]):
+        return DOMAIN_CONTACT_MOBILE
+    if "email" in raw_lower or "e-mail" in raw_lower:
+        return DOMAIN_CONTACT_EMAIL
+
+    # Financial
+    if "income" in raw_lower:
+        return DOMAIN_FINANCIAL_INCOME
+
+    # Community / Caste
+    if "caste" in raw_lower or "community name" in raw_lower or "subcaste" in norm:
+        return DOMAIN_COMMUNITY_CASTE
+    if "community" in raw_lower or "category" in raw_lower:
+        return DOMAIN_COMMUNITY_CATEGORY
+
+    # Address components
+    if "taluk" in raw_lower or "tehsil" in raw_lower or "mandal" in raw_lower or norm == "tk":
+        return DOMAIN_ADDRESS_TALUK
+    if "district" in raw_lower or norm in ["dist", "dt"]:
+        return DOMAIN_ADDRESS_DISTRICT
+    if "state" in raw_lower or "province" in raw_lower:
+        return DOMAIN_ADDRESS_STATE
+    if "village" in raw_lower or "town" in raw_lower or norm == "vtc":
+        return DOMAIN_ADDRESS_VILLAGE
+    if any(p in raw_lower for p in ["pincode", "pin code", "postal code", "postal pin"]) or norm == "pin":
+        return DOMAIN_ADDRESS_PINCODE
+    if any(a in raw_lower for a in ["address", "residential", "permanent", "communication"]):
+        return DOMAIN_ADDRESS_FULL
+
+    return None
+
+
+def get_canonical_source_field(field_name: str) -> str:
+    """
+    Resolve any raw AI field name or key to its standard canonical field name.
+    """
+    if not field_name:
+        return ""
+    norm = re.sub(r"[^a-z0-9]", "", field_name.lower().strip())
+    canonical = _default_service._alias_to_canonical.get(norm)
+    if canonical:
+        return canonical
+
+    for p_key, aliases in PROFILE_HEADER_ALIASES.items():
+        if any(norm == _default_service._normalize_key(a) for a in aliases):
+            if p_key == "student_name":
+                return "Student Name"
+            if p_key == "register_number":
+                return "Register Number"
+            if p_key == "mobile_number":
+                return "Mobile Number"
+            if p_key == "email":
+                return "Email"
+
+    domain = classify_field_domain(field_name)
+    if domain:
+        for c_field, d in CANONICAL_FIELD_DOMAINS.items():
+            if d == domain:
+                return c_field
+
+    return field_name.strip()
+
+
+def is_mapping_compatible(ai_field: str, excel_header: str) -> Tuple[bool, str]:
+    """
+    Deterministic semantic compatibility validator between AI field and Excel header.
+    Returns: (is_compatible, message)
+    """
+    if not ai_field or not excel_header:
+        return False, "Both AI field and Excel header are required."
+
+    ai_field_clean = ai_field.strip()
+    header_clean = excel_header.strip()
+
+    ai_domain = classify_field_domain(ai_field_clean)
+    header_domain = classify_field_domain(header_clean)
+
+    # If both domains are classified
+    if ai_domain and header_domain:
+        if ai_domain == header_domain:
+            return True, "Mapped"
+        return False, f"Invalid mapping: '{ai_field_clean}' cannot be mapped to '{header_clean}'."
+
+    # If AI field has a classified domain but header does not
+    if ai_domain and not header_domain:
+        return False, f"Invalid mapping: '{ai_field_clean}' cannot be mapped to '{header_clean}'."
+
+    # If header has a classified domain but AI field does not
+    if header_domain and not ai_domain:
+        return False, f"Invalid mapping: '{ai_field_clean}' cannot be mapped to '{header_clean}'."
+
+    # Fallback for unclassified custom fields: normalize and check exact or high fuzzy match
+    norm_ai = re.sub(r"[^a-z0-9]", "", ai_field_clean.lower())
+    norm_h = re.sub(r"[^a-z0-9]", "", header_clean.lower())
+    if norm_ai == norm_h or norm_ai in norm_h or norm_h in norm_ai:
+        return True, "Mapped"
+
+    return False, f"Invalid mapping: '{ai_field_clean}' cannot be mapped to '{header_clean}'."
+
+
+def validate_mapping_payload(
+    mappings: Dict[str, str], allowed_headers: Optional[List[str]] = None
+) -> Tuple[bool, Optional[str], Dict[str, str]]:
+    """
+    Validate an entire mapping payload for:
+    1. Empty/None removal
+    2. Unknown header validation (if allowed_headers given)
+    3. Semantic domain compatibility
+    4. Duplicate target column ownership by different source fields
+    Returns: (is_valid, error_message, sanitized_mappings)
+    """
+    if not isinstance(mappings, dict):
+        return False, "Mapping payload must be a JSON dictionary.", {}
+
+    cleaned: Dict[str, str] = {}
+    target_to_canonical_sources: Dict[str, str] = {}
+
+    allowed_set = set(allowed_headers) if allowed_headers else None
+
+    for raw_field, raw_target in mappings.items():
+        if not raw_field or not raw_target:
+            continue
+        target = str(raw_target).strip()
+        field = str(raw_field).strip()
+        if not target or target.upper() in ["-- DO NOT MAP --", "__UNMAPPED__", "NONE", "NULL"]:
+            continue
+
+        # Check allowed headers
+        if allowed_set is not None and target not in allowed_set:
+            return False, f"Unknown Excel header: '{target}'. Must be one of the template headers.", {}
+
+        # Semantic compatibility
+        is_compat, msg = is_mapping_compatible(field, target)
+        if not is_compat:
+            return False, msg, {}
+
+        # One Target Column Ownership
+        canonical_src = get_canonical_source_field(field)
+        if target in target_to_canonical_sources:
+            existing_src = target_to_canonical_sources[target]
+            if existing_src != canonical_src:
+                return (
+                    False,
+                    f"Conflict: Excel column '{target}' is already mapped to '{existing_src}'. One target column cannot have multiple distinct source fields ('{existing_src}' and '{canonical_src}').",
+                    {},
+                )
+        else:
+            target_to_canonical_sources[target] = canonical_src
+
+        cleaned[field] = target
+
+    return True, None, cleaned
 

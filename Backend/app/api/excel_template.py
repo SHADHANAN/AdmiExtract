@@ -114,10 +114,45 @@ async def update_excel_mappings(
 ):
     """
     Update field mappings (AI Extracted Field -> Excel Column) and primary lookup key column.
+    Independently validates semantic compatibility, column ownership, and template headers.
     """
     await _verify_batch_access(batchId, current_user)
 
-    template = await service.update_mappings(batchId, data.field_mappings, data.lookup_column, class_id=classId)
+    existing = await service.get_template_by_batch(batchId, class_id=classId)
+    if not existing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No Excel template found for batch '{batchId}' (Class: '{classId}'). Please upload a template first.",
+        )
+
+    # Validate lookup column if specified
+    lookup_col = data.lookup_column or existing.lookup_column or (existing.headers[0] if existing.headers else "Register Number")
+    if data.lookup_column and existing.headers and data.lookup_column not in existing.headers:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown lookup column '{data.lookup_column}'. Must be one of the template headers.",
+        )
+
+    # Safe persistence merge: update/add new keys, delete unmapped keys, keep unmentioned keys
+    merged_mappings = dict(existing.field_mappings or {})
+    for k, v in data.field_mappings.items():
+        if not v or str(v).strip() in ["", "-- DO NOT MAP --", "__UNMAPPED__", "NONE", "NULL"]:
+            merged_mappings.pop(k, None)
+        else:
+            merged_mappings[k] = str(v).strip()
+
+    # Backend semantic validation & duplicate target protection
+    from app.services.field_mapping_service import validate_mapping_payload
+    is_valid, err_msg, sanitized_mappings = validate_mapping_payload(
+        merged_mappings, allowed_headers=existing.headers
+    )
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=err_msg or "Invalid field mapping payload.",
+        )
+
+    template = await service.update_mappings(batchId, sanitized_mappings, lookup_col, class_id=classId)
     remaining = max(0, template.total_rows - template.updated_count)
     return ExcelTemplateResponse(
         id=str(template.id),

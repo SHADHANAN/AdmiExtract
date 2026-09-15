@@ -15,6 +15,7 @@ from app.services.student_submission_service import (
     StudentSubmissionNotFoundException,
 )
 from app.services.upload_link_service import UploadLinkService, UploadLinkNotFoundException
+from app.schemas.upload_link import UploadLinkResponse
 from app.services.excel_template_service import ExcelTemplateService
 from app.repositories.excel_template_repository import ExcelTemplateRepository
 from app.core.dependencies import get_current_user, get_optional_current_user, RoleChecker
@@ -327,7 +328,9 @@ async def extract_student_documents(
     register_number: str = Form(...),
     student_name: str = Form(...),
     mobile_number: str | None = Form(None),
-    files: list[UploadFile] = File(...)
+    email: str | None = Form(None),
+    files: list[UploadFile] = File(...),
+    force_refresh: bool = Form(False),
 ):
     """
     Production AI Document Extraction endpoint.
@@ -340,13 +343,14 @@ async def extract_student_documents(
             register_number=register_number,
             student_name=student_name,
             mobile_number=mobile_number,
+            email=email,
             files=files,
+            force_refresh=force_refresh,
         )
     except HTTPException:
         raise
     except Exception as e:
         print(f"[Extraction Endpoint Error] {e}", flush=True)
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
@@ -592,6 +596,17 @@ async def verify_student_identity(data: StudentIdentityVerifyRequest):
         class_id=class_id,
         class_name=class_name,
     )
+
+
+@student_router.get("/{slug}", response_model=UploadLinkResponse)
+async def get_student_upload_link_endpoint(slug: str):
+    """
+    Resolve upload portal link details for student by token or slug.
+    Delegates to the verified upload link lookup logic in app.api.upload_link.
+    """
+    from app.api.upload_link import get_upload_link_by_slug
+    return await get_upload_link_by_slug(slug, _upload_link_service)
+
 
 
 

@@ -24,9 +24,6 @@ import {
   MessageSquare,
   Mail,
   Plus,
-  Edit3,
-  ArrowUp,
-  ArrowDown,
   Eye,
   CheckCircle,
   XCircle,
@@ -40,29 +37,18 @@ import {
   Settings2,
   Save,
   Check,
-  FileCheck,
   Layers,
   FolderOpen,
   AlertTriangle,
+  AlertCircle,
   RefreshCw,
 } from 'lucide-react'
 
 import type { DocumentRequirement, StudentSubmission } from '../types'
 import { excelTemplateService, type ExcelTemplateResponse } from '../services/excelTemplate'
+import { wantedFieldService, type DocumentTypeOverviewItem, type WantedFieldItem } from '../services/wantedField'
 import { copyToClipboard } from '../utils/clipboard'
-
-const PRESET_DOCUMENTS = [
-  'Aadhaar Card',
-  'Birth Certificate',
-  'Community Certificate',
-  'Income Certificate',
-  'SSLC Marksheet',
-  'HSC Marksheet',
-  'Transfer Certificate',
-  'Passport Size Photo',
-  'Medical Certificate',
-  'Migration Certificate',
-]
+import { getStudentUploadUrl } from '../utils/studentPortalUrl'
 
 export const BatchDetails: React.FC = () => {
   const { batchId } = useParams<{ batchId: string }>()
@@ -74,8 +60,6 @@ export const BatchDetails: React.FC = () => {
     toggleUploadLink,
     updateUploadLinkExpiry,
     deleteUploadLink,
-    updateBatchRequirements,
-    getBatchDocVersions,
     fetchBatches,
     fetchUploadLinks,
     classesByBatch,
@@ -129,9 +113,6 @@ export const BatchDetails: React.FC = () => {
   const [newSecName, setNewSecName] = useState('')
   const [newSecCode, setNewSecCode] = useState('A')
 
-  // Version History toggle state
-  const [showVersionHistory, setShowVersionHistory] = useState(false)
-
   // Share menu open state (indexed by linkId)
   const [openShareMenu, setOpenShareMenu] = useState<string | null>(null)
 
@@ -145,62 +126,89 @@ export const BatchDetails: React.FC = () => {
   const [selectedLinkForExpiry, setSelectedLinkForExpiry] = useState<any | null>(null)
   const [editLinkExpiry, setEditLinkExpiry] = useState('')
 
-  // Document Config Modal states
-  const [isDocModalOpen, setIsDocModalOpen] = useState(false)
-  const [editingDocId, setEditingDocId] = useState<string | null>(null)
-  const [docName, setDocName] = useState('')
-  const [docRequired, setDocRequired] = useState(true)
-  const [docAllowedTypes, setDocAllowedTypes] = useState<string[]>(['PDF', 'JPG', 'PNG'])
-  const [docMaxSizeMb, setDocMaxSizeMb] = useState<number>(5)
-  const [docDescription, setDocDescription] = useState('')
-  const [docExtractionFieldsText, setDocExtractionFieldsText] = useState('')
+  const classifyFieldDomain = (name: string): string | null => {
+    if (!name) return null
+    const norm = name.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const rawLower = name.toLowerCase().trim()
 
-  const PROFILE_FIELDS = ['student name', 'register number', 'mobile number', 'email', 'name', 'register no', 'mobile']
-  const isProfileField = (name: string) => {
-    const lower = name.toLowerCase().trim()
-    return PROFILE_FIELDS.some(p => lower === p || lower.includes('student name') || lower.includes('register number') || lower.includes('mobile number'))
+    // Identification
+    if (norm.includes('aadhaar') || norm.includes('aadhar') || norm.includes('uidai')) return 'IDENTIFICATION_AADHAAR'
+    if (norm.includes('emis')) return 'IDENTIFICATION_EMIS'
+    if (
+      (rawLower.includes('transfer') || rawLower.includes('tc') || rawLower.startsWith('tc ')) &&
+      (rawLower.includes('no') || rawLower.includes('num') || rawLower.includes('number') || rawLower.includes('cert'))
+    ) return 'IDENTIFICATION_TC'
+    if (rawLower.includes('admission') && (rawLower.includes('no') || rawLower.includes('num') || rawLower.includes('number') || rawLower.includes('id'))) return 'IDENTIFICATION_ADMISSION'
+    if (norm.includes('registernumber') || norm.includes('registerno') || norm.includes('regno') || norm.includes('rollnumber') || norm.includes('rollno')) return 'IDENTIFICATION_REGISTER'
+
+    // Academic
+    if (rawLower.includes('sslc') || rawLower.includes('10th')) {
+      if (rawLower.includes('year') || rawLower.includes('passing')) return 'ACADEMIC_PASSING_YEAR'
+      return 'ACADEMIC_10TH'
+    }
+    if (rawLower.includes('hsc') || rawLower.includes('12th') || rawLower.includes('+2')) {
+      if (rawLower.includes('year') || rawLower.includes('passing')) return 'ACADEMIC_PASSING_YEAR'
+      return 'ACADEMIC_12TH'
+    }
+    if ((rawLower.includes('school') || rawLower.includes('institution') || rawLower.includes('college')) && (rawLower.includes('name') || rawLower.includes('studied'))) return 'ACADEMIC_INSTITUTION'
+
+    // Dates
+    if (rawLower.includes('issue date') || rawLower.includes('date of issue') || rawLower.includes('tc issue date') || rawLower.includes('tc date')) return 'DATE_ISSUE'
+    if (rawLower.includes('leaving date') || rawLower.includes('date of leaving') || rawLower.includes('tc leaving date')) return 'DATE_LEAVING'
+    if (rawLower.includes('admission date') || rawLower.includes('date of admission')) return 'DATE_ADMISSION'
+    if (rawLower.includes('dob') || rawLower.includes('birth') || rawLower.includes('date of birth')) return 'DATE_DOB'
+
+    // Identity
+    if (rawLower.includes('father')) return 'IDENTITY_FATHER_NAME'
+    if (rawLower.includes('mother')) return 'IDENTITY_MOTHER_NAME'
+    if (rawLower.includes('guardian')) return 'IDENTITY_GUARDIAN_NAME'
+    if ((rawLower.includes('student') || rawLower.includes('candidate') || rawLower.includes('applicant')) && rawLower.includes('name')) return 'IDENTITY_STUDENT_NAME'
+    if (norm === 'name' || rawLower === "student's name") return 'IDENTITY_STUDENT_NAME'
+
+    // Contact
+    if (rawLower.includes('mobile') || rawLower.includes('phone') || rawLower.includes('cell') || rawLower.includes('contact no')) return 'CONTACT_MOBILE'
+    if (rawLower.includes('email') || rawLower.includes('e-mail')) return 'CONTACT_EMAIL'
+
+    // Financial
+    if (rawLower.includes('income')) return 'FINANCIAL_INCOME'
+
+    // Community
+    if (rawLower.includes('caste') || rawLower.includes('community name') || norm.includes('subcaste')) return 'COMMUNITY_CASTE'
+    if (rawLower.includes('community') || rawLower.includes('category')) return 'COMMUNITY_CATEGORY'
+
+    // Address
+    if (rawLower.includes('taluk') || rawLower.includes('tehsil') || rawLower.includes('mandal') || norm === 'tk') return 'ADDRESS_TALUK'
+    if (rawLower.includes('district') || norm === 'dist' || norm === 'dt') return 'ADDRESS_DISTRICT'
+    if (rawLower.includes('state') || rawLower.includes('province')) return 'ADDRESS_STATE'
+    if (rawLower.includes('village') || rawLower.includes('town') || norm === 'vtc') return 'ADDRESS_VILLAGE'
+    if (rawLower.includes('pincode') || rawLower.includes('pin code') || rawLower.includes('postal code') || norm === 'pin') return 'ADDRESS_PINCODE'
+    if (rawLower.includes('address') || rawLower.includes('residential') || rawLower.includes('permanent') || rawLower.includes('communication')) return 'ADDRESS_FULL'
+
+    return null
   }
 
-  const getDefaultFieldsForDoc = (name: string): string[] => {
-    const lower = name.toLowerCase().trim()
-    if (lower.includes('aadhaar') || lower.includes('aadhar')) return ['Aadhaar Number']
-    if (lower.includes('community') || lower.includes('caste')) return ['Community Category']
-    if (lower.includes('birth') || lower.includes('dob')) return ['Date of Birth']
-    if (lower.includes('income')) return ['Annual Family Income']
-    if (lower.includes('sslc')) return ['SSLC Mark Percentage']
-    if (lower.includes('hsc')) return ['HSC Mark Percentage']
-    if (lower.includes('transfer') || lower.includes('tc')) return ['Transfer Certificate Number', 'School Name', 'Admission Number', 'Issue Date', 'Leaving Date']
-    if (lower.includes('migration')) return ['Migration Number', 'University', 'Year']
-    if (lower.includes('nativity')) return ['Nativity']
-    return [name]
-  }
+  const checkFieldCompatibility = (aiFieldLabel: string, excelHeader: string): { isCompatible: boolean; message: string } => {
+    if (!aiFieldLabel || !excelHeader) return { isCompatible: false, message: 'Header is required' }
+    const d1 = classifyFieldDomain(aiFieldLabel)
+    const d2 = classifyFieldDomain(excelHeader)
 
-  const getDynamicSystemFields = (requirements: DocumentRequirement[]): { key: string; label: string; docName: string }[] => {
-    const fieldsMap: { key: string; label: string; docName: string }[] = []
-    const seenKeys = new Set<string>()
+    if (d1 && d2) {
+      if (d1 === d2) return { isCompatible: true, message: 'Mapped' }
+      return { isCompatible: false, message: `Invalid mapping: ${aiFieldLabel} cannot be mapped to ${excelHeader}.` }
+    }
+    if (d1 && !d2) {
+      return { isCompatible: false, message: `Invalid mapping: ${aiFieldLabel} cannot be mapped to ${excelHeader}.` }
+    }
+    if (!d1 && d2) {
+      return { isCompatible: false, message: `Invalid mapping: ${aiFieldLabel} cannot be mapped to ${excelHeader}.` }
+    }
 
-    requirements.forEach((req) => {
-      const rawFields = req.extractionFields && req.extractionFields.length > 0
-        ? req.extractionFields
-        : getDefaultFieldsForDoc(req.name)
-
-      rawFields.forEach((fieldName) => {
-        const cleanName = fieldName.trim()
-        if (!cleanName || isProfileField(cleanName)) return
-
-        const key = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '')
-        if (!seenKeys.has(key)) {
-          seenKeys.add(key)
-          fieldsMap.push({
-            key,
-            label: cleanName,
-            docName: req.name,
-          })
-        }
-      })
-    })
-
-    return fieldsMap
+    const norm1 = aiFieldLabel.toLowerCase().replace(/[^a-z0-9]/g, '')
+    const norm2 = excelHeader.toLowerCase().replace(/[^a-z0-9]/g, '')
+    if (norm1 === norm2 || norm1.includes(norm2) || norm2.includes(norm1)) {
+      return { isCompatible: true, message: 'Mapped' }
+    }
+    return { isCompatible: false, message: `Invalid mapping: ${aiFieldLabel} cannot be mapped to ${excelHeader}.` }
   }
 
   // Student Details Modal states
@@ -211,7 +219,6 @@ export const BatchDetails: React.FC = () => {
 
   // Find batch
   const batch = batches.find((b) => b.id === batchId)
-  const versionHistory = batchId ? getBatchDocVersions(batchId) : []
 
   // Local state for tracking document requirement updates
   const [tempRequirements, setTempRequirements] = useState<DocumentRequirement[]>(batch?.docRequirements || [
@@ -255,6 +262,257 @@ export const BatchDetails: React.FC = () => {
   React.useEffect(() => {
     loadExcelTemplateInfo()
   }, [loadExcelTemplateInfo])
+
+  // Document-Specific Wanted Field Selection States
+  const [wantedOverview, setWantedOverview] = useState<DocumentTypeOverviewItem[]>([])
+  const [selectedDocType, setSelectedDocType] = useState<string>('')
+  const [activeDocFields, setActiveDocFields] = useState<WantedFieldItem[]>([])
+  const [isLoadingWanted, setIsLoadingWanted] = useState(false)
+  const [isSavingWanted, setIsSavingWanted] = useState(false)
+
+  // Add Document Type Modal States
+  const [isAddDocModalOpen, setIsAddDocModalOpen] = useState(false)
+  const [newDocName, setNewDocName] = useState('')
+  const [newDocCode, setNewDocCode] = useState('')
+  const [newDocDescription, setNewDocDescription] = useState('')
+  const [newDocRequirementStatus, setNewDocRequirementStatus] = useState<'REQUIRED' | 'OPTIONAL' | 'DISABLED'>('REQUIRED')
+  const [activeDocRequirementStatus, setActiveDocRequirementStatus] = useState<'REQUIRED' | 'OPTIONAL' | 'DISABLED'>('REQUIRED')
+  const [isCreatingDoc, setIsCreatingDoc] = useState(false)
+
+  // Add Custom Field Modal States
+  const [isAddFieldModalOpen, setIsAddFieldModalOpen] = useState(false)
+  const [newFieldName, setNewFieldName] = useState('')
+  const [isAddingField, setIsAddingField] = useState(false)
+
+  // Delete Document State
+  const [isDeletingDoc, setIsDeletingDoc] = useState(false)
+
+  // Load Wanted Fields Overview
+  const loadWantedOverview = React.useCallback(async (targetDocToSelect?: string) => {
+    if (!batchId) return
+    setIsLoadingWanted(true)
+    try {
+      const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
+      const overview = await wantedFieldService.getBatchOverview(batchId, classIdParam)
+      setWantedOverview(overview)
+      
+      const docToFind = targetDocToSelect || selectedDocType
+      const current = overview.find((o) => o.document_type === docToFind)
+      if (current) {
+        setSelectedDocType(current.document_type)
+        setActiveDocFields(current.fields)
+        setActiveDocRequirementStatus(current.requirement_status || 'REQUIRED')
+      } else if (overview.length > 0) {
+        setSelectedDocType(overview[0].document_type)
+        setActiveDocFields(overview[0].fields)
+        setActiveDocRequirementStatus(overview[0].requirement_status || 'REQUIRED')
+      } else {
+        setSelectedDocType('')
+        setActiveDocFields([])
+        setActiveDocRequirementStatus('REQUIRED')
+      }
+    } catch (err) {
+      console.error('Failed to load wanted fields overview:', err)
+    } finally {
+      setIsLoadingWanted(false)
+    }
+  }, [batchId, selectedClassId, selectedDocType])
+
+  React.useEffect(() => {
+    loadWantedOverview()
+  }, [loadWantedOverview])
+
+  const availableHeaders = React.useMemo(() => {
+    if (excelTemplate && excelTemplate.headers && excelTemplate.headers.length > 0) {
+      return excelTemplate.headers
+    }
+    const fromOverview = wantedOverview.find((o) => o.template_headers && o.template_headers.length > 0)
+    if (fromOverview && fromOverview.template_headers.length > 0) {
+      return fromOverview.template_headers
+    }
+    return []
+  }, [excelTemplate, wantedOverview])
+
+  const handleSelectDocType = (docType: string) => {
+    setSelectedDocType(docType)
+    const docItem = wantedOverview.find((o) => o.document_type === docType)
+    if (docItem) {
+      setActiveDocFields(docItem.fields)
+      setActiveDocRequirementStatus(docItem.requirement_status || 'REQUIRED')
+    }
+  }
+
+  const handleDocNameChange = (name: string) => {
+    setNewDocName(name)
+    // Auto-suggest normalized code if code wasn't manually customized
+    const autoCode = name
+      .toUpperCase()
+      .replace(/[^A-Z0-9\s_-]/g, '')
+      .trim()
+      .replace(/[\s-]+/g, '_')
+    setNewDocCode(autoCode)
+  }
+
+  const handleOpenAddDocModal = () => {
+    setNewDocName('')
+    setNewDocCode('')
+    setNewDocDescription('')
+    setNewDocRequirementStatus('REQUIRED')
+    setIsAddDocModalOpen(true)
+  }
+
+  const handleCreateDocumentType = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    if (!batchId) return
+    const trimmedName = newDocName.trim()
+    const trimmedCode = newDocCode.trim()
+
+    if (!trimmedName) {
+      addToast('Document Name is required.', 'error')
+      return
+    }
+    if (!trimmedCode) {
+      addToast('Document Code is required.', 'error')
+      return
+    }
+
+    setIsCreatingDoc(true)
+    try {
+      const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
+      const res = await wantedFieldService.createDocumentType(
+        batchId,
+        {
+          name: trimmedName,
+          code: trimmedCode,
+          description: newDocDescription.trim() || undefined,
+          requirement_status: newDocRequirementStatus,
+        },
+        classIdParam
+      )
+      addToast(`Document "${res.display_name}" created (${newDocRequirementStatus}) with 0 wanted fields.`, 'success')
+      setIsAddDocModalOpen(false)
+      setNewDocName('')
+      setNewDocCode('')
+      setNewDocDescription('')
+      setNewDocRequirementStatus('REQUIRED')
+      await loadWantedOverview(res.document_type)
+    } catch (err: any) {
+      addToast(err?.response?.data?.detail || err?.message || 'Failed to create document type.', 'error')
+    } finally {
+      setIsCreatingDoc(false)
+    }
+  }
+
+  const handleDeleteDocumentType = async (docType: string, docName: string) => {
+    if (!batchId) return
+    const confirmMsg = `Are you sure you want to remove "${docName}" (${docType})? If student files reference this document, it will be safely archived to protect uploaded records.`
+    if (!window.confirm(confirmMsg)) return
+
+    setIsDeletingDoc(true)
+    try {
+      const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
+      const res = await wantedFieldService.deleteDocumentType(batchId, docType, classIdParam)
+      addToast(res.message, res.archived ? 'info' : 'success')
+      await loadWantedOverview()
+      await loadExcelTemplateInfo()
+    } catch (err: any) {
+      addToast(err?.response?.data?.detail || err?.message || 'Failed to delete document type.', 'error')
+    } finally {
+      setIsDeletingDoc(false)
+    }
+  }
+
+  const handleAddCustomField = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    if (!batchId || !selectedDocType) return
+    const trimmed = newFieldName.trim()
+    if (!trimmed) {
+      addToast('Field name cannot be empty.', 'error')
+      return
+    }
+
+    setIsAddingField(true)
+    try {
+      const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
+      const res = await wantedFieldService.addCustomField(batchId, selectedDocType, trimmed, classIdParam)
+      setActiveDocFields(res.fields)
+      addToast(`Added field "${trimmed}". It is currently disabled (unselected).`, 'success')
+      setNewFieldName('')
+      setIsAddFieldModalOpen(false)
+      await loadWantedOverview(selectedDocType)
+    } catch (err: any) {
+      addToast(err?.response?.data?.detail || err?.message || 'Failed to add custom field.', 'error')
+    } finally {
+      setIsAddingField(false)
+    }
+  }
+
+  const handleToggleWantedField = (fieldName: string) => {
+    setActiveDocFields((prev) =>
+      prev.map((f) => {
+        if (f.field === fieldName) {
+          const nextEnabled = !f.enabled
+          let nextHeader = f.excel_header
+          if (nextEnabled && (!nextHeader || !nextHeader.trim())) {
+            const compatible = availableHeaders.find((h) => checkFieldCompatibility(f.field, h).isCompatible)
+            if (compatible) nextHeader = compatible
+          }
+          return { ...f, enabled: nextEnabled, excel_header: nextHeader }
+        }
+        return f
+      })
+    )
+  }
+
+  const handleSetWantedFieldHeader = (fieldName: string, targetHeader: string) => {
+    setActiveDocFields((prev) =>
+      prev.map((f) => (f.field === fieldName ? { ...f, excel_header: targetHeader || null } : f))
+    )
+  }
+
+  const handleSelectAllWantedFields = () => {
+    setActiveDocFields((prev) =>
+      prev.map((f) => {
+        let nextHeader = f.excel_header
+        if (!nextHeader || !nextHeader.trim()) {
+          const compatible = availableHeaders.find((h) => checkFieldCompatibility(f.field, h).isCompatible)
+          if (compatible) nextHeader = compatible
+        }
+        return { ...f, enabled: true, excel_header: nextHeader }
+      })
+    )
+  }
+
+  const handleDeselectAllWantedFields = () => {
+    setActiveDocFields((prev) => prev.map((f) => ({ ...f, enabled: false })))
+  }
+
+  const handleSaveDocWantedFields = async () => {
+    if (!batchId) return
+    setIsSavingWanted(true)
+    try {
+      const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
+      const activeDocOverview = wantedOverview.find((o) => o.document_type === selectedDocType)
+      await wantedFieldService.saveDocumentConfig(
+        batchId,
+        selectedDocType,
+        activeDocFields,
+        classIdParam,
+        {
+          requirement_status: activeDocRequirementStatus,
+          display_name: activeDocOverview?.display_name,
+          description: activeDocOverview?.description || undefined,
+        }
+      )
+      addToast(`Saved wanted fields for ${selectedDocType} successfully!`, 'success')
+      await loadWantedOverview()
+      await loadExcelTemplateInfo()
+    } catch (err: any) {
+      addToast(err?.response?.data?.detail || err?.message || 'Failed to save document configuration.', 'error')
+    } finally {
+      setIsSavingWanted(false)
+    }
+  }
 
   const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!batchId || !e.target.files || e.target.files.length === 0) return
@@ -302,120 +560,7 @@ export const BatchDetails: React.FC = () => {
     docRequirements: tempRequirements,
   }
 
-  // Document Modal Handlers
-  const openAddDocModal = () => {
-    setEditingDocId(null)
-    setDocName('')
-    setDocRequired(true)
-    setDocAllowedTypes(['PDF', 'JPG', 'PNG'])
-    setDocMaxSizeMb(5)
-    setDocDescription('')
-    setDocExtractionFieldsText('')
-    setIsDocModalOpen(true)
-  }
 
-  const openEditDocModal = (req: DocumentRequirement) => {
-    setEditingDocId(req.id)
-    setDocName(req.name)
-    setDocRequired(req.required ?? (req.type === 'MANDATORY'))
-    setDocAllowedTypes(req.allowedTypes || ['PDF', 'JPG', 'PNG'])
-    setDocMaxSizeMb(req.maxSizeMb || 5)
-    setDocDescription(req.description || '')
-    const ef = req.extractionFields && req.extractionFields.length > 0
-      ? req.extractionFields
-      : getDefaultFieldsForDoc(req.name)
-    setDocExtractionFieldsText(ef.join(', '))
-    setIsDocModalOpen(true)
-  }
-
-  const handleSaveDocConfig = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!batch) return
-    if (!docName.trim()) {
-      addToast('Document name is required', 'error')
-      return
-    }
-    if (docAllowedTypes.length === 0) {
-      addToast('Select at least one allowed file format', 'error')
-      return
-    }
-
-    const parsedExtractionFields = docExtractionFieldsText
-      .split(',')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0 && !isProfileField(s))
-
-    if (editingDocId) {
-      // Edit existing document
-      const updated = tempRequirements.map((r) =>
-        r.id === editingDocId
-          ? {
-              ...r,
-              name: docName,
-              required: docRequired,
-              type: docRequired ? ('MANDATORY' as const) : ('OPTIONAL' as const),
-              allowedTypes: docAllowedTypes,
-              maxSizeMb: Number(docMaxSizeMb),
-              description: docDescription,
-              extractionFields: parsedExtractionFields.length > 0 ? parsedExtractionFields : getDefaultFieldsForDoc(docName),
-            }
-          : r
-      )
-      const summary = `Updated rules for "${docName}"`
-      setTempRequirements(updated)
-      updateBatchRequirements(batch.id, updated, summary, 'Staff')
-      addToast(`Updated "${docName}" (created new document configuration version).`, 'success')
-    } else {
-      // Add new document requirement
-      const newReq: DocumentRequirement = {
-        id: `req_${Math.random().toString(36).substring(2, 9)}`,
-        name: docName,
-        required: docRequired,
-        type: docRequired ? 'MANDATORY' : 'OPTIONAL',
-        allowedTypes: docAllowedTypes,
-        maxSizeMb: Number(docMaxSizeMb),
-        description: docDescription,
-        extractionFields: parsedExtractionFields.length > 0 ? parsedExtractionFields : getDefaultFieldsForDoc(docName),
-      }
-      const updated = [...tempRequirements, newReq]
-      const summary = `Added document requirement "${docName}"`
-      setTempRequirements(updated)
-      updateBatchRequirements(batch.id, updated, summary, 'Staff')
-      addToast(`Added "${docName}" (created new document configuration version).`, 'success')
-    }
-
-    setIsDocModalOpen(false)
-  }
-
-  const handleRemoveDoc = (id: string, name: string) => {
-    if (!batch) return
-    const updated = tempRequirements.filter((r) => r.id !== id)
-    const summary = `Removed document requirement "${name}"`
-    setTempRequirements(updated)
-    updateBatchRequirements(batch.id, updated, summary, 'Staff')
-    addToast(`Removed "${name}" (created new document configuration version).`, 'info')
-  }
-
-  const handleMoveDoc = (index: number, direction: 'up' | 'down') => {
-    if (!batch) return
-    const targetIndex = direction === 'up' ? index - 1 : index + 1
-    if (targetIndex < 0 || targetIndex >= tempRequirements.length) return
-
-    const updated = [...tempRequirements]
-    const [moved] = updated.splice(index, 1)
-    updated.splice(targetIndex, 0, moved)
-
-    setTempRequirements(updated)
-    updateBatchRequirements(batch.id, updated, 'Reordered document requirements', 'Staff')
-  }
-
-  const handleTypeToggle = (type: string) => {
-    if (docAllowedTypes.includes(type)) {
-      setDocAllowedTypes(docAllowedTypes.filter((t) => t !== type))
-    } else {
-      setDocAllowedTypes([...docAllowedTypes, type])
-    }
-  }
 
   const handleSaveExcelMappings = async () => {
     if (!batchId) return
@@ -478,7 +623,7 @@ export const BatchDetails: React.FC = () => {
       addToast('Upload link could not be generated.', 'error')
       return
     }
-    const fullPortalUrl = `${window.location.origin}/upload/${slug}`
+    const fullPortalUrl = getStudentUploadUrl(slug)
     try {
       await copyToClipboard(fullPortalUrl)
       addToast('URL copied to clipboard!', 'success')
@@ -605,7 +750,7 @@ export const BatchDetails: React.FC = () => {
             { id: 'sections', label: `Sections (${batchClasses.length})`, icon: Layers },
             { id: 'students', label: `Students (${batchStudents.length})`, icon: Users },
             { id: 'links', label: `Upload Links (${batchLinks.length})`, icon: LinkIcon },
-            { id: 'documents', label: `Documents Config (${tempRequirements.length})`, icon: FileText },
+            { id: 'documents', label: 'Document Configuration', icon: FileText },
             { id: 'verification', label: 'AI Audit Logs', icon: CheckSquare },
             { id: 'exports', label: 'Exports', icon: Download },
           ] as const
@@ -931,7 +1076,7 @@ export const BatchDetails: React.FC = () => {
                         addToast('Upload link could not be generated.', 'error')
                         return
                       }
-                      const fullPortalUrl = `${window.location.origin}/upload/${slug}`
+                      const fullPortalUrl = getStudentUploadUrl(slug)
                       try {
                         await copyToClipboard(fullPortalUrl)
                         addToast('Upload portal URL copied to clipboard!', 'success')
@@ -978,7 +1123,9 @@ export const BatchDetails: React.FC = () => {
                     return (
                       <TableRow key={link.id} className="relative">
                         <TableCell className="font-semibold text-foreground">{link.title}</TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">/upload/{effectiveSlug}</TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground break-all max-w-[220px] truncate" title={getStudentUploadUrl(effectiveSlug)}>
+                          {getStudentUploadUrl(effectiveSlug)}
+                        </TableCell>
                         <TableCell>{link.submissionCount} uploads</TableCell>
                         <TableCell className="text-muted-foreground">{link.expiresAt || 'Always Active'}</TableCell>
                         <TableCell>
@@ -1018,7 +1165,7 @@ export const BatchDetails: React.FC = () => {
                                   </button>
                                   <button
                                     onClick={() => {
-                                      addToast(`Sharing link /upload/${effectiveSlug} via WhatsApp...`, 'info')
+                                      addToast(`Sharing link ${getStudentUploadUrl(effectiveSlug)} via WhatsApp...`, 'info')
                                       setOpenShareMenu(null)
                                     }}
                                     className="flex w-full items-center gap-2.5 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary transition-colors cursor-pointer"
@@ -1027,7 +1174,7 @@ export const BatchDetails: React.FC = () => {
                                   </button>
                                   <button
                                     onClick={() => {
-                                      addToast(`Sharing link /upload/${effectiveSlug} via Email...`, 'info')
+                                      addToast(`Sharing link ${getStudentUploadUrl(effectiveSlug)} via Email...`, 'info')
                                       setOpenShareMenu(null)
                                     }}
                                     className="flex w-full items-center gap-2.5 px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary transition-colors cursor-pointer"
@@ -1085,212 +1232,569 @@ export const BatchDetails: React.FC = () => {
           </div>
         )}
 
-        {/* DOCUMENTS TAB - DYNAMIC DOCUMENT CONFIGURATION BUILDER WITH VERSIONING */}
+        {/* DOCUMENT CONFIGURATION TAB - EXCLUSIVELY: DOCUMENT TYPE -> WANTED FIELDS -> FIELD -> EXCEL TARGET COLUMN */}
         {activeTab === 'documents' && (
           <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            {/* Page Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-foreground">Dynamic Document Configuration</h2>
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 dark:bg-indigo-950/80 text-indigo-800 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                    <Clock className="h-3.5 w-3.5" /> Current: Version {activeBatch.currentDocVersion || 1}
-                  </span>
+                  <FileText className="h-5 w-5 text-primary" />
+                  <h2 className="text-lg font-bold text-foreground">Document Configuration</h2>
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Changes create a new document configuration version. Existing students remain pinned to their assigned version snapshot.
+                <p className="text-xs text-muted-foreground mt-1">
+                  Configure document types, select wanted fields for extraction, and map them to Excel headers.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+
+              <div className="flex items-center gap-3 flex-wrap">
+                {batchClasses.length > 0 && (
+                  <div className="flex items-center gap-2 bg-card px-3 py-1.5 rounded-xl border border-border">
+                    <span className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1.5">
+                      <Layers className="h-4 w-4 text-primary" /> Class Scope:
+                    </span>
+                    <select
+                      value={selectedClassId}
+                      onChange={(e) => setSelectedClassId(e.target.value)}
+                      className="px-3 py-1 rounded-lg border border-border bg-background text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                    >
+                      <option value="all">Batch Level (Default)</option>
+                      {batchClasses.map((cls) => (
+                        <option key={cls.id} value={cls.id}>
+                          {cls.class_name} (Sec {cls.section})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleOpenAddDocModal}
+                  className="cursor-pointer gap-1.5 text-xs shadow-xs"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Document Type
+                </Button>
+
                 <Button
                   variant="outline"
-                  onClick={() => setShowVersionHistory(!showVersionHistory)}
+                  size="sm"
+                  onClick={() => loadWantedOverview()}
+                  disabled={isLoadingWanted}
                   className="cursor-pointer gap-1.5 text-xs"
+                  title="Refresh Configurations"
                 >
-                  <FileText className="h-3.5 w-3.5 text-indigo-600" />
-                  {showVersionHistory ? 'Hide Version History' : `Version History (${versionHistory.length})`}
-                </Button>
-                <Button variant="primary" onClick={openAddDocModal} className="cursor-pointer gap-1.5">
-                  <Plus className="h-4 w-4" /> Add Document Requirement
+                  <RefreshCw className={`h-3.5 w-3.5 ${isLoadingWanted ? 'animate-spin' : ''}`} />
+                  Refresh
                 </Button>
               </div>
             </div>
 
-            {/* STAFF DASHBOARD: VERSION HISTORY DRAWER / PANEL */}
-            {showVersionHistory && (
-              <div className="p-5 rounded-xl border border-indigo-200 dark:border-indigo-900 bg-indigo-50/40 dark:bg-indigo-950/20 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-indigo-600" /> Batch Document Version History
-                  </h3>
-                  <span className="text-xs text-muted-foreground">
-                    {versionHistory.length} Total Versions
-                  </span>
+            {/* Empty State: ZERO configured document types */}
+            {wantedOverview.length === 0 ? (
+              <div className="p-12 text-center border-2 border-dashed border-border rounded-2xl bg-card/50 flex flex-col items-center justify-center space-y-4">
+                <div className="h-14 w-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                  <FileText className="h-7 w-7" />
                 </div>
-
-                <div className="space-y-3">
-                  {versionHistory.map((ver) => (
-                    <div
-                      key={ver.id}
-                      className={`p-4 rounded-lg border transition-all ${
-                        ver.isCurrent
-                          ? 'border-indigo-300 dark:border-indigo-800 bg-card shadow-xs'
-                          : 'border-border bg-card/60'
-                      }`}
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`px-2.5 py-0.5 rounded-full text-xs font-black uppercase ${
-                              ver.isCurrent
-                                ? 'bg-indigo-600 text-white'
-                                : 'bg-secondary text-muted-foreground border border-border'
-                            }`}
-                          >
-                            Version {ver.version} {ver.isCurrent && '(Active)'}
-                          </span>
-                          <span className="text-xs font-semibold text-foreground">
-                            {ver.changeSummary || 'Configuration snapshot'}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3 text-2xs text-muted-foreground">
-                          <span>Created by <strong className="text-foreground">{ver.createdBy}</strong></span>
-                          <span>•</span>
-                          <span>{new Date(ver.createdAt).toLocaleString()}</span>
-                        </div>
-                      </div>
-
-                      {/* Document snapshot badges */}
-                      <div className="mt-3 flex items-center gap-1.5 flex-wrap">
-                        <span className="text-2xs font-bold uppercase tracking-wider text-muted-foreground mr-1">
-                          Documents ({ver.documents.length}):
-                        </span>
-                        {ver.documents.map((doc) => (
-                          <span
-                            key={doc.id || doc.name}
-                            className="px-2 py-0.5 rounded text-xs font-medium bg-secondary text-foreground border border-border flex items-center gap-1"
-                          >
-                            <FileCheck className="h-3 w-3 text-indigo-500" />
-                            {doc.name}
-                            {doc.required && (
-                              <span className="text-2xs text-destructive font-bold">*</span>
-                            )}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                <div className="max-w-md space-y-1">
+                  <h3 className="text-base font-bold text-foreground">No document types configured yet.</h3>
+                  <p className="text-xs text-muted-foreground">
+                    This batch has no configured documents. Staff/Admin must create document types manually to configure wanted extraction fields.
+                  </p>
                 </div>
-              </div>
-            )}
-
-
-            {tempRequirements.length > 0 ? (
-              <div className="rounded-xl border border-border bg-card overflow-hidden shadow-2xs">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12 text-center">Order</TableHead>
-                      <TableHead>Document Name & Description</TableHead>
-                      <TableHead>Requirement</TableHead>
-                      <TableHead>Accepted Formats</TableHead>
-                      <TableHead>Max Size</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {tempRequirements.map((req, idx) => {
-                      const isReq = req.required ?? (req.type === 'MANDATORY')
-                      return (
-                        <TableRow key={req.id || req.name} className="hover:bg-secondary/30 transition-colors">
-                          <TableCell className="text-center font-mono text-xs text-muted-foreground">
-                            <div className="flex flex-col items-center gap-1">
-                              <button
-                                disabled={idx === 0}
-                                onClick={() => handleMoveDoc(idx, 'up')}
-                                className="p-1 hover:bg-secondary rounded disabled:opacity-30 cursor-pointer"
-                                title="Move Up"
-                              >
-                                <ArrowUp className="h-3.5 w-3.5" />
-                              </button>
-                              <span>{idx + 1}</span>
-                              <button
-                                disabled={idx === tempRequirements.length - 1}
-                                onClick={() => handleMoveDoc(idx, 'down')}
-                                className="p-1 hover:bg-secondary rounded disabled:opacity-30 cursor-pointer"
-                                title="Move Down"
-                              >
-                                <ArrowDown className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <span className="font-bold text-foreground text-sm block">{req.name}</span>
-                              {req.description && (
-                                <span className="text-xs text-muted-foreground mt-0.5 block">{req.description}</span>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <span
-                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-extrabold border uppercase tracking-wider ${
-                                isReq
-                                  ? 'bg-destructive/10 text-destructive border-destructive/15'
-                                  : 'bg-primary/10 text-primary border-primary/15'
-                              }`}
-                            >
-                              {isReq ? 'Required' : 'Optional'}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {(req.allowedTypes || ['PDF', 'JPG', 'PNG']).map((t) => (
-                                <span key={t} className="px-2 py-0.5 rounded bg-secondary text-2xs font-mono font-bold text-muted-foreground border border-border">
-                                  {t}
-                                </span>
-                              ))}
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-mono text-xs font-semibold text-foreground">
-                            {req.maxSizeMb || 5} MB
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="inline-flex items-center gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => openEditDocModal(req)}
-                                className="cursor-pointer"
-                                title="Edit Configuration"
-                              >
-                                <Edit3 className="h-3.5 w-3.5" /> Edit
-                              </Button>
-                              <button
-                                onClick={() => handleRemoveDoc(req.id, req.name)}
-                                className="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition-colors cursor-pointer"
-                                title="Remove Document"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
+                <Button
+                  variant="primary"
+                  onClick={handleOpenAddDocModal}
+                  className="cursor-pointer gap-2 text-xs py-2 px-4 shadow-sm"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Document Type
+                </Button>
               </div>
             ) : (
-              <EmptyState
-                title="No Documents Configured"
-                description="Add document requirements to generate the student upload portal for this batch."
-                icon={<FileText className="h-12 w-12 text-muted-foreground/60" />}
-                action={
-                  <Button variant="primary" onClick={openAddDocModal} className="cursor-pointer">
-                    <Plus className="mr-2 h-4 w-4" /> Add Document Requirement
-                  </Button>
-                }
-              />
+              <>
+                {/* Section 1: Document Type Cards */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <Layers className="h-3.5 w-3.5 text-primary" /> DOCUMENT TYPES ({wantedOverview.length})
+                    </span>
+                    <span className="text-3xs text-muted-foreground">
+                      Click Configure on any card below to select its wanted fields
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {wantedOverview.map((item) => {
+                      const isSelected = selectedDocType === item.document_type
+                      let statusBadge = (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-3xs font-extrabold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                          <CheckCircle className="h-3 w-3" /> Configured
+                        </span>
+                      )
+                      if (item.status === 'NO_WANTED_FIELDS' || item.wanted_count === 0) {
+                        statusBadge = (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-3xs font-extrabold bg-zinc-500/10 text-zinc-500 border border-zinc-500/20">
+                            <XCircle className="h-3 w-3" /> Not Configured
+                          </span>
+                        )
+                      } else if (item.status === 'INCOMPLETE' || item.unmapped_count > 0) {
+                        statusBadge = (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-3xs font-extrabold bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                            <Clock className="h-3 w-3" /> Incomplete
+                          </span>
+                        )
+                      }
+
+                      return (
+                        <div
+                          key={item.document_type}
+                          onClick={() => handleSelectDocType(item.document_type)}
+                          className={`p-4 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between ${
+                            isSelected
+                              ? 'border-primary bg-primary/5 ring-2 ring-primary/20 shadow-xs'
+                              : 'border-border bg-card hover:bg-secondary/30 hover:border-border/80'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <span className="font-bold text-sm text-foreground block">{item.display_name}</span>
+                                <span className="text-3xs font-mono text-muted-foreground mt-0.5 block">
+                                  {item.document_type}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                                <span
+                                  className={`inline-flex items-center px-2 py-0.5 rounded text-3xs font-extrabold uppercase ${
+                                    item.requirement_status === 'OPTIONAL'
+                                      ? 'bg-purple-500/10 text-purple-600 border border-purple-500/20'
+                                      : item.requirement_status === 'DISABLED'
+                                      ? 'bg-zinc-500/10 text-zinc-500 border border-zinc-500/20'
+                                      : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
+                                  }`}
+                                >
+                                  {item.requirement_status || 'REQUIRED'}
+                                </span>
+                                {statusBadge}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleDeleteDocumentType(item.document_type, item.display_name)
+                                  }}
+                                  className="p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors cursor-pointer"
+                                  title="Delete or Archive Document Type"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {item.description && (
+                              <p className="text-3xs text-muted-foreground mt-1 line-clamp-1">{item.description}</p>
+                            )}
+
+                            <div className="mt-4 pt-3 border-t border-border/50 grid grid-cols-3 gap-2 text-center">
+                              <div className="bg-secondary/40 rounded-lg p-1.5">
+                                <span className="text-3xs text-muted-foreground block">Wanted</span>
+                                <span className="text-xs font-bold text-foreground">
+                                  {item.wanted_count}
+                                </span>
+                              </div>
+                              <div className="bg-emerald-500/5 rounded-lg p-1.5 border border-emerald-500/10">
+                                <span className="text-3xs text-emerald-600 font-semibold block">Mapped</span>
+                                <span className="text-xs font-bold text-emerald-600">{item.mapped_count}</span>
+                              </div>
+                              <div className="bg-secondary/40 rounded-lg p-1.5">
+                                <span className="text-3xs text-muted-foreground block">Unmapped</span>
+                                <span
+                                  className={`text-xs font-bold ${
+                                    item.unmapped_count > 0 ? 'text-amber-600' : 'text-muted-foreground'
+                                  }`}
+                                >
+                                  {item.unmapped_count}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 pt-2 border-t border-border/40 flex items-center justify-between text-3xs font-semibold">
+                            <span className={isSelected ? 'text-primary font-bold' : 'text-muted-foreground'}>
+                              {isSelected ? '● Currently Configuring' : 'Status: ' + (item.wanted_count === 0 ? 'Not Configured' : 'Configured')}
+                            </span>
+                            <Button
+                              variant={isSelected ? 'primary' : 'outline'}
+                              size="sm"
+                              className="h-6 px-2.5 text-3xs"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleSelectDocType(item.document_type)
+                              }}
+                            >
+                              Configure
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Section 2: Active Document Wanted Fields & Excel Target Column */}
+                {(() => {
+                  const activeDocOverview = wantedOverview.find((o) => o.document_type === selectedDocType)
+                  if (!activeDocOverview) return null
+
+                  const enabledFields = activeDocFields.filter((f) => f.enabled)
+                  const hasUnmappedEnabled = enabledFields.some((f) => !f.excel_header || !f.excel_header.trim())
+
+                  // Calculate duplicate target conflicts within enabled fields of this document
+                  const headerOwners: Record<string, string> = {}
+                  let hasDuplicateConflict = false
+                  for (const f of enabledFields) {
+                    if (f.excel_header && f.excel_header.trim()) {
+                      const h = f.excel_header.trim()
+                      if (headerOwners[h] && headerOwners[h] !== f.field) {
+                        hasDuplicateConflict = true
+                      } else {
+                        headerOwners[h] = f.field
+                      }
+                    }
+                  }
+
+                  const hasCompatibilityErrors = enabledFields.some(
+                    (f) => f.excel_header && !checkFieldCompatibility(f.field, f.excel_header).isCompatible
+                  )
+
+                  const canSave = !hasUnmappedEnabled && !hasDuplicateConflict && !hasCompatibilityErrors
+
+                  return (
+                    <div className="p-6 border border-border rounded-xl bg-card space-y-5 shadow-2xs">
+                      {/* Active Document Header */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-extrabold text-base text-foreground uppercase tracking-wide">
+                              {activeDocOverview.display_name || selectedDocType}
+                            </span>
+                            <span className="text-3xs px-2 py-0.5 rounded bg-secondary border border-border font-mono font-bold text-muted-foreground">
+                              {selectedDocType}
+                            </span>
+                            <span className="text-3xs px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">
+                              v{activeDocOverview.version || 1}
+                            </span>
+                            <div className="flex items-center gap-1.5 ml-2">
+                              <span className="text-3xs uppercase font-bold text-muted-foreground">Portal Status:</span>
+                              <select
+                                value={activeDocRequirementStatus}
+                                onChange={(e) => setActiveDocRequirementStatus(e.target.value as any)}
+                                className={`text-3xs font-extrabold px-2 py-0.5 rounded border focus:outline-none focus:ring-1 cursor-pointer uppercase ${
+                                  activeDocRequirementStatus === 'REQUIRED'
+                                    ? 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30 focus:ring-blue-500'
+                                    : activeDocRequirementStatus === 'OPTIONAL'
+                                    ? 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/30 focus:ring-purple-500'
+                                    : 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/30 focus:ring-zinc-500'
+                                }`}
+                              >
+                                <option value="REQUIRED">REQUIRED</option>
+                                <option value="OPTIONAL">OPTIONAL</option>
+                                <option value="DISABLED">DISABLED (Hidden)</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
+                            <span className="font-bold text-foreground">Wanted Fields:</span>
+                            <span>
+                              {enabledFields.length} of {activeDocFields.length} selected for extraction
+                            </span>
+                            <span>•</span>
+                            <span>Saving updates this document&apos;s wanted fields and requirement status</span>
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setNewFieldName('')
+                              setIsAddFieldModalOpen(true)
+                            }}
+                            className="cursor-pointer text-xs py-1 gap-1"
+                            title="Add Custom Field to this document"
+                          >
+                            <Plus className="h-3 w-3" /> Add Field
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleSelectAllWantedFields}
+                            className="cursor-pointer text-xs py-1"
+                          >
+                            Select All
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleDeselectAllWantedFields}
+                            className="cursor-pointer text-xs py-1"
+                          >
+                            Deselect All
+                          </Button>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={handleSaveDocWantedFields}
+                            disabled={isSavingWanted || !canSave}
+                            className="cursor-pointer text-xs py-1 gap-1.5"
+                          >
+                            {isSavingWanted ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Save className="h-3.5 w-3.5" />
+                            )}
+                            Save {activeDocOverview.display_name ? activeDocOverview.display_name.split(' ')[0] : 'Doc'} Configuration
+                          </Button>
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => handleDeleteDocumentType(selectedDocType, activeDocOverview.display_name)}
+                            disabled={isDeletingDoc}
+                            className="cursor-pointer text-xs py-1 gap-1"
+                            title="Delete or Archive Document Type"
+                          >
+                            <Trash2 className="h-3 w-3" /> Delete Doc
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Guidance Alerts */}
+                      {enabledFields.length === 0 && (
+                        <div className="p-3.5 rounded-lg border border-zinc-300 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+                          <AlertCircle className="h-4 w-4 shrink-0 text-zinc-500" />
+                          <span>
+                            <strong>Zero fields selected:</strong> AI multimodal extraction for this document will be
+                            skipped during batch processing with status <code>NO_WANTED_FIELDS_CONFIGURED</code> without faking data.
+                          </span>
+                        </div>
+                      )}
+
+                      {hasUnmappedEnabled && (
+                        <div className="p-3.5 rounded-lg border border-amber-300 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30 flex items-center gap-2 text-xs text-amber-800 dark:text-amber-300">
+                          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                          <span>
+                            Every enabled wanted field must have a target Excel column assigned before saving.
+                          </span>
+                        </div>
+                      )}
+
+                      {hasDuplicateConflict && (
+                        <div className="p-3.5 rounded-lg border border-destructive/30 bg-destructive/5 flex items-center gap-2 text-xs text-destructive">
+                          <AlertCircle className="h-4 w-4 shrink-0" />
+                          <span>
+                            Multiple wanted fields are assigned to the same Excel column. Each Excel column must be unique per document.
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Empty fields prompt if custom document has no fields */}
+                      {activeDocFields.length === 0 ? (
+                        <div className="p-8 text-center border border-dashed border-border rounded-lg bg-secondary/10 space-y-2">
+                          <p className="text-xs font-semibold text-foreground">No available fields defined for this document yet.</p>
+                          <p className="text-3xs text-muted-foreground">Click &quot;+ Add Field&quot; above to add fields you want to extract.</p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setNewFieldName('')
+                              setIsAddFieldModalOpen(true)
+                            }}
+                            className="cursor-pointer text-xs gap-1 mt-2"
+                          >
+                            <Plus className="h-3 w-3" /> Add Field
+                          </Button>
+                        </div>
+                      ) : (
+                        /* Wanted Fields Table: FIELD -> EXCEL TARGET COLUMN */
+                        <div className="rounded-xl border border-border overflow-hidden bg-card">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-secondary/40">
+                                <TableHead className="w-16 text-center">Wanted</TableHead>
+                                <TableHead>Field Name</TableHead>
+                                <TableHead>Target Excel Header Column</TableHead>
+                                <TableHead className="w-28 text-center">Status</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {activeDocFields.map((field) => {
+                                const isEnabled = field.enabled
+                                const selectedHeader = field.excel_header || ''
+                                const isMapped = isEnabled && Boolean(selectedHeader)
+                                const compatResult = isMapped ? checkFieldCompatibility(field.field, selectedHeader) : null
+                                const isInvalid = isMapped && compatResult ? !compatResult.isCompatible : false
+                                const conflictingOwner =
+                                  isMapped && headerOwners[selectedHeader] && headerOwners[selectedHeader] !== field.field
+                                    ? headerOwners[selectedHeader]
+                                    : null
+
+                                return (
+                                  <TableRow
+                                    key={field.field}
+                                    className={`transition-colors ${
+                                      isEnabled ? 'bg-card hover:bg-secondary/20' : 'bg-secondary/10 opacity-60'
+                                    }`}
+                                  >
+                                    {/* Checkbox Column */}
+                                    <TableCell className="text-center">
+                                      <input
+                                        type="checkbox"
+                                        checked={isEnabled}
+                                        onChange={() => handleToggleWantedField(field.field)}
+                                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
+                                        title={isEnabled ? 'Disable field extraction' : 'Enable field extraction'}
+                                      />
+                                    </TableCell>
+
+                                    {/* Field Name */}
+                                    <TableCell className="font-semibold text-xs text-foreground">
+                                      <div>
+                                        <span
+                                          className={`block font-bold ${
+                                            isEnabled ? 'text-foreground' : 'text-muted-foreground line-through'
+                                          }`}
+                                        >
+                                          {field.field}
+                                        </span>
+                                        <span className="text-3xs text-muted-foreground font-normal block mt-0.5">
+                                          Source: {activeDocOverview.display_name || selectedDocType}
+                                        </span>
+                                      </div>
+                                    </TableCell>
+
+                                    {/* Target Excel Column Dropdown */}
+                                    <TableCell>
+                                      <div className="space-y-1">
+                                        <select
+                                          disabled={!isEnabled}
+                                          value={selectedHeader}
+                                          onChange={(e) => handleSetWantedFieldHeader(field.field, e.target.value)}
+                                          className={`w-full max-w-sm px-3 py-1.5 text-xs rounded border bg-background font-medium focus:outline-none focus:ring-2 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-secondary/40 ${
+                                            !isEnabled
+                                              ? 'border-border text-muted-foreground'
+                                              : isInvalid
+                                              ? 'border-destructive focus:ring-destructive text-destructive'
+                                              : conflictingOwner
+                                              ? 'border-amber-500 focus:ring-amber-500 text-amber-600'
+                                              : !selectedHeader
+                                              ? 'border-amber-400 focus:ring-amber-400 text-amber-700'
+                                              : 'border-border focus:ring-primary text-foreground'
+                                          }`}
+                                        >
+                                          <option value="">
+                                            {isEnabled
+                                              ? availableHeaders.length > 0
+                                                ? '-- Select Target Excel Column --'
+                                                : '-- No Excel Template Uploaded --'
+                                              : '-- Extraction Disabled --'}
+                                          </option>
+                                          {selectedHeader && !availableHeaders.includes(selectedHeader) && (
+                                            <option value={selectedHeader}>{selectedHeader}</option>
+                                          )}
+                                          {availableHeaders.map((h) => {
+                                            const isCompat = checkFieldCompatibility(field.field, h).isCompatible
+                                            const owner = headerOwners[h]
+                                            const isOwnedByOther = Boolean(owner && owner !== field.field)
+                                            const isDisabled = !isCompat || isOwnedByOther
+
+                                            let optionLabel = h
+                                            if (!isCompat) {
+                                              optionLabel = `${h} (Incompatible)`
+                                            } else if (isOwnedByOther) {
+                                              optionLabel = `${h} (Already mapped to ${owner})`
+                                            }
+
+                                            return (
+                                              <option key={h} value={h} disabled={isDisabled}>
+                                                {optionLabel}
+                                              </option>
+                                            )
+                                          })}
+                                        </select>
+
+                                        {isEnabled && isInvalid && (
+                                          <p className="text-destructive text-3xs font-semibold flex items-center gap-1">
+                                            <AlertCircle className="h-3 w-3 inline shrink-0" />
+                                            Invalid mapping: {field.field} cannot be mapped to {selectedHeader}.
+                                          </p>
+                                        )}
+
+                                        {isEnabled && conflictingOwner && !isInvalid && (
+                                          <p className="text-amber-600 text-3xs font-semibold flex items-center gap-1">
+                                            <AlertTriangle className="h-3 w-3 inline shrink-0" />
+                                            Conflict: Column &quot;{selectedHeader}&quot; is already mapped to{' '}
+                                            {conflictingOwner}.
+                                          </p>
+                                        )}
+                                      </div>
+                                    </TableCell>
+
+                                    {/* Status Column */}
+                                    <TableCell className="text-center">
+                                      {!isEnabled ? (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-3xs font-medium bg-secondary text-muted-foreground border border-border">
+                                          Disabled
+                                        </span>
+                                      ) : isInvalid ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-3xs font-extrabold bg-red-100 text-red-800">
+                                          <AlertCircle className="h-3 w-3" /> Invalid
+                                        </span>
+                                      ) : conflictingOwner ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-3xs font-extrabold bg-amber-100 text-amber-800">
+                                          <AlertTriangle className="h-3 w-3" /> Conflict
+                                        </span>
+                                      ) : isMapped ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-3xs font-extrabold bg-emerald-100 text-emerald-800">
+                                          <Check className="h-3 w-3" /> Mapped
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-3xs font-bold bg-amber-100 text-amber-800">
+                                          Unmapped
+                                        </span>
+                                      )}
+                                    </TableCell>
+                                  </TableRow>
+                                )
+                              })}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+
+                      {/* Footer Save Button */}
+                      <div className="flex justify-end pt-2">
+                        <Button
+                          variant="primary"
+                          onClick={handleSaveDocWantedFields}
+                          disabled={isSavingWanted || !canSave}
+                          className="cursor-pointer gap-2"
+                        >
+                          {isSavingWanted ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Save className="h-4 w-4" />
+                          )}
+                          Save {activeDocOverview.display_name || selectedDocType} Configuration
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </>
             )}
           </div>
         )}
@@ -1416,29 +1920,33 @@ export const BatchDetails: React.FC = () => {
               </div>
             </div>
 
-            {/* 2. Column Mapping UI Matrix */}
+            {/* 2. Document-Specific Wanted Field & Excel Column Mapping Matrix */}
             {excelTemplate && excelTemplate.headers.length > 0 && (
               <div className="p-6 border border-border rounded-xl bg-card space-y-6 shadow-2xs">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                {/* Section Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
                   <div>
-                    <div className="flex items-center gap-2 text-foreground font-bold text-sm">
-                      <Settings2 className="h-4 w-4 text-primary" /> 2. Map AI Extracted Fields to Excel Columns
+                    <div className="flex items-center gap-2 text-foreground font-bold text-base">
+                      <Settings2 className="h-5 w-5 text-primary" /> 2. Document-Specific Wanted Field Selection & Mapping
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Extracted headers: {excelTemplate.headers.join(', ')}
+                      Configure exactly which fields are extracted from each document type and which Excel column each field populates.
                     </p>
                   </div>
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleSaveExcelMappings}
-                    disabled={isSavingMappings}
-                    className="cursor-pointer gap-1.5"
-                  >
-                    {isSavingMappings ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                    Save Field Mappings
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => loadWantedOverview()}
+                      disabled={isLoadingWanted}
+                      className="cursor-pointer gap-1.5 text-xs"
+                      title="Refresh Configurations"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${isLoadingWanted ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Primary Lookup Key Selector */}
@@ -1449,254 +1957,57 @@ export const BatchDetails: React.FC = () => {
                       The system uses candidate Register Number to find the matching row in this column.
                     </span>
                   </div>
-                  <select
-                    value={lookupColumn}
-                    onChange={(e) => setLookupColumn(e.target.value)}
-                    className="px-3 py-1.5 rounded-lg border border-border bg-background text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-                  >
-                    {excelTemplate.headers.map((h) => (
-                      <option key={h} value={h}>
-                        {h}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={lookupColumn}
+                      onChange={(e) => setLookupColumn(e.target.value)}
+                      className="px-3 py-1.5 rounded-lg border border-border bg-background text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                    >
+                      {excelTemplate.headers.map((h) => (
+                        <option key={h} value={h}>
+                          {h}
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSaveExcelMappings}
+                      disabled={isSavingMappings}
+                      className="cursor-pointer gap-1.5 text-xs"
+                    >
+                      {isSavingMappings ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                      Save Lookup Key
+                    </Button>
+                  </div>
                 </div>
 
-                {/* Mapping Matrix Table */}
-                <div className="rounded-lg border border-border overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>AI Extracted System Field</TableHead>
-                        <TableHead>Excel Target Header Column</TableHead>
-                        <TableHead className="w-24 text-center">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(() => {
-                        const dynamicSystemFields = getDynamicSystemFields(tempRequirements)
-                        if (dynamicSystemFields.length === 0) {
-                          return (
-                            <TableRow>
-                              <TableCell colSpan={3} className="text-center py-6 text-xs text-muted-foreground">
-                                No document extraction fields configured for this batch. Add document requirements with extraction fields.
-                              </TableCell>
-                            </TableRow>
-                          )
-                        }
-                        return dynamicSystemFields.map((field) => {
-                          const selectedHeader = excelMappings[field.key] || excelMappings[field.label] || ''
-                          const isMapped = Boolean(selectedHeader)
-
-                          return (
-                            <TableRow key={field.key} className="hover:bg-secondary/20">
-                              <TableCell className="font-semibold text-xs text-foreground">
-                                <div>
-                                  <span className="font-bold text-foreground block">{field.label}</span>
-                                  <span className="text-3xs text-muted-foreground block font-normal mt-0.5">
-                                    Source Document: {field.docName}
-                                  </span>
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <select
-                                  value={selectedHeader}
-                                  onChange={(e) =>
-                                    setExcelMappings({
-                                      ...excelMappings,
-                                      [field.key]: e.target.value,
-                                      [field.label]: e.target.value,
-                                    })
-                                  }
-                                  className="w-full max-w-xs px-3 py-1 text-xs rounded border border-border bg-background text-foreground font-medium focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-                                >
-                                  <option value="">-- Do Not Map --</option>
-                                  {excelTemplate.headers.map((h) => (
-                                    <option key={h} value={h}>
-                                      {h}
-                                    </option>
-                                  ))}
-                                </select>
-                              </TableCell>
-                              <TableCell className="text-center">
-                                {isMapped ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-3xs font-extrabold bg-green-100 text-green-800">
-                                    <Check className="h-3 w-3" /> Mapped
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-3xs font-medium bg-gray-100 text-gray-600">
-                                    Unmapped
-                                  </span>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          )
-                        })
-                      })()}
-                    </TableBody>
-                  </Table>
-                </div>
+            {/* 3. Document Configuration Link Banner */}
+            <div className="p-6 border border-border rounded-xl bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs">
+              <div>
+                <span className="font-bold text-base text-foreground block flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-primary" /> Document-Specific Wanted Fields Configuration
+                </span>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Configure which fields should be extracted from each document and where those selected fields should go in Excel.
+                </p>
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setActiveTab('documents')}
+                className="cursor-pointer gap-2 shrink-0"
+              >
+                <FileText className="h-4 w-4" /> Go to Document Configuration
+              </Button>
+            </div>
               </div>
             )}
           </div>
         )}
       </div>
 
-      {/* MODAL: ADD / EDIT DOCUMENT REQUIREMENT */}
-      <Modal
-        isOpen={isDocModalOpen}
-        onClose={() => setIsDocModalOpen(false)}
-        title={editingDocId ? 'Edit Document Requirement' : 'Add Document Requirement'}
-      >
-        <form onSubmit={handleSaveDocConfig} className="space-y-5">
-          {/* Document Name with Preset Select */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Document Name
-            </label>
-            <Input
-              type="text"
-              placeholder="e.g. Aadhaar Card, SSLC Marksheet, Medical Cert"
-              value={docName}
-              onChange={(e) => setDocName(e.target.value)}
-              required
-            />
-            <div className="flex items-center gap-1.5 flex-wrap pt-1">
-              <span className="text-3xs text-muted-foreground font-bold uppercase mr-1">Presets:</span>
-              {PRESET_DOCUMENTS.map((preset) => (
-                <button
-                  type="button"
-                  key={preset}
-                  onClick={() => setDocName(preset)}
-                  className="px-2 py-0.5 rounded bg-secondary/80 hover:bg-secondary text-3xs font-semibold text-muted-foreground border border-border transition-colors cursor-pointer"
-                >
-                  {preset}
-                </button>
-              ))}
-            </div>
-          </div>
 
-          {/* Mandatory vs Optional */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
-              Requirement Rule
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <label
-                className={`flex items-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${
-                  docRequired ? 'border-destructive bg-destructive/5 text-destructive font-bold' : 'border-border bg-card text-muted-foreground'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="docReqRule"
-                  checked={docRequired}
-                  onChange={() => setDocRequired(true)}
-                  className="h-4 w-4 accent-destructive"
-                />
-                <div className="text-xs">
-                  <span className="block font-bold">Required (Mandatory)</span>
-                  <span className="text-3xs font-normal text-muted-foreground">Student MUST upload file to submit</span>
-                </div>
-              </label>
-
-              <label
-                className={`flex items-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${
-                  !docRequired ? 'border-primary bg-primary/5 text-primary font-bold' : 'border-border bg-card text-muted-foreground'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="docReqRule"
-                  checked={!docRequired}
-                  onChange={() => setDocRequired(false)}
-                  className="h-4 w-4 accent-primary"
-                />
-                <div className="text-xs">
-                  <span className="block font-bold">Optional (Waiver Eligible)</span>
-                  <span className="text-3xs font-normal text-muted-foreground">Student can select "I don't have this"</span>
-                </div>
-              </label>
-            </div>
-          </div>
-
-          {/* Allowed File Types */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
-              Accepted File Types
-            </label>
-            <div className="flex gap-4">
-              {['PDF', 'JPG', 'PNG'].map((type) => {
-                const checked = docAllowedTypes.includes(type)
-                return (
-                  <label key={type} className="flex items-center gap-2 text-xs font-bold cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => handleTypeToggle(type)}
-                      className="h-4 w-4 accent-primary rounded border-border"
-                    />
-                    <span>{type}</span>
-                  </label>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Max File Size */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
-              Maximum Allowed File Size (MB)
-            </label>
-            <Input
-              type="number"
-              min={1}
-              max={50}
-              value={docMaxSizeMb}
-              onChange={(e) => setDocMaxSizeMb(Number(e.target.value))}
-              required
-            />
-          </div>
-
-          {/* Description */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
-              Description / Instructions for Student
-            </label>
-            <Input
-              type="text"
-              placeholder="e.g. Upload front and back side of card in a single file."
-              value={docDescription}
-              onChange={(e) => setDocDescription(e.target.value)}
-            />
-          </div>
-
-          {/* AI Entity Extraction Fields */}
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
-              AI Entity Extraction Fields (Comma Separated)
-            </label>
-            <Input
-              type="text"
-              placeholder="e.g. Transfer Certificate Number, School Name, Admission Number"
-              value={docExtractionFieldsText}
-              onChange={(e) => setDocExtractionFieldsText(e.target.value)}
-            />
-            <span className="text-3xs text-muted-foreground block">
-              Entities that AI will extract from this document and populate into mapping &amp; verification tables.
-            </span>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-border">
-            <Button type="button" variant="outline" onClick={() => setIsDocModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary">
-              {editingDocId ? 'Save Changes' : 'Add Document'}
-            </Button>
-          </div>
-        </form>
-      </Modal>
 
       {/* MODAL: GENERATE UPLOAD LINK */}
       <Modal isOpen={isLinkModalOpen} onClose={() => setIsLinkModalOpen(false)} title="Generate Tokenized Upload Link">
@@ -1976,6 +2287,171 @@ export const BatchDetails: React.FC = () => {
             </Button>
             <Button type="submit" variant="primary">
               Create Section
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ADD DOCUMENT TYPE MODAL */}
+      <Modal
+        isOpen={isAddDocModalOpen}
+        onClose={() => setIsAddDocModalOpen(false)}
+        title="Add Document Type"
+      >
+        <form onSubmit={handleCreateDocumentType} className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Configure a new document type for this batch. All document types start with zero wanted fields until explicitly selected.
+          </p>
+
+          <div>
+            <label className="text-xs font-bold text-foreground block mb-1">Quick Presets (Optional)</label>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { name: 'Aadhaar Card', code: 'AADHAAR' },
+                { name: 'Transfer Certificate', code: 'TC' },
+                { name: 'Community Certificate', code: 'COMMUNITY' },
+                { name: 'Income Certificate', code: 'INCOME' },
+                { name: 'SSLC Marksheet', code: 'SSLC' },
+                { name: 'HSC Marksheet', code: 'HSC' },
+                { name: 'Birth Certificate', code: 'BIRTH_CERTIFICATE' },
+                { name: 'Passport', code: 'PASSPORT' },
+                { name: 'Bank Passbook', code: 'BANK_PASSBOOK' },
+                { name: 'Nativity Certificate', code: 'NATIVITY' },
+                { name: 'Bonafide Certificate', code: 'BONAFIDE' },
+                { name: 'Migration Certificate', code: 'MIGRATION' },
+              ].map((preset) => (
+                <button
+                  type="button"
+                  key={preset.code}
+                  onClick={() => {
+                    setNewDocName(preset.name)
+                    setNewDocCode(preset.code)
+                  }}
+                  className={`text-3xs px-2.5 py-1 rounded-lg border font-medium transition-colors cursor-pointer ${
+                    newDocCode === preset.code
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-secondary/60 hover:bg-secondary border-border text-foreground'
+                  }`}
+                >
+                  {preset.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <Input
+            label="Document Name"
+            type="text"
+            placeholder="e.g. Aadhaar Card, Residence Certificate"
+            value={newDocName}
+            onChange={(e) => handleDocNameChange(e.target.value)}
+            required
+          />
+
+          <Input
+            label="Document Code"
+            type="text"
+            placeholder="e.g. AADHAAR, RESIDENCE_CERTIFICATE"
+            value={newDocCode}
+            onChange={(e) => setNewDocCode(e.target.value.toUpperCase())}
+            required
+          />
+          <span className="text-3xs text-muted-foreground block -mt-2">
+            Unique identifier normalized to uppercase alphanumeric and underscores.
+          </span>
+
+          <Input
+            label="Description (Optional)"
+            type="text"
+            placeholder="e.g. Government issued proof of residence"
+            value={newDocDescription}
+            onChange={(e) => setNewDocDescription(e.target.value)}
+          />
+
+          <div>
+            <label className="text-xs font-bold text-foreground block mb-1.5">Student Upload Requirement</label>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { value: 'REQUIRED', label: 'REQUIRED', desc: 'Must upload before submission' },
+                { value: 'OPTIONAL', label: 'OPTIONAL', desc: 'Optional / Waivable by student' },
+                { value: 'DISABLED', label: 'DISABLED', desc: 'Hidden from Student Portal' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setNewDocRequirementStatus(opt.value as any)}
+                  className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                    newDocRequirementStatus === opt.value
+                      ? 'border-primary bg-primary/10 text-foreground ring-2 ring-primary/20'
+                      : 'border-border bg-card text-muted-foreground hover:bg-secondary/40'
+                  }`}
+                >
+                  <span className="font-bold text-xs block text-foreground">{opt.label}</span>
+                  <span className="text-3xs block text-muted-foreground mt-0.5">{opt.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-border">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsAddDocModalOpen(false)}
+              disabled={isCreatingDoc}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={isCreatingDoc || !newDocName.trim() || !newDocCode.trim()}
+              className="gap-1.5"
+            >
+              {isCreatingDoc && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Add Document
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ADD CUSTOM FIELD MODAL */}
+      <Modal
+        isOpen={isAddFieldModalOpen}
+        onClose={() => setIsAddFieldModalOpen(false)}
+        title={`Add Field to ${selectedDocType}`}
+      >
+        <form onSubmit={handleAddCustomField} className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Add a new field to this document configuration. The field will initially be disabled (unselected) until you check it.
+          </p>
+
+          <Input
+            label="Field Name"
+            type="text"
+            placeholder="e.g. Passport Expiry Date, Place of Birth"
+            value={newFieldName}
+            onChange={(e) => setNewFieldName(e.target.value)}
+            required
+          />
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-border">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsAddFieldModalOpen(false)}
+              disabled={isAddingField}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={isAddingField || !newFieldName.trim()}
+              className="gap-1.5"
+            >
+              {isAddingField && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Add Field
             </Button>
           </div>
         </form>

@@ -35,11 +35,18 @@ NOISE_PATTERNS = [
 # Field key aliases mapping to standard requested field names
 FIELD_ALIASES = {
     "aadhaar number": "Aadhaar Number",
+    "aadhaar_number": "Aadhaar Number",
     "aadhaar card": "Aadhaar Number",
     "aadhaar card number": "Aadhaar Number",
     "aadhaar no": "Aadhaar Number",
     "aadhaar no.": "Aadhaar Number",
+    "aadhaar_no": "Aadhaar Number",
     "aadhaar": "Aadhaar Number",
+    "aadhaar_number_without_space": "Aadhaar Number",
+    "aadhaar number (without space)": "Aadhaar Number",
+    "aadhaar number without space": "Aadhaar Number",
+    "ஆதார் எண்": "Aadhaar Number",
+    "ஆதார்": "Aadhaar Number",
     "vid": "VID",
     "virtual id": "VID",
     "dob": "DOB",
@@ -139,15 +146,57 @@ class OCRPreprocessor:
         if not text:
             return results
 
-        # 1. Aadhaar Number (12 digits, format 1234 5678 9012, 1234-5678-9012, or 123456789012)
-        aadhaar_matches = re.findall(r"\b([2-9]\d{3}[\s-]?\d{4}[\s-]?\d{4})\b", text)
-        for match in aadhaar_matches:
-            clean_digits = re.sub(r"\D", "", match)
-            if len(clean_digits) == 12:
-                formatted_aadhaar = f"{clean_digits[:4]} {clean_digits[4:8]} {clean_digits[8:]}"
-                aadhaar_obj = {"value": formatted_aadhaar, "confidence": 100}
-                results["Aadhaar Card"] = aadhaar_obj
+        # 1. Aadhaar Number (12 digits, format XXXX XXXX XXXX, XXXX-XXXX-XXXX, XXXX XXXX\nXXXX, or XXXXXXXXXXXX)
+        from app.utils.normalization import (
+            normalize_aadhaar_digits,
+            validate_and_normalize_aadhaar,
+            correct_aadhaar_ocr_confusion,
+        )
+
+        aadhaar_found_digits = None
+
+        # Pattern A: Aadhaar contextual label followed by digits (Tamil + English)
+        context_pattern = (
+            r"(?:(?:ஆதார்\s*எண்|ஆதார்|Your\s+Aadhaar\s+No\.?|Aadhaar\s*(?:No\.?|Number|Card)?|"
+            r"Aadhar\s*(?:No\.?|Number|Card)?|UIDAI|UID)\s*[:\-\.]?\s*[\n\r]*)"
+            r"([0-9OIlSBG]{4}[\s\-\n\r]+[0-9OIlSBG]{4}[\s\-\n\r]+[0-9OIlSBG]{4}|[0-9OIlSBG]{12})"
+        )
+        for m in re.finditer(context_pattern, text, re.IGNORECASE):
+            cand_raw = m.group(1)
+            norm = normalize_aadhaar_digits(cand_raw)
+            if norm:
+                aadhaar_found_digits = norm
                 break
+
+        # Pattern B: 4-4-4 digit pattern with spaces, hyphens, or newlines (e.g. 1234 5678 9012, 1234-5678-9012, 1234 5678\n9012)
+        if not aadhaar_found_digits:
+            raw_matches = re.findall(
+                r"\b([2-9][0-9OIlSBG]{3}[\s\-\n\r]+[0-9OIlSBG]{4}[\s\-\n\r]+[0-9OIlSBG]{4})\b",
+                text
+            )
+            for rm in raw_matches:
+                rm_clean = re.sub(r'[\s\-\n\r]', '', rm)
+                if len(rm_clean) == 12:
+                    norm = normalize_aadhaar_digits(rm)
+                    if norm:
+                        aadhaar_found_digits = norm
+                        break
+
+        # Pattern C: Continuous 12 digits (with Aadhaar context in document)
+        if not aadhaar_found_digits and any(k in text.lower() for k in ["aadhaar", "aadhar", "uid", "uidai", "ஆதார்"]):
+            cont_matches = re.findall(r"\b([2-9]\d{11})\b", text)
+            for cm in cont_matches:
+                norm = normalize_aadhaar_digits(cm)
+                if norm:
+                    aadhaar_found_digits = norm
+                    break
+
+        if aadhaar_found_digits:
+            formatted_aadhaar = f"{aadhaar_found_digits[:4]} {aadhaar_found_digits[4:8]} {aadhaar_found_digits[8:]}"
+            results["aadhaar_number"] = {"value": aadhaar_found_digits, "confidence": 100}
+            results["Aadhaar Number"] = {"value": aadhaar_found_digits, "confidence": 100}
+            results["Aadhaar Card"] = {"value": formatted_aadhaar, "confidence": 100}
+            results["Aadhaar Number (without space)"] = {"value": aadhaar_found_digits, "confidence": 100}
 
         # 2. VID (16 digits, format 9183 9618 9309 8831)
         vid_match = re.search(r"\bVID\s*[:\-]?\s*([2-9]\d{3}\s?\d{4}\s?\d{4}\s?\d{4})\b", text, re.IGNORECASE)

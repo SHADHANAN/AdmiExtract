@@ -1,12 +1,18 @@
 import axios from 'axios'
 import { useAuthStore } from '../store/useAuthStore'
 
-export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ||
-  import.meta.env.VITE_API_URL ||
-  (typeof window !== 'undefined' && window.location.hostname
-    ? `http://${window.location.hostname}:8000`
-    : 'http://localhost:8000')
+const resolveApiBaseUrl = (): string => {
+  const envUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
+    return envUrl.trim().replace(/\/+$/, '')
+  }
+  if (typeof window !== 'undefined' && window.location.hostname) {
+    return `http://${window.location.hostname}:8000`
+  }
+  return 'http://localhost:8000'
+}
+
+export const API_BASE_URL = resolveApiBaseUrl()
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -48,7 +54,8 @@ api.interceptors.response.use(
       // Only redirect if not already on the login or public upload page
       if (
         window.location.pathname !== '/login' &&
-        !window.location.pathname.startsWith('/upload')
+        !window.location.pathname.startsWith('/upload') &&
+        !window.location.pathname.startsWith('/student')
       ) {
         window.location.href = '/login'
       }

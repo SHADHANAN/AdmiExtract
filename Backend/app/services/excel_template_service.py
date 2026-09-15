@@ -326,9 +326,12 @@ class ExcelTemplateService:
         row_idx, row_dict, status_code = await self.find_student_excel_row(batch_id, register_number)
         return row_dict
 
-    def _resolve_header_value(self, header: str, data_dict: dict[str, Any]) -> Any:
+    def _resolve_header_value(
+        self, header: str, data_dict: dict[str, Any], custom_mappings: dict[str, str] | None = None
+    ) -> Any:
         """
         Adaptive semantic field resolver matching any reasonable Excel column header against student data.
+        If custom_mappings is configured, enforces strict mapping to configured target columns.
         Never returns literal 'NO', 'NULL', 'NONE', 'N/A'. Returns None for blank cells.
         """
         if not header or not data_dict:
@@ -373,6 +376,39 @@ class ExcelTemplateService:
         h_clean = header.strip()
         h_lower = h_clean.lower()
         h_norm = re.sub(r'[\s_\-\./\(\)]+', '', h_lower)
+
+        # ---------------------------------------------------------
+        # Priority 0: Configured Custom Mappings (Highest Priority)
+        # ---------------------------------------------------------
+        if isinstance(custom_mappings, dict) and bool(custom_mappings):
+            mapped_sources = [
+                src for src, tgt in custom_mappings.items()
+                if tgt and tgt.strip().lower() == h_clean.lower()
+            ]
+            if mapped_sources:
+                for src in mapped_sources:
+                    raw_val = None
+                    if src in data_dict:
+                        raw_val = data_dict[src]
+                    else:
+                        norm_src = re.sub(r'[\s_\-\./\(\)]+', '', src.lower())
+                        for dk, dv in data_dict.items():
+                            if re.sub(r'[\s_\-\./\(\)]+', '', dk.lower()) == norm_src:
+                                raw_val = dv
+                                break
+                    val = _clean_val(raw_val)
+                    if val is not None:
+                        return val
+                # Explicitly mapped target column with no value in data_dict:
+                # Do NOT let fallback heuristic populate this column with incorrect data!
+                return None
+            else:
+                # Column is not mapped in custom_mappings.
+                # Preserve unmapped columns from arbitrary pollution,
+                # except for primary register/roll number identity lookup
+                reg_indicators = ["register number", "register no", "reg no", "reg. no", "roll number", "roll no"]
+                if not any(h_norm == re.sub(r'[\s_\-\./\(\)]+', '', ind) for ind in reg_indicators):
+                    return None
 
         # ---------------------------------------------------------
         # Priority 1: Profile Identity Fields (Guaranteed Match)
@@ -616,7 +652,7 @@ class ExcelTemplateService:
                 )
 
                 for header_name, col_idx in header_col_map.items():
-                    val = self._resolve_header_value(header_name, student_data)
+                    val = self._resolve_header_value(header_name, student_data, custom_mappings=template.field_mappings)
                     hn_lower = header_name.lower().strip()
                     is_bool_q = (
                         any(q in hn_lower for q in ["yes/no", "(yes/no)", "yes / no", "same as", "did ", "whether"])

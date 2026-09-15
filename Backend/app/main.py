@@ -15,6 +15,7 @@ from app.api.doc_config_version import router as doc_config_version_router
 from app.api.batch import router as batch_router, public_router as public_batch_router
 from app.api.batch_class import router as batch_class_router
 from app.api.upload_link import router as upload_link_router
+from app.api.wanted_field import router as wanted_field_router
 
 
 @asynccontextmanager
@@ -40,10 +41,22 @@ allowed_origins = [
     "http://127.0.0.1:3000",
 ]
 
+# Dynamically add configured public app URL and CORS_ORIGINS
+if getattr(settings, "PUBLIC_APP_URL", None) and settings.PUBLIC_APP_URL.strip():
+    clean_pub = settings.PUBLIC_APP_URL.strip().rstrip("/")
+    if clean_pub not in allowed_origins:
+        allowed_origins.append(clean_pub)
+
+if getattr(settings, "CORS_ORIGINS", None) and settings.CORS_ORIGINS.strip():
+    for raw_origin in settings.CORS_ORIGINS.split(","):
+        clean_origin = raw_origin.strip().rstrip("/")
+        if clean_origin and clean_origin not in allowed_origins:
+            allowed_origins.append(clean_origin)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=r"^https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+)(:\d+)?$",
+    allow_origin_regex=r"^https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|.*\.trycloudflare\.com)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -88,6 +101,7 @@ app.include_router(student_router)
 app.include_router(students_me_router)
 app.include_router(excel_template_router)
 app.include_router(doc_config_version_router)
+app.include_router(wanted_field_router)
 
 
 @app.get("/")

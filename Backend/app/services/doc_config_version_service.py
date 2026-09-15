@@ -60,16 +60,33 @@ class DocConfigVersionService:
         current = await self.repository.get_current_by_batch_id(batch_id)
         if not current:
             from app.models.batch import AdmissionBatch
+            from app.services.wanted_field_service import WantedFieldService
             batch_doc = await AdmissionBatch.get(batch_id)
             department_id = batch_doc.department_id if batch_doc else None
+
+            wanted_service = WantedFieldService()
+            reqs = await wanted_service.get_student_document_requirements(batch_id)
+            doc_items = [
+                DocumentRequirementItem(
+                    id=d["id"],
+                    name=d["name"],
+                    required=d["required"],
+                    allowed_types=d["allowed_types"],
+                    max_size_mb=d["max_size_mb"],
+                    description=d.get("description"),
+                    type=d["type"],
+                    extraction_fields=d.get("wanted_fields", []),
+                )
+                for d in reqs
+            ]
 
             current = DocumentConfigurationVersion(
                 batch_id=batch_id,
                 department_id=department_id,
                 version=1,
-                documents=DEFAULT_V1_DOCUMENTS,
+                documents=doc_items,
                 is_current=True,
-                change_summary="Initial document configuration (Version 1)",
+                change_summary="Initial document configuration (from Admin configuration)",
                 created_by="System",
             )
             await self.repository.save_version(current)

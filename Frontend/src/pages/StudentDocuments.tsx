@@ -58,45 +58,7 @@ interface ExtractedField {
   confidence: number
 }
 
-/* ─── Fallback requirements if no doc-version configured ─── */
-const fallbackRequirements: DocumentRequirement[] = [
-  {
-    id: 'req_1',
-    name: 'Aadhaar Card',
-    required: true,
-    allowedTypes: ['PDF', 'JPG', 'PNG'],
-    maxSizeMb: 5,
-    description: 'Upload front and back side of Aadhaar card',
-    type: 'MANDATORY',
-  },
-  {
-    id: 'req_5',
-    name: 'SSLC Marksheet',
-    required: true,
-    allowedTypes: ['PDF', 'JPG', 'PNG'],
-    maxSizeMb: 5,
-    description: '10th grade official marks statement',
-    type: 'MANDATORY',
-  },
-  {
-    id: 'req_6',
-    name: 'HSC Marksheet',
-    required: true,
-    allowedTypes: ['PDF', 'JPG', 'PNG'],
-    maxSizeMb: 5,
-    description: '12th grade / Diploma final marks statement',
-    type: 'MANDATORY',
-  },
-  {
-    id: 'req_3',
-    name: 'Community Certificate',
-    required: true,
-    allowedTypes: ['PDF', 'JPG'],
-    maxSizeMb: 5,
-    description: 'Caste / Community reservation proof',
-    type: 'MANDATORY',
-  },
-]
+
 
 /* ─── Stepper config ─── */
 const STEPS = [
@@ -179,6 +141,10 @@ export const StudentDocuments: React.FC = () => {
     ? 5
     : 2
 
+  const basePath = location.pathname.startsWith('/student')
+    ? `/student/${batchId}/documents`
+    : `/upload/${batchId}/documents`
+
   /* ── On mount: read session; redirect if missing ── */
   useEffect(() => {
     const session = readSubmissionSession()
@@ -192,6 +158,7 @@ export const StudentDocuments: React.FC = () => {
     setRegisterNum(session.register_number)
     setMobileNum(session.mobile_number)
     setBatchName(session.batch_name)
+    if (session.email) setEmail(session.email)
     if (session.class_id) setClassId(session.class_id)
     if (session.class_name) setClassName(session.class_name)
 
@@ -224,7 +191,12 @@ export const StudentDocuments: React.FC = () => {
     const loadRequirements = async () => {
       setIsLoadingBatch(true)
       try {
-        const currentV = await api.get(`/public/batches/${batchId}/doc-versions/current`)
+        const session = readSubmissionSession()
+        const currentClassId = classId || session?.class_id
+        const url = currentClassId
+          ? `/public/batches/${batchId}/doc-versions/current?classId=${encodeURIComponent(currentClassId)}`
+          : `/public/batches/${batchId}/doc-versions/current`
+        const currentV = await api.get(url)
         const reqs: DocumentRequirement[] = (currentV.data.documents || []).map((d: any) => ({
           id: d.id,
           name: d.name,
@@ -232,18 +204,19 @@ export const StudentDocuments: React.FC = () => {
           allowedTypes: d.allowed_types || ['PDF', 'JPG', 'PNG'],
           maxSizeMb: d.max_size_mb || 5,
           description: d.description || '',
-          type: d.type || 'MANDATORY',
+          type: d.type || (d.required ? 'MANDATORY' : 'OPTIONAL'),
         }))
-        setAssignedRequirements(reqs.length > 0 ? reqs : fallbackRequirements)
-      } catch {
-        setAssignedRequirements(fallbackRequirements)
+        setAssignedRequirements(reqs)
+      } catch (err) {
+        console.error('Failed to load batch document requirements:', err)
+        setAssignedRequirements([])
       } finally {
         setIsLoadingBatch(false)
       }
     }
 
     loadRequirements()
-  }, [sessionLoaded, batchId])
+  }, [sessionLoaded, batchId, classId])
 
   /* ── Initialise doc states when requirements load ── */
   useEffect(() => {
@@ -261,9 +234,9 @@ export const StudentDocuments: React.FC = () => {
   /* ── Guard: direct URL access to deep steps without session ── */
   useEffect(() => {
     if (sessionLoaded && step > 2 && !studentName) {
-      navigate(`/upload/${batchId}/documents`, { replace: true })
+      navigate(basePath, { replace: true })
     }
-  }, [step, studentName, sessionLoaded])
+  }, [step, studentName, sessionLoaded, basePath])
 
   /* ─────────────────────────────────────────────
      Upload helpers
@@ -355,7 +328,7 @@ export const StudentDocuments: React.FC = () => {
     return s?.status !== 'Uploaded' && s?.status !== 'Not Available'
   })
 
-  const canSubmit = missingRequired.length === 0 && missingOptional.length === 0
+  const canSubmit = enabledDocs.length > 0 && missingRequired.length === 0 && missingOptional.length === 0
 
   /* ─────────────────────────────────────────────
      Step 2 → 3: Trigger AI extraction
@@ -366,7 +339,7 @@ export const StudentDocuments: React.FC = () => {
       return
     }
 
-    navigate(`/upload/${batchId}/documents/processing`)
+    navigate(`${basePath}/processing`)
     setVerificationLogs((prev) => prev.map((l) => ({ ...l, status: 'pending' })))
     setIsProcessing(true)
 
@@ -375,6 +348,7 @@ export const StudentDocuments: React.FC = () => {
     formData.append('register_number', registerNum)
     formData.append('student_name', studentName)
     if (mobileNum) formData.append('mobile_number', mobileNum)
+    if (email) formData.append('email', email)
 
     Object.values(docStates).forEach((ds) => {
       if (ds.file) formData.append('files', ds.file)
@@ -404,13 +378,13 @@ export const StudentDocuments: React.FC = () => {
         setVerificationLogs((prev) => prev.map((l) => ({ ...l, status: 'complete' })))
         setIsProcessing(false)
         addToast('Documents processed! Please verify details.', 'success')
-        navigate(`/upload/${batchId}/documents/verify`)
-      }, 3200)
+        navigate(`${basePath}/verify`)
+      }, 400)
     } catch (err: any) {
       clearInterval(logInterval)
       setIsProcessing(false)
       addToast(err.response?.data?.detail || 'Document extraction failed. Try again.', 'error')
-      navigate(`/upload/${batchId}/documents`)
+      navigate(basePath)
     }
   }
 
@@ -471,7 +445,7 @@ export const StudentDocuments: React.FC = () => {
       setIsProcessing(false)
       clearSubmissionSession()
       addToast('Application submitted & Excel updated!', 'success')
-      navigate(`/upload/${batchId}/documents/success`)
+      navigate(`${basePath}/success`)
     } catch (err: any) {
       setIsProcessing(false)
       addToast(err.response?.data?.detail || 'Finalization failed. Try again.', 'error')
@@ -531,6 +505,12 @@ export const StudentDocuments: React.FC = () => {
           </span>
           <span className="text-border">·</span>
           <span className="font-mono">{registerNum}</span>
+          {email && (
+            <>
+              <span className="text-border">·</span>
+              <span className="font-mono text-muted-foreground">{email}</span>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground bg-secondary/80 px-3 py-1.5 rounded-xl border border-border/80">
           <Lock className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -595,6 +575,11 @@ export const StudentDocuments: React.FC = () => {
                       <span className="font-semibold text-foreground">
                         {studentName} ({registerNum})
                       </span>
+                      {email && (
+                        <>
+                          {' '}• <span className="font-medium text-muted-foreground">{email}</span>
+                        </>
+                      )}
                     </p>
                   </div>
                   <div className="flex flex-col bg-secondary/50 border border-border/80 px-4 py-3 rounded-xl text-xs font-mono select-none shrink-0">
@@ -609,67 +594,76 @@ export const StudentDocuments: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-5">
-                  {enabledDocs.map((req) => {
-                    const isMandatory = req.required !== undefined ? req.required : req.type === 'MANDATORY'
-                    const allowedTypes = req.allowedTypes || ['PDF', 'JPG', 'PNG']
-                    const maxSizeMb = req.maxSizeMb || 5
-                    const state = docStates[req.name] || { file: null, status: 'Pending', progress: 0 }
-                    const isUploading = state.status === 'Uploading'
-                    const isUploaded = state.status === 'Uploaded'
-                    const isNA = state.status === 'Not Available'
-                    const isHovered = draggedOverDoc === req.name
-                    const DocIcon = getDocIcon(req.name)
+                {enabledDocs.length === 0 ? (
+                  <div className="text-center py-16 px-6 bg-card rounded-2xl border border-dashed border-border space-y-3">
+                    <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto" />
+                    <h3 className="text-lg font-bold text-foreground">No admission documents configured</h3>
+                    <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                      No admission documents have been configured for this batch/class. Please contact your admissions administrator.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-5">
+                    {enabledDocs.map((req) => {
+                      const isMandatory = req.required !== undefined ? req.required : req.type === 'MANDATORY'
+                      const allowedTypes = req.allowedTypes || ['PDF', 'JPG', 'PNG']
+                      const maxSizeMb = req.maxSizeMb || 5
+                      const state = docStates[req.name] || { file: null, status: 'Pending', progress: 0 }
+                      const isUploading = state.status === 'Uploading'
+                      const isUploaded = state.status === 'Uploaded'
+                      const isNA = state.status === 'Not Available'
+                      const isHovered = draggedOverDoc === req.name
+                      const DocIcon = getDocIcon(req.name)
 
-                    return (
-                      <Card
-                        key={req.name}
-                        className={`transition-all duration-300 border-2 overflow-hidden ${
-                          isUploaded
-                            ? 'border-green-500/20 bg-green-500/2 dark:bg-green-950/5 shadow-2xs'
-                            : isNA
-                            ? 'border-border/50 bg-secondary/20 opacity-80'
-                            : isUploading
-                            ? 'border-primary/20 bg-primary/2'
-                            : isHovered
-                            ? 'border-primary ring-4 ring-primary/10'
-                            : 'border-border bg-card hover:-translate-y-0.5 hover:shadow-xs'
-                        }`}
-                        onDragOver={(e) => { e.preventDefault(); setDraggedOverDoc(req.name) }}
-                        onDragLeave={(e) => { e.preventDefault(); setDraggedOverDoc(null) }}
-                        onDrop={(e) => handleDrop(e, req)}
-                      >
-                        <div className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-5">
-                          <div className="flex items-start gap-4 min-w-0 flex-1">
-                            <div
-                              className={`p-3 rounded-xl border shrink-0 mt-0.5 transition-colors ${
-                                isUploaded
-                                  ? 'bg-green-500/10 text-green-600 border-green-500/25'
-                                  : isNA
-                                  ? 'bg-secondary text-muted-foreground border-border'
-                                  : isUploading
-                                  ? 'bg-primary/10 text-primary border-primary/20'
-                                  : 'bg-primary/5 text-primary border-primary/10'
-                              }`}
-                            >
-                              <DocIcon className="h-6 w-6" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <h3 className="font-bold text-foreground text-base leading-none">{req.name}</h3>
-                                <span
-                                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-3xs font-extrabold uppercase tracking-wider ${
-                                    isMandatory
-                                      ? 'bg-destructive/10 text-destructive border border-destructive/15'
-                                      : 'bg-primary/10 text-primary border border-primary/15'
-                                  }`}
-                                >
-                                  {isMandatory ? 'Required' : 'Optional'}
-                                </span>
+                      return (
+                        <Card
+                          key={req.name}
+                          className={`transition-all duration-300 border-2 overflow-hidden ${
+                            isUploaded
+                              ? 'border-green-500/20 bg-green-500/2 dark:bg-green-950/5 shadow-2xs'
+                              : isNA
+                              ? 'border-border/50 bg-secondary/20 opacity-80'
+                              : isUploading
+                              ? 'border-primary/20 bg-primary/2'
+                              : isHovered
+                              ? 'border-primary ring-4 ring-primary/10'
+                              : 'border-border bg-card hover:-translate-y-0.5 hover:shadow-xs'
+                          }`}
+                          onDragOver={(e) => { e.preventDefault(); setDraggedOverDoc(req.name) }}
+                          onDragLeave={(e) => { e.preventDefault(); setDraggedOverDoc(null) }}
+                          onDrop={(e) => handleDrop(e, req)}
+                        >
+                          <div className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-5">
+                            <div className="flex items-start gap-4 min-w-0 flex-1">
+                              <div
+                                className={`p-3 rounded-xl border shrink-0 mt-0.5 transition-colors ${
+                                  isUploaded
+                                    ? 'bg-green-500/10 text-green-600 border-green-500/25'
+                                    : isNA
+                                    ? 'bg-secondary text-muted-foreground border-border'
+                                    : isUploading
+                                    ? 'bg-primary/10 text-primary border-primary/20'
+                                    : 'bg-primary/5 text-primary border-primary/10'
+                                }`}
+                              >
+                                <DocIcon className="h-6 w-6" />
                               </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h3 className="font-bold text-foreground text-base leading-none">{req.name}</h3>
+                                  <span
+                                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-3xs font-extrabold uppercase tracking-wider ${
+                                      isMandatory
+                                        ? 'bg-destructive/10 text-destructive border border-destructive/15'
+                                        : 'bg-primary/10 text-primary border border-primary/15'
+                                    }`}
+                                  >
+                                    {isMandatory ? 'REQUIRED' : 'OPTIONAL'}
+                                  </span>
+                                </div>
 
-                              {req.description && (
-                                <p className="text-xs text-muted-foreground font-medium mt-1">{req.description}</p>
+                                {req.description && (
+                                  <p className="text-xs text-muted-foreground font-medium mt-1">{req.description}</p>
                               )}
 
                               <div className="flex items-center gap-3 text-3xs font-mono text-muted-foreground/80 mt-1.5 flex-wrap">
@@ -768,6 +762,7 @@ export const StudentDocuments: React.FC = () => {
                     )
                   })}
                 </div>
+              )}
               </div>
 
               {/* Right: Checklist sidebar */}
@@ -1105,7 +1100,7 @@ export const StudentDocuments: React.FC = () => {
                     <Button
                       variant="outline"
                       className="w-full py-5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer transition-all"
-                      onClick={() => navigate(`/upload/${batchId}/documents`)}
+                      onClick={() => navigate(basePath)}
                     >
                       <ArrowLeft className="h-4 w-4" /> Back to Uploads
                     </Button>

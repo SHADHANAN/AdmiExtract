@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-3.6-flash"
     MISTRAL_API_KEY: str = ""
+    EXTRACTION_BYPASS_CACHE: bool = False
+
+    # 6. Public App & CORS Settings
+    PUBLIC_APP_URL: str = "http://localhost:5173"
+    CORS_ORIGINS: str = ""
 
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE),

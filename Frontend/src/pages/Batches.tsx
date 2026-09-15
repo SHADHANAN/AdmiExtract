@@ -11,6 +11,7 @@ import { FolderOpen, Plus, Search, Calendar, Share2, Layers, Edit3, Trash2 } fro
 
 import { api } from '../services/api'
 import { copyToClipboard } from '../utils/clipboard'
+import { getStudentUploadUrl } from '../utils/studentPortalUrl'
 import type { BatchClass, Batch } from '../types'
 
 export const Batches: React.FC = () => {
@@ -347,7 +348,7 @@ export const Batches: React.FC = () => {
                           addToast('Upload link could not be generated.', 'error')
                           return
                         }
-                        const url = `${window.location.origin}/upload/${slug}`
+                        const url = getStudentUploadUrl(slug)
                         try {
                           await copyToClipboard(url)
                           addToast('Upload portal URL copied to clipboard!', 'success')

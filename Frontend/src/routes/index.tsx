@@ -33,12 +33,18 @@ export const AppRoutes: React.FC = () => {
       />
 
       {/* ── Public Student Upload Portal ─────────────────────────────────
-          /upload/:token           → Identity form (no auth)
-          /upload/:batchId/documents/* → Document workspace (session-gated)
+          /student/:token          → Identity form (public cross-network link)
+          /student/:batchId/documents/* → Document workspace (session-gated)
+          /upload/:token           → Identity form (backward compatibility)
+          /upload/:batchId/documents/* → Document workspace (backward compatibility)
       ─────────────────────────────────────────────────────────────────── */}
-      <Route path="/upload/:token" element={<StudentUpload />} />
+      <Route path="/student/:token" element={<StudentUpload />} />
+      <Route path="/student/:batchId/documents" element={<StudentDocuments />} />
+      <Route path="/student/:batchId/documents/processing" element={<StudentDocuments />} />
+      <Route path="/student/:batchId/documents/verify" element={<StudentDocuments />} />
+      <Route path="/student/:batchId/documents/success" element={<StudentDocuments />} />
 
-      {/* Document upload workspace — session validated inside the component */}
+      <Route path="/upload/:token" element={<StudentUpload />} />
       <Route path="/upload/:batchId/documents" element={<StudentDocuments />} />
       <Route path="/upload/:batchId/documents/processing" element={<StudentDocuments />} />
       <Route path="/upload/:batchId/documents/verify" element={<StudentDocuments />} />
