@@ -1,0 +1,62 @@
+[
+  {
+    "_id": "batch_1c47c721",
+    "name": "E2E Audit Batch 2026",
+    "department_id": "AIML",
+    "academic_year": "2026-2030",
+    "description": "Automated connection audit batch",
+    "start_date": null,
+    "end_date": null,
+    "status": "active",
+    "created_by": "admin",
+    "created_at": "2026-09-12 04:51:37.533000"
+  },
+  {
+    "_id": "batch_78a1d612",
+    "name": "AIML Batch 2786",
+    "department_id": "AIML",
+    "academic_year": "2026-2030",
+    "description": "QA Concurrency Test Batch",
+    "start_date": null,
+    "end_date": null,
+    "status": "active",
+    "created_by": "aiml",
+    "created_at": "2026-09-10 06:46:26.200000"
+  },
+  {
+    "_id": "batch_86af2ab0",
+    "name": "AIML Batch 3385",
+    "department_id": "AIML",
+    "academic_year": "2026-2030",
+    "description": "QA Concurrency Test Batch",
+    "start_date": null,
+    "end_date": null,
+    "status": "active",
+    "created_by": "aiml",
+    "created_at": "2026-09-10 06:56:25.483000"
+  },
+  {
+    "_id": "test-e2e-batch-real",
+    "name": "E2E Extraction Test Batch",
+    "department_id": "DEPT-TEST",
+    "academic_year": "2027-2028",
+    "description": null,
+    "start_date": null,
+    "end_date": null,
+    "status": "active",
+    "created_by": "admin",
+    "created_at": "2026-09-12 06:29:42.091000"
+  },
+  {
+    "_id": "test-perf-benchmark-batch",
+    "name": "Perf Benchmark Batch",
+    "department_id": "DEPT-PERF",
+    "academic_year": "2027-2028",
+    "description": null,
+    "start_date": null,
+    "end_date": null,
+    "status": "active",
+    "created_by": "admin",
+    "created_at": "2026-09-12 10:27:23.972000"
+  }
+]

@@ -1,0 +1,53 @@
+[
+  {
+    "_id": "6aa25242c4857be10f71b128",
+    "department_id": "6aa1e3b0da8b07991d686496",
+    "batch_id": "batch_78a1d612",
+    "class_id": null,
+    "token": "[REDACTED]",
+    "slug": "admissions-portal-2026",
+    "title": "Admissions Portal 2026",
+    "description": "Upload documents for admission",
+    "is_active": true,
+    "expires_at": null,
+    "max_submissions": null,
+    "submission_count": 0,
+    "created_by": "aiml",
+    "created_at": "2026-09-10 06:46:26.301000",
+    "updated_at": "2026-09-10 06:46:26.301000"
+  },
+  {
+    "_id": "6aa25499ca7a6112d38812ae",
+    "department_id": "6aa1e3b0da8b07991d686496",
+    "batch_id": "batch_86af2ab0",
+    "class_id": "class_batch_86af2ab0_section_alpha",
+    "token": "[REDACTED]",
+    "slug": "admissions-portal-3385",
+    "title": "Admissions Portal 3385",
+    "description": "Upload documents for admission",
+    "is_active": true,
+    "expires_at": null,
+    "max_submissions": null,
+    "submission_count": 0,
+    "created_by": "aiml",
+    "created_at": "2026-09-10 06:56:25.603000",
+    "updated_at": "2026-09-10 06:56:25.603000"
+  },
+  {
+    "_id": "6aa4da6fb9bab894cc5bcc35",
+    "department_id": "6aa1e3b0da8b07991d686496",
+    "batch_id": "batch_1c47c721",
+    "class_id": "class_batch_1c47c721_aiml_a",
+    "token": "[REDACTED]",
+    "slug": "UTnPyw_M22U",
+    "title": "E2E Upload Portal",
+    "description": null,
+    "is_active": true,
+    "expires_at": null,
+    "max_submissions": 50,
+    "submission_count": 0,
+    "created_by": "admin",
+    "created_at": "2026-09-12 04:51:59.714000",
+    "updated_at": "2026-09-12 04:51:59.714000"
+  }
+]

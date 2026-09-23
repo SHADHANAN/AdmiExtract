@@ -58,10 +58,23 @@ export const wantedFieldService = {
     classId?: string
   ): Promise<DocumentTypeOverviewItem[]> {
     const url = classId
-      ? `/wanted-fields/${batchId}/overview?class_id=${encodeURIComponent(classId)}`
+      ? `/wanted-fields/${batchId}/overview?class_id=${encodeURIComponent(classId)}&classId=${encodeURIComponent(classId)}`
       : `/wanted-fields/${batchId}/overview`
     const response = await api.get(url)
-    return response.data
+    const items: DocumentTypeOverviewItem[] = response.data || []
+    const dedupedMap = new Map<string, DocumentTypeOverviewItem>()
+    for (const item of items) {
+      const code = (item.document_type || '').toUpperCase().trim()
+      if (!dedupedMap.has(code)) {
+        dedupedMap.set(code, item)
+      } else {
+        const existing = dedupedMap.get(code)!
+        if ((item.version || 1) >= (existing.version || 1)) {
+          dedupedMap.set(code, item)
+        }
+      }
+    }
+    return Array.from(dedupedMap.values())
   },
 
   // Create a new document type for this batch

@@ -69,7 +69,10 @@ export interface StudentDocumentSubmission {
   status: StudentDocStatus;
   uploadedAt?: string;
   fileUrl?: string;
+  /** Zero-based index into the submission's documents array — used to call the secure file endpoint */
+  documentIndex?: number;
 }
+
 
 export interface DocumentConfigurationVersion {
   id: string;
@@ -82,6 +85,13 @@ export interface DocumentConfigurationVersion {
   createdAt: string;
 }
 
+export interface ClassStats {
+  students: number;
+  pending: number;
+  verified: number;
+  rejected: number;
+}
+
 export interface BatchClass {
   id: string;
   batch_id: string;
@@ -89,6 +99,7 @@ export interface BatchClass {
   department: string;
   section: string;
   academic_year: string;
+  stats?: ClassStats;
   created_at: string;
   updated_at: string;
 }
@@ -110,6 +121,10 @@ export interface StudentSubmission {
   documentSnapshot?: DocumentRequirement[];
   submittedAt: string;
   documents: StudentDocumentSubmission[];
+  extractedData?: Record<string, any>;
+  extracted_data?: Record<string, any>;
+  updatedAt?: string;
+  updated_at?: string;
 }
 
 export interface Batch {

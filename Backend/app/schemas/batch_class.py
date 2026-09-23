@@ -16,6 +16,13 @@ class ClassUpdate(BaseModel):
     academic_year: str | None = Field(default=None, min_length=1)
 
 
+class ClassStats(BaseModel):
+    students: int = 0
+    pending: int = 0
+    verified: int = 0
+    rejected: int = 0
+
+
 class ClassResponse(BaseModel):
     id: str
     batch_id: str
@@ -23,8 +30,10 @@ class ClassResponse(BaseModel):
     department: str
     section: str
     academic_year: str
+    stats: ClassStats = Field(default_factory=ClassStats)
     created_at: datetime
     updated_at: datetime
 
     class Config:
         from_attributes = True
+

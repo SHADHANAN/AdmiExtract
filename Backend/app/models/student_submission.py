@@ -23,6 +23,7 @@ class StudentSubmission(Document):
     class_id: Annotated[str | None, Indexed()] = None
     class_name: str | None = None
     department_id: str | None = None
+    upload_link_id: Annotated[str | None, Indexed()] = None
     student_name: str
     register_number: Annotated[str, Indexed()]
     mobile_number: str

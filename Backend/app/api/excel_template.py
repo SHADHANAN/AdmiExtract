@@ -199,21 +199,28 @@ async def download_excel_workbook(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Download the latest updated Excel workbook (.xlsx) for an Admission Batch or Class.
+    Download dynamically generated Excel workbook (.xlsx) for an Admission Batch or Class/Section.
+    Generated on-demand from configured column/field mappings and student data.
     """
     await _verify_batch_access(batchId, current_user)
 
-    template = await service.get_template_by_batch(batchId, class_id=classId)
-    if not template or not os.path.exists(template.file_path):
+    try:
+        buffer, filename = await service.generate_dynamic_excel_export(batchId, class_id=classId)
+        from fastapi.responses import Response
+        return Response(
+            content=buffer.getvalue(),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Access-Control-Expose-Headers": "Content-Disposition",
+            },
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Excel workbook for batch '{batchId}' (Class: '{classId}') not found.",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Dynamic export error: {str(e)}",
         )
 
-    file_prefix = f"{batchId}_{classId}" if classId else batchId
-    return FileResponse(
-        path=template.file_path,
-        filename=f"{file_prefix}_updated_{template.template_filename}",
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
 

@@ -13,8 +13,8 @@ import { Batches } from '../pages/Batches'
 import { BatchDetails } from '../pages/BatchDetails'
 import { ClassDetails } from '../pages/ClassDetails'
 import { Students } from '../pages/Students'
-import { VerificationPage } from '../pages/VerificationPage'
 import { ExportPage } from '../pages/ExportPage'
+import { DocumentsPage } from '../pages/DocumentsPage'
 import { Settings } from '../pages/Settings'
 import { StudentUpload } from '../pages/StudentUpload'
 import { StudentDocuments } from '../pages/StudentDocuments'
@@ -90,7 +90,8 @@ export const AppRoutes: React.FC = () => {
           }
         />
         <Route path="students" element={<Students />} />
-        <Route path="verification" element={<VerificationPage />} />
+        <Route path="documents" element={<DocumentsPage />} />
+        <Route path="verification" element={<Navigate to="/students" replace />} />
         <Route path="export" element={<ExportPage />} />
         <Route path="settings" element={<Settings />} />
       </Route>

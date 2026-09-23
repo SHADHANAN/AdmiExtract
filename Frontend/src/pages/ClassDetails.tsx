@@ -1,18 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useBatchStore } from '../store/useBatchStore'
-import { useStudentStore } from '../store/useStudentStore'
 import { useToastStore } from '../store/useToastStore'
 import { batchClassService } from '../services/batchClass'
-import { excelTemplateService, type ExcelTemplateResponse } from '../services/excelTemplate'
+import { excelTemplateService } from '../services/excelTemplate'
 import { copyToClipboard } from '../utils/clipboard'
 import { getStudentUploadUrl } from '../utils/studentPortalUrl'
-import type { BatchClass, StudentSubmission, UploadLink } from '../types'
+import type { BatchClass, UploadLink } from '../types'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Modal } from '../components/ui/Modal'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table'
 import { EmptyState } from '../components/ui/EmptyState'
+import { DocumentPreviewModal, type DocumentPreviewTarget } from '../components/ui/DocumentPreviewModal'
+import { DeleteStudentModal, type DeleteStudentTarget } from '../components/ui/DeleteStudentModal'
+import { useAuthStore } from '../store/useAuthStore'
+import { studentSubmissionService } from '../services/studentSubmission'
 import {
   ArrowLeft,
   Users,
@@ -24,7 +28,6 @@ import {
   Copy,
   Loader2,
   Eye,
-  Upload,
   Settings,
   Maximize2,
   QrCode,
@@ -32,26 +35,50 @@ import {
   ToggleLeft,
   ToggleRight,
   RefreshCw,
+  FileText,
+  ArrowRight,
 } from 'lucide-react'
 
 export const ClassDetails: React.FC = () => {
   const { classId } = useParams<{ classId: string }>()
   const navigate = useNavigate()
-  const { batches, uploadLinks, addUploadLink, fetchUploadLinks, toggleUploadLink, deleteUploadLink } = useBatchStore()
-  const { submissions, fetchSubmissionsByBatch } = useStudentStore()
+  const queryClient = useQueryClient()
+  const { batches, addUploadLink, toggleUploadLink, deleteUploadLink } = useBatchStore()
   const { addToast } = useToastStore()
+  const { user } = useAuthStore()
+
+  // Authorized Staff/Admin check - students cannot delete
+  const canDeleteStudent = user?.role === 'super_admin' || user?.role === 'department_admin'
 
   const [classDoc, setClassDoc] = useState<BatchClass | null>(null)
   const [isLoadingClass, setIsLoadingClass] = useState(true)
+  const [deleteStudentTarget, setDeleteStudentTarget] = useState<DeleteStudentTarget | null>(null)
+
+  // TanStack queries for server-isolated section students & upload links
+  const {
+    data: classStudents = [],
+    isLoading: isLoadingStudents,
+    refetch: refetchStudents,
+  } = useQuery({
+    queryKey: ['section-students', classId],
+    queryFn: () => (classId ? batchClassService.getClassStudents(classId) : Promise.resolve([])),
+    enabled: !!classId,
+  })
+
+  const {
+    data: classLinks = [],
+    isLoading: isLoadingLinks,
+    refetch: refetchLinks,
+  } = useQuery({
+    queryKey: ['section-upload-links', classId],
+    queryFn: () => (classId ? batchClassService.getClassUploadLinks(classId) : Promise.resolve([])),
+    enabled: !!classId,
+  })
 
   // Active Tab state — Class Dashboard Navigation
   const [activeTab, setActiveTab] = useState<'students' | 'links' | 'submissions' | 'exports' | 'settings'>('students')
 
-  // Excel template states
-  const [excelTemplate, setExcelTemplate] = useState<ExcelTemplateResponse | null>(null)
-  const [isUploadingExcel, setIsUploadingExcel] = useState(false)
-  const [, setExcelMappings] = useState<Record<string, string>>({})
-  const [, setLookupColumn] = useState<string>('Reg No')
+  // Excel export state
   const [isDownloadingExcel, setIsDownloadingExcel] = useState(false)
 
   // Class settings edit states
@@ -64,8 +91,30 @@ export const ClassDetails: React.FC = () => {
   const [linkExpiry, setLinkExpiry] = useState('')
   const [isGeneratingLink, setIsGeneratingLink] = useState(false)
   const [qrModalLink, setQrModalLink] = useState<UploadLink | null>(null)
-  const [, setSelectedStudent] = useState<StudentSubmission | null>(null)
-  const [, setPreviewDoc] = useState<{ title: string; url?: string; type?: string; studentName?: string } | null>(null)
+  const [selectedStudent, setSelectedStudent] = useState<any | null>(null)
+  const [previewTarget, setPreviewTarget] = useState<DocumentPreviewTarget | null>(null)
+
+  // Handle student deletion
+  const handleDeleteStudent = async (target: DeleteStudentTarget) => {
+    try {
+      await studentSubmissionService.deleteSubmission(target.id, classDoc?.batch_id, classId)
+      addToast(`${target.name} has been removed from this section.`, 'success')
+      // Refresh section students and counts immediately
+      await queryClient.invalidateQueries({ queryKey: ['section-students', classId] })
+      await queryClient.invalidateQueries({ queryKey: ['submissions'] })
+      if (classDoc?.batch_id) {
+        await queryClient.invalidateQueries({ queryKey: ['classes', classDoc.batch_id] })
+        await queryClient.invalidateQueries({ queryKey: ['batches'] })
+      }
+      await refetchStudents()
+      setDeleteStudentTarget(null)
+    } catch (error: any) {
+      const errorMsg =
+        error?.response?.data?.detail || error?.message || 'Failed to delete student. No data was removed.'
+      addToast(errorMsg, 'error')
+      throw error
+    }
+  }
 
   // Fetch Class details from backend
   const loadClass = useCallback(async () => {
@@ -76,77 +125,29 @@ export const ClassDetails: React.FC = () => {
       setClassDoc(cls)
       setEditClassName(cls.class_name)
       setEditSection(cls.section)
-      if (cls.batch_id) {
-        fetchSubmissionsByBatch(cls.batch_id)
-      }
     } catch {
       addToast('Class details could not be loaded.', 'error')
     } finally {
       setIsLoadingClass(false)
     }
-  }, [classId, fetchSubmissionsByBatch, addToast])
-
-  // Fetch Excel template for class
-  const loadExcelTemplateInfo = useCallback(async () => {
-    if (classDoc?.batch_id && classId) {
-      const data = await excelTemplateService.getTemplate(classDoc.batch_id, classId)
-      if (data) {
-        setExcelTemplate(data)
-        setExcelMappings(data.field_mappings || {})
-        setLookupColumn(data.lookup_column || (data.headers[0] || 'Reg No'))
-      }
-    }
-  }, [classDoc?.batch_id, classId])
+  }, [classId, addToast])
 
   useEffect(() => {
     loadClass()
   }, [loadClass])
 
-  useEffect(() => {
-    if (classDoc) {
-      loadExcelTemplateInfo()
-    }
-  }, [classDoc, loadExcelTemplateInfo])
-
-  // Filter items STRICTLY for this class (Section A)
   const parentBatch = batches.find((b) => b.id === classDoc?.batch_id)
-  const classStudents = submissions.filter((s) => {
-    if (s.classId) return s.classId === classId
-    if (classDoc && s.batchId === classDoc.batch_id && s.className === classDoc.class_name) return true
-    return false
-  })
-  const classLinks = uploadLinks.filter((l) => l.class_id === classId || (classDoc && l.batchId === classDoc.batch_id))
-
-  // Handlers
-  const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!classDoc || !e.target.files || e.target.files.length === 0) return
-    const file = e.target.files[0]
-    if (!file.name.toLowerCase().endsWith('.xlsx')) {
-      addToast('Only .xlsx format Excel files are allowed.', 'error')
-      return
-    }
-    setIsUploadingExcel(true)
-    try {
-      const res = await excelTemplateService.uploadTemplate(classDoc.batch_id, file, classId)
-      setExcelTemplate(res)
-      setExcelMappings(res.field_mappings || {})
-      setLookupColumn(res.lookup_column || (res.headers[0] || 'Reg No'))
-      addToast(`Excel template "${file.name}" uploaded for ${classDoc.class_name}!`, 'success')
-    } catch (err: any) {
-      addToast(err.message || 'Failed to upload Excel template', 'error')
-    } finally {
-      setIsUploadingExcel(false)
-    }
-  }
 
   const handleDownloadExcel = async () => {
     if (!classDoc || !classId) return
     setIsDownloadingExcel(true)
     try {
-      await excelTemplateService.downloadExcel(classDoc.batch_id, excelTemplate?.template_filename, classId)
+      const sectionNameClean = (classDoc.class_name || 'Section').replace(/\s+/g, '_')
+      const filename = `${classDoc.batch_id}_${sectionNameClean}_Export.xlsx`
+      await excelTemplateService.downloadExcel(classDoc.batch_id, filename, classId)
       addToast(`Downloaded Excel workbook for ${classDoc.class_name}!`, 'success')
     } catch (err: any) {
-      addToast(err.message || 'Failed to download Excel workbook', 'error')
+      addToast(err?.response?.data?.detail || err?.message || 'Failed to download Excel workbook', 'error')
     } finally {
       setIsDownloadingExcel(false)
     }
@@ -169,7 +170,7 @@ export const ClassDetails: React.FC = () => {
         expiresAt: linkExpiry || '',
         isActive: true,
       })
-      await fetchUploadLinks()
+      queryClient.invalidateQueries({ queryKey: ['section-upload-links', classId] })
       addToast(`Upload link generated specifically for ${classDoc.class_name}!`, 'success')
       setIsLinkModalOpen(false)
       setLinkTitle('')
@@ -248,6 +249,19 @@ export const ClassDetails: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              refetchStudents()
+              refetchLinks()
+              addToast('Refreshed section data', 'info')
+            }}
+            className="cursor-pointer gap-1.5 text-xs"
+            title="Refresh Section Data"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isLoadingStudents || isLoadingLinks ? 'animate-spin' : ''}`} /> Refresh
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setIsLinkModalOpen(true)} className="cursor-pointer gap-1.5 text-xs">
             <Plus className="h-4 w-4" /> Generate Section Link
           </Button>
@@ -306,22 +320,25 @@ export const ClassDetails: React.FC = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Register No</TableHead>
+                      <TableHead>Register Number</TableHead>
                       <TableHead>Student Name</TableHead>
-                      <TableHead>Contact Mobile</TableHead>
-                      <TableHead>Uploaded Documents</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Submitted At</TableHead>
+                      <TableHead>Documents Uploaded</TableHead>
+                      <TableHead>Submission Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {classStudents.map((student) => {
-                      const uploadedDocs = student.documents.filter((d) => d.status === 'Uploaded').length
+                    {classStudents.map((student: any) => {
+                      const uploadedDocs = (student.documents || []).filter((d: any) => d.status === 'Uploaded').length
+                      const formattedDate = student.submittedAt
+                        ? new Date(student.submittedAt).toLocaleString()
+                        : 'Pending'
                       return (
                         <TableRow key={student.id} className="hover:bg-secondary/30 transition-colors">
                           <TableCell className="font-mono text-xs font-bold text-foreground">{student.registerNum}</TableCell>
-                          <TableCell className="font-semibold text-foreground">{student.name}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{student.mobile}</TableCell>
+                          <TableCell className="font-semibold text-foreground">{student.studentName || student.name}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{formattedDate}</TableCell>
                           <TableCell className="text-xs font-bold text-foreground">{uploadedDocs} Files</TableCell>
                           <TableCell>
                             <span
@@ -333,13 +350,34 @@ export const ClassDetails: React.FC = () => {
                                   : 'bg-blue-100 text-blue-800 border border-blue-200'
                               }`}
                             >
-                              {student.status}
+                              {student.status || 'Pending'}
                             </span>
                           </TableCell>
                           <TableCell className="text-right">
-                            <Button variant="outline" size="sm" onClick={() => setSelectedStudent(student)} className="cursor-pointer text-xs">
-                              <Eye className="h-3.5 w-3.5 mr-1" /> View Profile
-                            </Button>
+                            <div className="flex items-center justify-end gap-2">
+                              <Button variant="outline" size="sm" onClick={() => setSelectedStudent(student)} className="cursor-pointer text-xs">
+                                <Eye className="h-3.5 w-3.5 mr-1" /> View Profile
+                              </Button>
+                              {canDeleteStudent && (
+                                <Button
+                                  variant="danger"
+                                  size="sm"
+                                  onClick={() =>
+                                    setDeleteStudentTarget({
+                                      id: student.id,
+                                      name: student.studentName || student.name,
+                                      registerNum: student.registerNum,
+                                      className: classDoc?.class_name,
+                                      documentsCount: (student.documents || []).length,
+                                    })
+                                  }
+                                  className="cursor-pointer text-xs"
+                                  title="Delete Student"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                                </Button>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       )
@@ -428,7 +466,7 @@ export const ClassDetails: React.FC = () => {
                                 size="sm"
                                 onClick={async () => {
                                   await toggleUploadLink(link.id)
-                                  await fetchUploadLinks()
+                                  queryClient.invalidateQueries({ queryKey: ['section-upload-links', classId] })
                                   addToast(`Link ${link.isActive ? 'disabled' : 'activated'}`, 'info')
                                 }}
                                 title={link.isActive ? 'Disable Link' : 'Enable Link'}
@@ -449,7 +487,7 @@ export const ClassDetails: React.FC = () => {
                                       expiresAt: link.expiresAt || '',
                                       isActive: true,
                                     })
-                                    await fetchUploadLinks()
+                                    queryClient.invalidateQueries({ queryKey: ['section-upload-links', classId] })
                                     addToast('Upload link regenerated successfully!', 'success')
                                   }
                                 }}
@@ -464,7 +502,7 @@ export const ClassDetails: React.FC = () => {
                                 onClick={async () => {
                                   if (window.confirm(`Delete upload link "${link.title}"?`)) {
                                     await deleteUploadLink(link.id)
-                                    await fetchUploadLinks()
+                                    queryClient.invalidateQueries({ queryKey: ['section-upload-links', classId] })
                                     addToast('Upload link deleted successfully!', 'success')
                                   }
                                 }}
@@ -536,8 +574,8 @@ export const ClassDetails: React.FC = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {classStudents.map((student) => {
-                      const isSubmitted = student.documents.some((d) => d.status === 'Uploaded') || student.status !== 'Pending'
+                    {classStudents.map((student: any) => {
+                      const isSubmitted = (student.documents || []).some((d: any) => d.status === 'Uploaded') || student.status !== 'Pending'
                       return (
                         <TableRow key={student.id} className="hover:bg-secondary/30 transition-colors">
                           <TableCell className="font-mono text-xs font-bold text-foreground">{student.registerNum}</TableCell>
@@ -571,13 +609,20 @@ export const ClassDetails: React.FC = () => {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => {
-                                  const firstUploaded = student.documents.find((d) => d.status === 'Uploaded')
-                                  setPreviewDoc({
-                                    title: firstUploaded ? firstUploaded.reqName : 'Uploaded Documents',
-                                    url: firstUploaded?.fileUrl,
-                                    type: firstUploaded?.fileType,
-                                    studentName: student.name,
-                                  })
+                                  const firstUploadedIdx = (student.documents || []).findIndex((d: any) => d.status === 'Uploaded')
+                                  if (firstUploadedIdx !== -1) {
+                                    const doc = student.documents[firstUploadedIdx]
+                                    setPreviewTarget({
+                                      submissionId: student.id,
+                                      documentIndex: doc.documentIndex !== undefined ? doc.documentIndex : firstUploadedIdx,
+                                      documentName: doc.document_name || doc.reqName || 'Document',
+                                      fileType: doc.fileType,
+                                      fileName: doc.fileName,
+                                      studentName: student.name,
+                                    })
+                                  } else {
+                                    addToast('No uploaded documents available for preview.', 'info')
+                                  }
                                 }}
                                 className="cursor-pointer text-xs py-1"
                               >
@@ -604,37 +649,33 @@ export const ClassDetails: React.FC = () => {
         {/* 5. EXPORT TAB */}
         {activeTab === 'exports' && (
           <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-bold text-foreground">Export Class Data ({classDoc.class_name})</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Export verified student submissions and mapped Excel workbooks strictly for {classDoc.class_name}.
-                </p>
+            <div className="p-6 border border-border rounded-xl bg-card space-y-5 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-bold text-foreground">Export Section Data ({classDoc.class_name})</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Generate and download a dynamic Excel (.xlsx) workbook containing verified student submissions for {classDoc.class_name}.
+                  </p>
+                </div>
+                <Button variant="primary" onClick={handleDownloadExcel} disabled={isDownloadingExcel} className="cursor-pointer gap-2 shrink-0">
+                  {isDownloadingExcel ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  Download Export (.xlsx)
+                </Button>
               </div>
-              <Button variant="primary" onClick={handleDownloadExcel} disabled={isDownloadingExcel} className="cursor-pointer gap-2">
-                {isDownloadingExcel ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                Download Export (.xlsx)
-              </Button>
-            </div>
 
-            {/* Template Status */}
-            <div className="p-6 border border-border rounded-xl bg-card space-y-4 shadow-2xs">
-              <div className="flex items-center gap-2 text-foreground font-bold text-sm">
-                <Upload className="h-4 w-4 text-primary" /> Upload Excel Template for {classDoc.class_name}
-              </div>
-              <div className="border-2 border-dashed border-border hover:border-primary/50 rounded-xl p-6 text-center transition-colors bg-secondary/20">
-                <input type="file" id="class-excel-upload" accept=".xlsx" onChange={handleExcelUpload} className="hidden" />
-                <label htmlFor="class-excel-upload" className="cursor-pointer flex flex-col items-center gap-2">
-                  {isUploadingExcel ? <Loader2 className="h-8 w-8 text-primary animate-spin" /> : <FileSpreadsheet className="h-8 w-8 text-primary" />}
-                  <div>
-                    <span className="font-bold text-sm text-foreground block">
-                      {excelTemplate ? `Replace "${excelTemplate.template_filename}"` : 'Click to Upload admission.xlsx'}
-                    </span>
-                    <span className="text-xs text-muted-foreground mt-0.5 block">
-                      Excel template will be bound to class ID {classId}.
-                    </span>
-                  </div>
-                </label>
+              <div className="pt-4 border-t border-border grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-semibold">
+                <div className="p-3.5 rounded-xl bg-secondary/30 border border-border">
+                  <span className="text-muted-foreground block text-[11px]">Enrolled Students</span>
+                  <span className="text-foreground font-bold text-base mt-0.5 block">{classStudents.length}</span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-secondary/30 border border-border">
+                  <span className="text-muted-foreground block text-[11px]">Department</span>
+                  <span className="text-foreground font-bold text-base mt-0.5 block">{classDoc.department}</span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-secondary/30 border border-border">
+                  <span className="text-muted-foreground block text-[11px]">Export Format</span>
+                  <span className="text-foreground font-bold text-base mt-0.5 block">Microsoft Excel (.xlsx)</span>
+                </div>
               </div>
             </div>
           </div>
@@ -740,6 +781,161 @@ export const ClassDetails: React.FC = () => {
           </div>
         )}
       </Modal>
+
+      {/* MODAL: VIEW STUDENT PROFILE */}
+      <Modal isOpen={Boolean(selectedStudent)} onClose={() => setSelectedStudent(null)} title={`Student Profile: ${selectedStudent?.studentName || selectedStudent?.name || ''}`}>
+        {selectedStudent && (
+          <div className="space-y-4 p-1">
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="p-3 bg-secondary/30 rounded-lg">
+                <span className="text-muted-foreground block mb-1">Register Number</span>
+                <span className="font-mono font-bold text-foreground text-sm">{selectedStudent.registerNum}</span>
+              </div>
+              <div className="p-3 bg-secondary/30 rounded-lg">
+                <span className="text-muted-foreground block mb-1">Full Name</span>
+                <span className="font-semibold text-foreground text-sm">{selectedStudent.studentName || selectedStudent.name}</span>
+              </div>
+              <div className="p-3 bg-secondary/30 rounded-lg">
+                <span className="text-muted-foreground block mb-1">Mobile Number</span>
+                <span className="text-foreground">{selectedStudent.mobile || 'N/A'}</span>
+              </div>
+              <div className="p-3 bg-secondary/30 rounded-lg">
+                <span className="text-muted-foreground block mb-1">Email</span>
+                <span className="text-foreground">{selectedStudent.email || 'N/A'}</span>
+              </div>
+              <div className="p-3 bg-secondary/30 rounded-lg">
+                <span className="text-muted-foreground block mb-1">Submission Status</span>
+                <span className="font-bold text-foreground">{selectedStudent.status || 'Pending'}</span>
+              </div>
+              <div className="p-3 bg-secondary/30 rounded-lg">
+                <span className="text-muted-foreground block mb-1">Submitted At</span>
+                <span className="text-foreground">{selectedStudent.submittedAt ? new Date(selectedStudent.submittedAt).toLocaleString() : 'N/A'}</span>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                <FileText className="h-3.5 w-3.5" />
+                Uploaded Documents ({(selectedStudent.documents || []).length})
+              </h4>
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {(selectedStudent.documents || []).length > 0 ? (
+                  (selectedStudent.documents || []).map((doc: any, i: number) => {
+                    const isUploaded = doc.status === 'Uploaded'
+                    const docIndex = doc.documentIndex !== undefined ? doc.documentIndex : i
+                    const docName = doc.document_name || doc.reqName || 'Document'
+                    const canPreview = isUploaded && docIndex !== undefined
+
+                    return (
+                      <div
+                        key={i}
+                        onClick={() => {
+                          if (canPreview) {
+                            setPreviewTarget({
+                              submissionId: selectedStudent.id,
+                              documentIndex: docIndex,
+                              documentName: docName,
+                              fileType: doc.fileType,
+                              fileName: doc.fileName,
+                              studentName: selectedStudent.studentName || selectedStudent.name,
+                            })
+                          }
+                        }}
+                        className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 shadow-2xs ${
+                          canPreview
+                            ? 'border-border bg-card hover:bg-secondary/40 hover:border-emerald-500/40 cursor-pointer'
+                            : 'border-border/60 bg-card/60 opacity-80 cursor-default'
+                        }`}
+                      >
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <div
+                            className={`flex h-8 w-8 items-center justify-center rounded-lg shrink-0 mt-0.5 ${
+                              isUploaded
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                                : 'bg-muted text-muted-foreground border border-border'
+                            }`}
+                          >
+                            <FileText className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <span className="font-bold text-foreground text-xs block truncate">{docName}</span>
+                            {doc.fileName ? (
+                              <span className="text-[11px] text-muted-foreground font-mono block mt-0.5 truncate">
+                                {doc.fileName}
+                                {doc.fileSizeMb ? ` · ${doc.fileSizeMb} MB` : ''}
+                              </span>
+                            ) : !isUploaded ? (
+                              <span className="text-[11px] text-muted-foreground/60 italic block mt-0.5">
+                                Document unavailable
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {isUploaded ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-800 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border dark:border-emerald-800/40">
+                              Uploaded
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-muted text-muted-foreground border border-border">
+                              Document unavailable
+                            </span>
+                          )}
+
+                          {canPreview && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setPreviewTarget({
+                                  submissionId: selectedStudent.id,
+                                  documentIndex: docIndex,
+                                  documentName: docName,
+                                  fileType: doc.fileType,
+                                  fileName: doc.fileName,
+                                  studentName: selectedStudent.studentName || selectedStudent.name,
+                                })
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white dark:bg-emerald-500 dark:hover:bg-emerald-400 dark:text-slate-950 transition-colors shadow-2xs cursor-pointer"
+                              title={`Preview ${docName}`}
+                            >
+                              <span>Preview</span>
+                              <ArrowRight className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">No documents uploaded.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-border">
+              <Button variant="outline" size="sm" onClick={() => setSelectedStudent(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* MODAL: PREVIEW DOCUMENT */}
+      <DocumentPreviewModal
+        target={previewTarget}
+        onClose={() => setPreviewTarget(null)}
+      />
+
+      {/* MODAL: DELETE STUDENT */}
+      <DeleteStudentModal
+        target={deleteStudentTarget}
+        isOpen={!!deleteStudentTarget}
+        onClose={() => setDeleteStudentTarget(null)}
+        onConfirm={handleDeleteStudent}
+      />
     </div>
   )
 }

@@ -39,10 +39,25 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Network or connection failure (backend unreachable)
+    // Network or connection failure
     if (!error.response) {
+      const errMsg = error?.message || ''
+      const isCorsOrNetwork =
+        errMsg.toLowerCase().includes('network error') ||
+        errMsg.toLowerCase().includes('failed to fetch') ||
+        error.code === 'ERR_NETWORK'
+
+      if (isCorsOrNetwork) {
+        const currentOrigin = typeof window !== 'undefined' ? window.location.origin : ''
+        return Promise.reject(
+          new Error(
+            `Unable to connect to backend at ${API_BASE_URL}. If the server is running, check CORS configuration for origin '${currentOrigin}'.`
+          )
+        )
+      }
+
       return Promise.reject(
-        new Error(`Backend unreachable at ${API_BASE_URL}. Please ensure the server is running.`)
+        new Error(errMsg || `Connection failure to backend at ${API_BASE_URL}.`)
       )
     }
 

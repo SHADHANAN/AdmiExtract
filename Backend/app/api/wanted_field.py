@@ -48,6 +48,7 @@ async def _verify_batch_access(batch_id: str, user: User):
 async def get_batch_wanted_fields_overview(
     batchId: str,
     classId: Optional[str] = None,
+    class_id: Optional[str] = None,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -55,7 +56,8 @@ async def get_batch_wanted_fields_overview(
     If no document types have been configured, returns an empty list.
     """
     await _verify_batch_access(batchId, current_user)
-    return await wanted_field_service.get_batch_overview(batchId, class_id=classId)
+    target_class = classId or class_id
+    return await wanted_field_service.get_batch_overview(batchId, class_id=target_class)
 
 
 def _to_config_response(config: DocumentFieldConfiguration) -> DocumentFieldConfigurationResponse:
@@ -86,6 +88,7 @@ async def create_document_type(
     batchId: str,
     payload: CreateDocumentTypePayload,
     classId: Optional[str] = None,
+    class_id: Optional[str] = None,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -93,13 +96,14 @@ async def create_document_type(
     Validates name and code uniqueness, normalizes code, and starts with zero wanted fields.
     """
     await _verify_batch_access(batchId, current_user)
+    target_class = classId or class_id
     try:
         config = await wanted_field_service.create_document_type(
             batch_id=batchId,
             name=payload.name,
             code=payload.code,
             description=payload.description,
-            class_id=classId,
+            class_id=target_class,
             initial_fields=payload.initial_fields,
             requirement_status=payload.requirement_status,
             allowed_types=payload.allowed_types,
@@ -119,13 +123,15 @@ async def get_document_wanted_fields(
     batchId: str,
     documentType: str,
     classId: Optional[str] = None,
+    class_id: Optional[str] = None,
     current_user: User = Depends(get_current_user),
 ):
     """
     Retrieve wanted fields configuration for a specific document type.
     """
     await _verify_batch_access(batchId, current_user)
-    config = await wanted_field_service.get_document_configuration(batchId, documentType, class_id=classId)
+    target_class = classId or class_id
+    config = await wanted_field_service.get_document_configuration(batchId, documentType, class_id=target_class)
     if not config:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -140,18 +146,20 @@ async def add_field_to_document_type(
     documentType: str,
     payload: AddFieldPayload,
     classId: Optional[str] = None,
+    class_id: Optional[str] = None,
     current_user: User = Depends(get_current_user),
 ):
     """
     Add a custom field to the document type's available fields list.
     """
     await _verify_batch_access(batchId, current_user)
+    target_class = classId or class_id
     try:
         updated = await wanted_field_service.add_field_to_document(
             batch_id=batchId,
             doc_type=documentType,
             field_name=payload.field_name,
-            class_id=classId,
+            class_id=target_class,
         )
     except ValueError as err:
         raise HTTPException(
@@ -168,6 +176,7 @@ async def save_document_wanted_fields(
     documentType: str,
     payload: SaveDocumentWantedFieldsPayload,
     classId: Optional[str] = None,
+    class_id: Optional[str] = None,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -175,9 +184,10 @@ async def save_document_wanted_fields(
     Enforces semantic compatibility, allowed template headers, and duplicate target conflict detection.
     """
     await _verify_batch_access(batchId, current_user)
+    target_class = classId or class_id
 
     # Get allowed headers from template if template exists
-    template = await excel_service.get_template_by_batch(batchId, class_id=classId)
+    template = await excel_service.get_template_by_batch(batchId, class_id=target_class)
     allowed_headers = template.headers if (template and template.headers) else None
 
     # Convert payload items to model items
@@ -196,7 +206,7 @@ async def save_document_wanted_fields(
             doc_type=documentType,
             fields=field_items,
             allowed_headers=allowed_headers,
-            class_id=classId,
+            class_id=target_class,
             display_name=payload.display_name,
             description=payload.description,
             requirement_status=payload.requirement_status,
@@ -217,6 +227,7 @@ async def delete_document_type(
     batchId: str,
     documentType: str,
     classId: Optional[str] = None,
+    class_id: Optional[str] = None,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -224,11 +235,12 @@ async def delete_document_type(
     Preserves auditability for existing uploaded student submissions.
     """
     await _verify_batch_access(batchId, current_user)
+    target_class = classId or class_id
     try:
         result = await wanted_field_service.delete_or_archive_document_type(
             batch_id=batchId,
             doc_type=documentType,
-            class_id=classId,
+            class_id=target_class,
         )
         return result
     except ValueError as err:
@@ -236,3 +248,4 @@ async def delete_document_type(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(err),
         )
+

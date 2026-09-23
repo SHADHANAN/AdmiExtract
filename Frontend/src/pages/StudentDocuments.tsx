@@ -4,6 +4,7 @@ import { useToastStore } from '../store/useToastStore'
 import { useAuthStore } from '../store/useAuthStore'
 import { Button } from '../components/ui/Button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card'
+import { ThemeToggle } from '../components/ui/ThemeToggle'
 import { api } from '../services/api'
 import { readSubmissionSession, clearSubmissionSession, getStudentMe } from '../services/studentIdentity'
 import {
@@ -30,14 +31,14 @@ import {
   Award,
   Milestone,
   AlertCircle,
-  Terminal,
+  Clock,
+  CheckCircle2,
   Layers,
   Sparkles,
   Edit2,
   Save,
   ArrowLeft,
   ShieldAlert,
-  Printer,
 } from 'lucide-react'
 import type { DocumentRequirement } from '../types'
 
@@ -48,25 +49,28 @@ interface DocumentState {
   progress: number
 }
 
-interface VerificationLog {
-  name: string
-  status: 'pending' | 'scanning' | 'complete'
-}
-
 interface ExtractedField {
   value: string
   confidence: number
+}
+
+interface ProcessingJobItem {
+  job_id: string
+  document_name: string
+  document_type: string
+  status: string
+  error?: string
 }
 
 
 
 /* ─── Stepper config ─── */
 const STEPS = [
-  { number: 1, label: 'Identify' },
-  { number: 2, label: 'Upload' },
+  { number: 1, label: 'Student Details' },
+  { number: 2, label: 'Documents' },
   { number: 3, label: 'Processing' },
-  { number: 4, label: 'Verify' },
-  { number: 5, label: 'Success' },
+  { number: 4, label: 'Verification' },
+  { number: 5, label: 'Complete' },
 ]
 
 /* ─── Icon helper ─── */
@@ -107,6 +111,8 @@ export const StudentDocuments: React.FC = () => {
   const [batchName, setBatchName] = useState('')
   const [classId, setClassId] = useState<string | undefined>()
   const [className, setClassName] = useState<string | undefined>()
+  const [uploadLinkId, setUploadLinkId] = useState<string | undefined>()
+  const [token, setToken] = useState<string | undefined>()
   const [assignedRequirements, setAssignedRequirements] = useState<DocumentRequirement[]>([])
   const [isLoadingBatch, setIsLoadingBatch] = useState(true)
 
@@ -123,14 +129,7 @@ export const StudentDocuments: React.FC = () => {
   const [submissionId, setSubmissionId] = useState('')
   const [submissionTime, setSubmissionTime] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
-
-  /* ── Processing console logs ── */
-  const [verificationLogs, setVerificationLogs] = useState<VerificationLog[]>([
-    { name: 'Uploading PDFs to secure admissions server...', status: 'pending' },
-    { name: 'Running OCR Document Processing maps...', status: 'pending' },
-    { name: 'AI Extracting requested fields & confidence metrics...', status: 'pending' },
-    { name: 'Preparing verification payloads...', status: 'pending' },
-  ])
+  const [processingJobs, setProcessingJobs] = useState<ProcessingJobItem[]>([])
 
   /* ── Derive current step from URL path ── */
   const step = location.pathname.endsWith('/processing')
@@ -161,6 +160,8 @@ export const StudentDocuments: React.FC = () => {
     if (session.email) setEmail(session.email)
     if (session.class_id) setClassId(session.class_id)
     if (session.class_name) setClassName(session.class_name)
+    if (session.upload_link_id) setUploadLinkId(session.upload_link_id)
+    if (session.token) setToken(session.token)
 
     const fetchStudentProfile = async () => {
       const tokenInStore = useAuthStore.getState().token
@@ -197,15 +198,23 @@ export const StudentDocuments: React.FC = () => {
           ? `/public/batches/${batchId}/doc-versions/current?classId=${encodeURIComponent(currentClassId)}`
           : `/public/batches/${batchId}/doc-versions/current`
         const currentV = await api.get(url)
-        const reqs: DocumentRequirement[] = (currentV.data.documents || []).map((d: any) => ({
-          id: d.id,
-          name: d.name,
-          required: d.required,
-          allowedTypes: d.allowed_types || ['PDF', 'JPG', 'PNG'],
-          maxSizeMb: d.max_size_mb || 5,
-          description: d.description || '',
-          type: d.type || (d.required ? 'MANDATORY' : 'OPTIONAL'),
-        }))
+        const rawDocs = currentV.data.documents || []
+        const dedupedMap = new Map<string, DocumentRequirement>()
+        for (const d of rawDocs) {
+          const stableKey = (d.document_code || d.code || d.id || d.name || '').trim().toUpperCase()
+          if (!dedupedMap.has(stableKey)) {
+            dedupedMap.set(stableKey, {
+              id: d.id || d.code || d.name,
+              name: d.name,
+              required: d.required,
+              allowedTypes: d.allowed_types || ['PDF', 'JPG', 'PNG'],
+              maxSizeMb: d.max_size_mb || 5,
+              description: d.description || '',
+              type: d.type || (d.required ? 'MANDATORY' : 'OPTIONAL'),
+            })
+          }
+        }
+        const reqs: DocumentRequirement[] = Array.from(dedupedMap.values())
         setAssignedRequirements(reqs)
       } catch (err) {
         console.error('Failed to load batch document requirements:', err)
@@ -213,6 +222,7 @@ export const StudentDocuments: React.FC = () => {
       } finally {
         setIsLoadingBatch(false)
       }
+
     }
 
     loadRequirements()
@@ -340,7 +350,6 @@ export const StudentDocuments: React.FC = () => {
     }
 
     navigate(`${basePath}/processing`)
-    setVerificationLogs((prev) => prev.map((l) => ({ ...l, status: 'pending' })))
     setIsProcessing(true)
 
     const formData = new FormData()
@@ -354,34 +363,54 @@ export const StudentDocuments: React.FC = () => {
       if (ds.file) formData.append('files', ds.file)
     })
 
-    let logIdx = 0
-    const logInterval = setInterval(() => {
-      setVerificationLogs((prev) =>
-        prev.map((l, i) => {
-          if (i === logIdx) return { ...l, status: 'scanning' }
-          if (i < logIdx) return { ...l, status: 'complete' }
-          return l
-        })
-      )
-      logIdx++
-    }, 800)
+    // Initialise processing queue display for uploaded documents
+    const initialJobs: ProcessingJobItem[] = enabledDocs
+      .filter((req) => docStates[req.name]?.status === 'Uploaded')
+      .map((req) => ({
+        job_id: req.name,
+        document_name: req.name,
+        document_type: req.type || 'DOCUMENT',
+        status: 'QUEUED',
+      }))
+    setProcessingJobs(initialJobs)
+
+    let pollInterval: any = null
 
     try {
-      const response = await api.post('/student-submissions/extract', formData, {
+      const response = await api.post('/student-submissions/extract-async', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
-      const rawExtracted = response.data.verification_fields || response.data.extracted_data || {}
-      setExtractedData(rawExtracted)
+      const currentSubId = response.data.submission_id
 
-      setTimeout(() => {
-        clearInterval(logInterval)
-        setVerificationLogs((prev) => prev.map((l) => ({ ...l, status: 'complete' })))
-        setIsProcessing(false)
-        addToast('Documents processed! Please verify details.', 'success')
-        navigate(`${basePath}/verify`)
-      }, 400)
+      // Poll extraction status every 1.5 seconds
+      pollInterval = setInterval(async () => {
+        try {
+          const statusRes = await api.get(`/student-submissions/${currentSubId}/status`)
+          const data = statusRes.data
+
+          if (data.documents && data.documents.length > 0) {
+            setProcessingJobs(data.documents)
+          }
+
+          if (data.status === 'READY_FOR_VERIFICATION' || data.status === 'PARTIAL_SUCCESS') {
+            clearInterval(pollInterval)
+            const rawExtracted = data.verification_fields || data.extracted_data || {}
+            setExtractedData(rawExtracted)
+            setIsProcessing(false)
+            addToast('Documents processed! Please verify details.', 'success')
+            navigate(`${basePath}/verify`)
+          } else if (data.status === 'FAILED') {
+            clearInterval(pollInterval)
+            setIsProcessing(false)
+            addToast('Document extraction failed. Try again.', 'error')
+            navigate(basePath)
+          }
+        } catch (pollErr) {
+          console.error('Error polling status:', pollErr)
+        }
+      }, 1500)
     } catch (err: any) {
-      clearInterval(logInterval)
+      if (pollInterval) clearInterval(pollInterval)
       setIsProcessing(false)
       addToast(err.response?.data?.detail || 'Document extraction failed. Try again.', 'error')
       navigate(basePath)
@@ -428,6 +457,8 @@ export const StudentDocuments: React.FC = () => {
       batch_name: batchName,
       class_id: classId,
       class_name: className,
+      upload_link_id: uploadLinkId,
+      token: token,
       student_name: studentName,
       register_number: registerNum,
       mobile_number: mobileNum,
@@ -482,20 +513,20 @@ export const StudentDocuments: React.FC = () => {
      RENDER
   ═══════════════════════════════════════════ */
   return (
-    <div className="flex min-h-screen flex-col bg-[#f9fafb] dark:bg-[#080d16] transition-colors duration-300">
+    <div className="flex min-h-screen flex-col bg-background text-foreground transition-colors duration-300">
 
       {/* ── Header ── */}
       <header className="sticky top-0 z-50 flex h-16 w-full items-center justify-between border-b border-border bg-card/80 backdrop-blur-md px-6 md:px-8 shadow-2xs">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/20">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20 shadow-2xs">
             <GraduationCap className="h-5 w-5" />
           </div>
           <div>
-            <span className="text-base font-extrabold tracking-tight text-foreground">
-              Smart Admissions
+            <span className="text-base font-extrabold tracking-tight text-foreground block leading-tight">
+              ADMIEXTRACT
             </span>
-            <span className="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/15">
-              Dynamic Portal
+            <span className="text-xs text-muted-foreground font-medium">
+              Student Admission Portal
             </span>
           </div>
         </div>
@@ -512,9 +543,12 @@ export const StudentDocuments: React.FC = () => {
             </>
           )}
         </div>
-        <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground bg-secondary/80 px-3 py-1.5 rounded-xl border border-border/80">
-          <Lock className="h-3.5 w-3.5 text-primary shrink-0" />
-          <span>AES-256 Secured</span>
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground bg-secondary/80 px-3 py-1.5 rounded-xl border border-border/80">
+            <Lock className="h-3.5 w-3.5 text-primary shrink-0" />
+            <span>AES-256 Secured</span>
+          </div>
         </div>
       </header>
 
@@ -617,7 +651,7 @@ export const StudentDocuments: React.FC = () => {
 
                       return (
                         <Card
-                          key={req.name}
+                          key={req.id || req.name}
                           className={`transition-all duration-300 border-2 overflow-hidden ${
                             isUploaded
                               ? 'border-green-500/20 bg-green-500/2 dark:bg-green-950/5 shadow-2xs'
@@ -797,7 +831,7 @@ export const StudentDocuments: React.FC = () => {
                           const uploaded = s?.status === 'Uploaded'
                           const na = s?.status === 'Not Available'
                           return (
-                            <div key={req.name} className="flex items-center justify-between text-xs py-1.5 border-b border-border/50">
+                            <div key={req.id || req.name} className="flex items-center justify-between text-xs py-1.5 border-b border-border/50">
                               <span className="font-semibold text-muted-foreground truncate max-w-[160px]">{req.name}</span>
                               {uploaded ? (
                                 <span className="inline-flex items-center gap-0.5 text-green-600 font-extrabold">
@@ -852,43 +886,107 @@ export const StudentDocuments: React.FC = () => {
 
           {/* ══ STEP 3: Processing ══ */}
           {step === 3 && (
-            <Card className="border border-border bg-card shadow-xl max-w-xl mx-auto overflow-hidden rounded-2xl">
-              <div className="h-2 bg-gradient-to-r from-primary to-indigo-500" />
-              <CardContent className="p-8 text-center space-y-6">
-                <div className="relative mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-primary/5 text-primary border border-primary/20">
+            <Card className="border-border bg-card text-card-foreground shadow-md max-w-xl w-full mx-auto overflow-hidden rounded-2xl">
+              <div className="h-1.5 bg-gradient-to-r from-primary via-emerald-500 to-primary" />
+              <CardContent className="p-6 sm:p-8 text-center space-y-6">
+                <div className="relative mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-primary border border-primary/20 shadow-xs">
                   <Loader2 className="h-10 w-10 animate-spin" />
                 </div>
                 <div className="space-y-2">
-                  <h3 className="text-xl font-black text-foreground">Processing Your Documents</h3>
-                  <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                    Analyzing visual document boundaries, executing OCR character extraction, and saving verified directory data.
+                  <h3 className="text-xl font-bold text-foreground tracking-tight">Processing Your Documents</h3>
+                  <p className="text-sm text-muted-foreground max-w-sm mx-auto leading-relaxed">
+                    Please wait while our verification engine processes your uploaded certificates and extracts admission fields.
                   </p>
                 </div>
 
-                <div className="bg-[#0f172a] text-green-400 font-mono text-left text-xs p-4 rounded-xl border border-slate-800 shadow-inner max-w-md mx-auto space-y-2.5">
-                  <div className="flex items-center gap-2 text-slate-400 border-b border-slate-800 pb-2 mb-2">
-                    <Terminal className="h-4 w-4" />
-                    <span className="font-bold text-3xs uppercase tracking-wider">OCR Processing Console</span>
+                {/* Per-document live concurrent status list */}
+                {processingJobs.length > 0 && (
+                  <div className="bg-secondary/40 dark:bg-secondary/30 border border-border rounded-xl p-4 text-left space-y-3 max-w-md w-full mx-auto shadow-2xs">
+                    <div className="text-xs font-bold text-foreground/90 border-b border-border/80 pb-2.5 flex items-center justify-between">
+                      <span className="uppercase tracking-wider text-[11px] font-extrabold text-muted-foreground">Document Status</span>
+                      <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 font-bold inline-flex items-center gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        Live Validation
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {processingJobs.map((j) => {
+                        const isCompleted = j.status === 'COMPLETED'
+                        const isProcessing = j.status === 'PROCESSING'
+                        const isFailed = j.status === 'FAILED'
+                        const isQueued = j.status === 'QUEUED' || j.status === 'RETRY_PENDING'
+                        return (
+                          <div
+                            key={j.job_id || j.document_name}
+                            className="flex items-center justify-between p-2.5 rounded-lg bg-card border border-border text-xs shadow-2xs hover:bg-secondary/40 transition-colors"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <span className="font-semibold text-foreground truncate" title={j.document_name}>
+                                {j.document_name}
+                              </span>
+                            </div>
+                            <div className="shrink-0">
+                              {isCompleted && (
+                                <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-bold px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/25 text-[10px]">
+                                  <Check className="h-3 w-3 stroke-[3]" /> Completed
+                                </span>
+                              )}
+                              {isProcessing && (
+                                <span className="inline-flex items-center gap-1 text-primary font-bold px-2 py-0.5 rounded-md bg-primary/10 border border-primary/25 text-[10px] animate-pulse">
+                                  <Loader2 className="h-3 w-3 animate-spin" /> Processing
+                                </span>
+                              )}
+                              {isQueued && (
+                                <span className="inline-flex items-center gap-1 text-muted-foreground font-semibold px-2 py-0.5 rounded-md bg-secondary border border-border text-[10px]">
+                                  <Clock className="h-3 w-3" /> Queued
+                                </span>
+                              )}
+                              {isFailed && (
+                                <span className="inline-flex items-center gap-1 text-destructive font-bold px-2 py-0.5 rounded-md bg-destructive/10 border border-destructive/25 text-[10px]">
+                                  <X className="h-3 w-3 stroke-[3]" /> Retry Needed
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
-                  {verificationLogs.map((log, i) => {
-                    const done = log.status === 'complete'
-                    const scanning = log.status === 'scanning'
-                    return (
-                      <div
-                        key={i}
-                        className={`flex items-center gap-2.5 transition-opacity duration-300 ${!done && !scanning ? 'opacity-30' : 'opacity-100'}`}
+                )}
+
+                {/* Friendly Verification Progress Stages */}
+                <div className="bg-secondary/40 dark:bg-secondary/30 text-left text-xs p-4 rounded-xl border border-border shadow-2xs max-w-md w-full mx-auto space-y-3">
+                  <div className="font-bold text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/80 pb-2">
+                    Verification Pipeline
+                  </div>
+                  {[
+                    { label: 'Documents uploaded', status: 'done' },
+                    { label: 'Document validation', status: 'done' },
+                    { label: 'Extraction in progress', status: 'progress' },
+                    { label: 'Verification ready', status: 'pending' },
+                  ].map((stage, i) => (
+                    <div key={i} className="flex items-center gap-2.5">
+                      {stage.status === 'done' ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      ) : stage.status === 'progress' ? (
+                        <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" />
+                      ) : (
+                        <div className="h-4 w-4 rounded-full border-2 border-border dark:border-muted-foreground/40 shrink-0" />
+                      )}
+                      <span
+                        className={`text-xs ${
+                          stage.status === 'progress'
+                            ? 'font-bold text-foreground'
+                            : stage.status === 'done'
+                            ? 'font-medium text-foreground/90'
+                            : 'text-muted-foreground'
+                        }`}
                       >
-                        {done ? (
-                          <Check className="h-3.5 w-3.5 text-green-400 shrink-0 stroke-[2.5]" />
-                        ) : scanning ? (
-                          <Loader2 className="h-3.5 w-3.5 text-primary animate-spin shrink-0" />
-                        ) : (
-                          <div className="h-3.5 w-3.5 rounded-full border border-slate-600 shrink-0" />
-                        )}
-                        <span className={scanning ? 'text-white font-bold animate-pulse' : ''}>{log.name}</span>
-                      </div>
-                    )
-                  })}
+                        {stage.label}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
@@ -1176,14 +1274,7 @@ export const StudentDocuments: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                  <Button
-                    variant="outline"
-                    className="w-full py-4 rounded-xl cursor-pointer flex items-center justify-center gap-2"
-                    onClick={() => window.print()}
-                  >
-                    <Printer className="h-4 w-4" /> Print Receipt
-                  </Button>
+                <div className="pt-2">
                   <Button
                     variant="primary"
                     className="w-full py-4 rounded-xl cursor-pointer shadow-md shadow-primary/10 hover:shadow-lg transition-all"

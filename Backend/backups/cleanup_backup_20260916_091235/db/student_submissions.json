@@ -1,0 +1,4143 @@
+[
+  {
+    "_id": "6aa25524ca7a6112d38812b0",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "AIML Batch 3385",
+    "class_id": "class_batch_86af2ab0_section_alpha",
+    "class_name": "Section Alpha",
+    "department_id": "AIML",
+    "student_name": "Kavitha Raman",
+    "register_number": "QA_REG_1001",
+    "mobile_number": "9876543210",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Student Name": "Kavitha Raman",
+      "Father Name": "SARAVANA KUMAR V",
+      "Mother Name": "PRIYA G",
+      "DOB": "Verified",
+      "Gender": "Verified",
+      "Community": "BC",
+      "Caste": "BC",
+      "Aadhaar": "Verified",
+      "EMIS": "Verified",
+      "Register Number": "QA_REG_1001",
+      "Mobile": "9876543210",
+      "Address": "\u0baf\u0bbf\u0bb2\u0bcd \u0bb5\u0b9a\u0bbf\u0ba4\u0bcd\u0ba4\u0bc1 \u0bb5\u0bb0\u0bc1\u0bae\u0bcd \u0b9a\u0bc6\u0bb2\u0bcd\u0bb5\u0ba9\u0bcd \u0bb7\u0bbe\u0ba4\u0ba9\u0ba9\u0bcd \u0b9a \u0ba4\u0ba8\u0bcd\u0ba4\u0bc8\u0baf\u0bbf\u0ba9\u0bcd \u0baa\u0bc6\u0baf\u0bb0\u0bcd \u0ba4\u0bbf\u0bb0\u0bc1 \u0b9a\u0bb0\u0bb5\u0ba3\u0b95\u0bcd\u0b95\u0bc1\u0bae\u0bbe\u0bb0\u0bcd \u0b8e\u0ba9\u0bcd\u0baa\u0bb5\u0bb0\u0bcd, \u0b85\u0bb0\u0b9a\u0bc1 \u0b86\u0ba3\u0bc8 \u0ba8\u0bbf\u0bb2\u0bc8 \u0b8e\u0ba3\u0bcd: 85. \u0baa\u0bbf\u0bb1\u0bcd\u0baa\u0b9f\u0bc1\u0ba4\u0bcd\u0ba4\u0baa\u0bcd\u0baa\u0b9f\u0bcd\u0b9f\u0bcb\u0bb0\u0bcd, \u0bae\u0bbf\u0b95\u0baa\u0bcd\u0baa\u0bbf\u0bb1\u0bcd\u0baa\u0b9f\u0bc1\u0ba4\u0bcd\u0ba4\u0baa\u0bcd\u0baa\u0b9f\u0bcd\u0b9f\u0bcb\u0bb0\u0bcd \u0bae\u0bb1\u0bcd\u0bb1\u0bc1\u0bae\u0bcd \u0b9a\u0bbf\u0bb1\u0bc1\u0baa\u0bbe\u0ba9\u0bcd\u0bae\u0bc8\u0baf\u0bbf\u0ba9\u0bb0\u0bcd \u0baa\u0bbf\u0bb0\u0bbf\u0bb5\u0bbf\u0ba9\u0bcd \u0ba8\u0bb2\u0ba4\u0bcd\u0ba4\u0bc1\u0bb1\u0bc8 \u0ba8\u0bbe\u0bb3\u0bcd 29.07.2008 \u0bb5\u0bb0\u0bbf\u0b9a\u0bc8 \u0b8e\u0ba3\u0bcd 25 \u0ba9\u0bcd\u0baa\u0b9f\u0bbf \u0bb5\u0b9f\u0bc1\u0b95\u0bb0\u0bcd \u0b8e\u0ba9\u0bcd\u0bb1 \u0baa\u0bbf\u0bb1\u0bcd\u0baa\u0b9f\u0bcd\u0b9f \u0bb5\u0b95\u0bc1\u0baa\u0bcd\u0baa\u0bc8\u0b9a\u0bcd \u0b9a\u0bc7\u0bb0\u0bcd\u0ba8\u0bcd\u0ba4\u0bb5\u0bb0\u0bcd \u0b8e\u0ba9\u0b9a\u0bcd \u0b9a\u0bbe\u0ba9\u0bcd\u0bb1\u0bb3\u0bbf\u0b95\u0bcd\u0b95\u0baa\u0bcd\u0baa\u0b9f\u0bc1\u0b95\u0bbf\u0bb1\u0ba4\u0bc1., This is to certify that Selvan Shadhanan S son of Thiru Saravanakumar residing at Door No. 39, Balakrishnapuram, siluvathur road, of Balakrishnapuram Village / Town Dindigul East Taluk Dindigul District of the State of Tamil Nadu belongs to Vadugar Community, which is recognized as a Backward Class as per Government Order (Ms.) No. 85, Backward Classes, Most Backward Classes and Minority Welfare Department (BCC), dated 29th July 2008 vide Serial No. 25., Signature Not Verified, Digitally signed by SUBBIAH PREMKUMAR, Date: 24/10/2024 18: 59: 33 IST, \u0bae\u0bbe\u0bb5\u0b9f\u0bcd\u0b9f\u0bae\u0bcd /District: Dindigul, \u0bb5\u0b9f\u0bcd\u0b9f\u0bae\u0bcd /Taluk: Dindigul East, \u0baa\u0ba4\u0bb5\u0bbf /Designation: \u0bae\u0ba3\u0bcd\u0b9f\u0bb2 \u0ba4\u0bc1\u0ba3\u0bc8 \u0bb5\u0b9f\u0bcd\u0b9f\u0bbe\u0b9f\u0bcd\u0b9a\u0bbf\u0baf\u0bb0\u0bcd /Zonal Deputy Tahsildar, \u0b95\u0bc1\u0bb1\u0bbf\u0baa\u0bcd\u0baa\u0bc1 / Remarks: , \u0b87\u0b9a\u0bcd\u0b9a\u0bbe\u0ba9\u0bcd\u0bb1\u0bbf\u0ba4\u0bb4\u0bcd \u0bae\u0bbf\u0ba9\u0bcd\u0b95\u0bc8\u0baf\u0bca\u0baa\u0bcd\u0baa\u0bae\u0bcd \u0b87\u0b9f\u0baa\u0bcd\u0baa\u0b9f\u0bcd\u0b9f\u0ba4\u0bbe\u0bb2\u0bcd, \u0b95\u0bc8\u0baf\u0bca\u0baa\u0bcd\u0baa\u0bae\u0bcd \u0b85\u0bb2\u0bcd\u0bb2\u0ba4\u0bc1 \u0bae\u0bc1\u0ba4\u0bcd\u0ba4\u0bbf\u0bb0\u0bc8 \u0ba4\u0bc7\u0bb5\u0bc8\u0baf\u0bbf\u0bb2\u0bcd\u0bb2\u0bc8 /, This certificate is digitally signed and does not require any seal or signature., \u0b86\u0bb5\u0ba3 \u0bb5\u0bbf\u0bb5\u0bb0\u0b99\u0bcd\u0b95\u0bb3\u0bc8 \u0b89\u0bb1\u0bc1\u0ba4\u0bbf \u0b9a\u0bc6\u0baf\u0bcd\u0baf: , (\u0b85) TN-5202410235381 \u0b8e\u0ba9\u0bcd\u0bb1 \u0ba4\u0ba9\u0bbf\u0baa\u0bcd\u0baa\u0b9f\u0bcd\u0b9f \u0b9a\u0bbe\u0ba9\u0bcd\u0bb1\u0bbf\u0ba4\u0bb4\u0bcd \u0b8e\u0ba3\u0bcd\u0ba3\u0bc8 https: //tnedistrict.tn.gov.in/tneda/VerifyCerti.xhtml \u0bb2\u0bcd \u0b89\u0bb3\u0bcd\u0bb3\u0bc0\u0b9f\u0bc1 \u0b9a\u0bc6\u0baf\u0bcd\u0ba4\u0bc1 \u0b9a\u0bb0\u0bbf\u0baa\u0bbe\u0bb0\u0bcd\u0b95\u0bcd\u0b95\u0bb5\u0bc1\u0bae\u0bcd., (\u0b85\u0bb2\u0bcd\u0bb2\u0ba4\u0bc1), (\u0b86) \u0b95\u0bc8\u0baa\u0bcd\u0baa\u0bc7\u0b9a\u0bbf \u0b95\u0bc7\u0bae\u0bb0\u0bbe\u0bb5\u0bbf\u0ba9\u0bcd 2D barcode \u0baa\u0b9f\u0bbf\u0baa\u0bcd\u0baa\u0bbe\u0ba9\u0bcd \u0bae\u0bc2\u0bb2\u0bae\u0bcd \u0b87\u0ba3\u0bc8\u0baf\u0ba4\u0bb3\u0ba4\u0bcd\u0ba4\u0bbf\u0bb2\u0bcd \u0b9a\u0bb0\u0bbf\u0baa\u0bbe\u0bb0\u0bcd\u0b95\u0bcd\u0b95\u0bb5\u0bc1\u0bae\u0bcd., Genuineness of the certificate can be verified by., (a) Keying in the unique certificate number TN-5202410235381 in the URL https: //tnedistrict.tn.gov.in/tneda/VerifyCerti.xhtml., (or), (b) Reading the 2D barcode with mobile barcode reader and verify through online.",
+      "District": "Code",
+      "Taluk": "Verified",
+      "Village": "Verified",
+      "State": "of Tamil Nadu belongs to Vadugar Community",
+      "Pincode": "641014"
+    },
+    "submitted_at": "2026-09-10 06:58:44.157000",
+    "updated_at": "2026-09-10 06:58:44.157000",
+    "documents": [
+      {
+        "document_name": "10th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "12th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "Community Certificate",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      }
+    ]
+  },
+  {
+    "_id": "6aa25524ca7a6112d38812b1",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "AIML Batch 3385",
+    "class_id": "class_batch_86af2ab0_section_alpha",
+    "class_name": "Section Alpha",
+    "department_id": "AIML",
+    "student_name": "Student A - Rajesh",
+    "register_number": "CONCUR_A",
+    "mobile_number": "9123456781",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Student Name": "Student A - Rajesh",
+      "Register Number": "CONCUR_A",
+      "Mobile Number": "9123456781"
+    },
+    "submitted_at": "2026-09-10 06:58:44.557000",
+    "updated_at": "2026-09-10 06:58:44.557000",
+    "documents": [
+      {
+        "document_name": "10th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "12th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "Community Certificate",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      }
+    ]
+  },
+  {
+    "_id": "6aa25524ca7a6112d38812b2",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "AIML Batch 3385",
+    "class_id": "class_batch_86af2ab0_section_alpha",
+    "class_name": "Section Alpha",
+    "department_id": "AIML",
+    "student_name": "Student B - Priya",
+    "register_number": "CONCUR_B",
+    "mobile_number": "9123456782",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Student Name": "Student B - Priya",
+      "Register Number": "CONCUR_B",
+      "Mobile Number": "9123456782"
+    },
+    "submitted_at": "2026-09-10 06:58:44.566000",
+    "updated_at": "2026-09-10 06:58:44.566000",
+    "documents": [
+      {
+        "document_name": "10th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "12th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "Community Certificate",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      }
+    ]
+  },
+  {
+    "_id": "6aa25524ca7a6112d38812b3",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "AIML Batch 3385",
+    "class_id": "class_batch_86af2ab0_section_alpha",
+    "class_name": "Section Alpha",
+    "department_id": "AIML",
+    "student_name": "Student C - Dinesh",
+    "register_number": "CONCUR_C",
+    "mobile_number": "9123456783",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Student Name": "Student C - Dinesh",
+      "Register Number": "CONCUR_C",
+      "Mobile Number": "9123456783"
+    },
+    "submitted_at": "2026-09-10 06:58:44.694000",
+    "updated_at": "2026-09-10 06:58:44.694000",
+    "documents": [
+      {
+        "document_name": "10th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "12th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "Community Certificate",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      }
+    ]
+  },
+  {
+    "_id": "6aa25528ca7a6112d38812b4",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "AIML Batch 3385",
+    "class_id": "class_batch_86af2ab0_section_alpha",
+    "class_name": "Section Alpha",
+    "department_id": "AIML",
+    "student_name": "Continuous Student 1",
+    "register_number": "PERF_0",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Student Name": "Continuous Student 1",
+      "Register Number": "PERF_0"
+    },
+    "submitted_at": "2026-09-10 06:58:48.853000",
+    "updated_at": "2026-09-10 06:58:48.853000",
+    "documents": [
+      {
+        "document_name": "10th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "12th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "Community Certificate",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      }
+    ]
+  },
+  {
+    "_id": "6aa25529ca7a6112d38812b5",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "AIML Batch 3385",
+    "class_id": "class_batch_86af2ab0_section_alpha",
+    "class_name": "Section Alpha",
+    "department_id": "AIML",
+    "student_name": "Continuous Student 2",
+    "register_number": "PERF_1",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Student Name": "Continuous Student 2",
+      "Register Number": "PERF_1"
+    },
+    "submitted_at": "2026-09-10 06:58:49.024000",
+    "updated_at": "2026-09-10 06:58:49.024000",
+    "documents": [
+      {
+        "document_name": "10th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "12th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "Community Certificate",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      }
+    ]
+  },
+  {
+    "_id": "6aa25529ca7a6112d38812b6",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "AIML Batch 3385",
+    "class_id": "class_batch_86af2ab0_section_alpha",
+    "class_name": "Section Alpha",
+    "department_id": "AIML",
+    "student_name": "Continuous Student 3",
+    "register_number": "PERF_2",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Student Name": "Continuous Student 3",
+      "Register Number": "PERF_2"
+    },
+    "submitted_at": "2026-09-10 06:58:49.195000",
+    "updated_at": "2026-09-10 06:58:49.195000",
+    "documents": [
+      {
+        "document_name": "10th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "12th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "Community Certificate",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      }
+    ]
+  },
+  {
+    "_id": "6aa25529ca7a6112d38812b7",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "AIML Batch 3385",
+    "class_id": "class_batch_86af2ab0_section_alpha",
+    "class_name": "Section Alpha",
+    "department_id": "AIML",
+    "student_name": "Continuous Student 4",
+    "register_number": "PERF_3",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Student Name": "Continuous Student 4",
+      "Register Number": "PERF_3"
+    },
+    "submitted_at": "2026-09-10 06:58:49.369000",
+    "updated_at": "2026-09-10 06:58:49.369000",
+    "documents": [
+      {
+        "document_name": "10th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "12th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "Community Certificate",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      }
+    ]
+  },
+  {
+    "_id": "6aa25529ca7a6112d38812b8",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "AIML Batch 3385",
+    "class_id": "class_batch_86af2ab0_section_alpha",
+    "class_name": "Section Alpha",
+    "department_id": "AIML",
+    "student_name": "Continuous Student 5",
+    "register_number": "PERF_4",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Student Name": "Continuous Student 5",
+      "Register Number": "PERF_4"
+    },
+    "submitted_at": "2026-09-10 06:58:49.518000",
+    "updated_at": "2026-09-10 06:58:49.518000",
+    "documents": [
+      {
+        "document_name": "10th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "12th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "Community Certificate",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      }
+    ]
+  },
+  {
+    "_id": "6aa25529ca7a6112d38812b9",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "AIML Batch 3385",
+    "class_id": "class_batch_86af2ab0_section_alpha",
+    "class_name": "Section Alpha",
+    "department_id": "AIML",
+    "student_name": "Continuous Student 6",
+    "register_number": "PERF_5",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Student Name": "Continuous Student 6",
+      "Register Number": "PERF_5"
+    },
+    "submitted_at": "2026-09-10 06:58:49.693000",
+    "updated_at": "2026-09-10 06:58:49.693000",
+    "documents": [
+      {
+        "document_name": "10th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "12th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "Community Certificate",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      }
+    ]
+  },
+  {
+    "_id": "6aa25529ca7a6112d38812ba",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "AIML Batch 3385",
+    "class_id": "class_batch_86af2ab0_section_alpha",
+    "class_name": "Section Alpha",
+    "department_id": "AIML",
+    "student_name": "Continuous Student 7",
+    "register_number": "PERF_6",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Student Name": "Continuous Student 7",
+      "Register Number": "PERF_6"
+    },
+    "submitted_at": "2026-09-10 06:58:49.861000",
+    "updated_at": "2026-09-10 06:58:49.861000",
+    "documents": [
+      {
+        "document_name": "10th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "12th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "Community Certificate",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      }
+    ]
+  },
+  {
+    "_id": "6aa2552aca7a6112d38812bb",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "AIML Batch 3385",
+    "class_id": "class_batch_86af2ab0_section_alpha",
+    "class_name": "Section Alpha",
+    "department_id": "AIML",
+    "student_name": "Continuous Student 8",
+    "register_number": "PERF_7",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Student Name": "Continuous Student 8",
+      "Register Number": "PERF_7"
+    },
+    "submitted_at": "2026-09-10 06:58:50.029000",
+    "updated_at": "2026-09-10 06:58:50.029000",
+    "documents": [
+      {
+        "document_name": "10th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "12th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "Community Certificate",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      }
+    ]
+  },
+  {
+    "_id": "6aa2552aca7a6112d38812bc",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "AIML Batch 3385",
+    "class_id": "class_batch_86af2ab0_section_alpha",
+    "class_name": "Section Alpha",
+    "department_id": "AIML",
+    "student_name": "Continuous Student 9",
+    "register_number": "PERF_8",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Student Name": "Continuous Student 9",
+      "Register Number": "PERF_8"
+    },
+    "submitted_at": "2026-09-10 06:58:50.192000",
+    "updated_at": "2026-09-10 06:58:50.192000",
+    "documents": [
+      {
+        "document_name": "10th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "12th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "Community Certificate",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      }
+    ]
+  },
+  {
+    "_id": "6aa2552aca7a6112d38812bd",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "AIML Batch 3385",
+    "class_id": "class_batch_86af2ab0_section_alpha",
+    "class_name": "Section Alpha",
+    "department_id": "AIML",
+    "student_name": "Continuous Student 10",
+    "register_number": "PERF_9",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Student Name": "Continuous Student 10",
+      "Register Number": "PERF_9"
+    },
+    "submitted_at": "2026-09-10 06:58:50.377000",
+    "updated_at": "2026-09-10 06:58:50.377000",
+    "documents": [
+      {
+        "document_name": "10th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "12th Mark Sheet",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      },
+      {
+        "document_name": "Community Certificate",
+        "status": "Uploaded",
+        "file_path": null,
+        "file_size_mb": null,
+        "file_type": "PDF",
+        "uploaded_at": null
+      }
+    ]
+  },
+  {
+    "_id": "6aa2591e7ae7692e8e5a35f7",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 0",
+    "register_number": "AUDIT_THREAD_0_42730",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_0_42730",
+      "Student Name": "Audit Student 0"
+    },
+    "submitted_at": "2026-09-10 07:15:42.765000",
+    "updated_at": "2026-09-10 07:15:42.765000",
+    "documents": []
+  },
+  {
+    "_id": "6aa2591e7ae7692e8e5a35f8",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 2",
+    "register_number": "AUDIT_THREAD_2_42733",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_2_42733",
+      "Student Name": "Audit Student 2"
+    },
+    "submitted_at": "2026-09-10 07:15:42.784000",
+    "updated_at": "2026-09-10 07:15:42.784000",
+    "documents": []
+  },
+  {
+    "_id": "6aa2591e7ae7692e8e5a35f9",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 1",
+    "register_number": "AUDIT_THREAD_1_42731",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_1_42731",
+      "Student Name": "Audit Student 1"
+    },
+    "submitted_at": "2026-09-10 07:15:42.789000",
+    "updated_at": "2026-09-10 07:15:42.789000",
+    "documents": []
+  },
+  {
+    "_id": "6aa2591e7ae7692e8e5a35fa",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 3",
+    "register_number": "AUDIT_THREAD_3_42735",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_3_42735",
+      "Student Name": "Audit Student 3"
+    },
+    "submitted_at": "2026-09-10 07:15:42.904000",
+    "updated_at": "2026-09-10 07:15:42.904000",
+    "documents": []
+  },
+  {
+    "_id": "6aa2591e7ae7692e8e5a35fb",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 4",
+    "register_number": "AUDIT_THREAD_4_42737",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_4_42737",
+      "Student Name": "Audit Student 4"
+    },
+    "submitted_at": "2026-09-10 07:15:42.914000",
+    "updated_at": "2026-09-10 07:15:42.914000",
+    "documents": []
+  },
+  {
+    "_id": "6aa2591e7ae7692e8e5a35fc",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 6",
+    "register_number": "AUDIT_THREAD_6_42743",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_6_42743",
+      "Student Name": "Audit Student 6"
+    },
+    "submitted_at": "2026-09-10 07:15:42.921000",
+    "updated_at": "2026-09-10 07:15:42.921000",
+    "documents": []
+  },
+  {
+    "_id": "6aa2591e7ae7692e8e5a35fd",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 5",
+    "register_number": "AUDIT_THREAD_5_42742",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_5_42742",
+      "Student Name": "Audit Student 5"
+    },
+    "submitted_at": "2026-09-10 07:15:42.923000",
+    "updated_at": "2026-09-10 07:15:42.923000",
+    "documents": []
+  },
+  {
+    "_id": "6aa2591e7ae7692e8e5a35fe",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 8",
+    "register_number": "AUDIT_THREAD_8_42748",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_8_42748",
+      "Student Name": "Audit Student 8"
+    },
+    "submitted_at": "2026-09-10 07:15:42.928000",
+    "updated_at": "2026-09-10 07:15:42.928000",
+    "documents": []
+  },
+  {
+    "_id": "6aa2591f7ae7692e8e5a35ff",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 9",
+    "register_number": "AUDIT_THREAD_9_42751",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_9_42751",
+      "Student Name": "Audit Student 9"
+    },
+    "submitted_at": "2026-09-10 07:15:43.036000",
+    "updated_at": "2026-09-10 07:15:43.036000",
+    "documents": []
+  },
+  {
+    "_id": "6aa2591f7ae7692e8e5a3600",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 7",
+    "register_number": "AUDIT_THREAD_7_42746",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_7_42746",
+      "Student Name": "Audit Student 7"
+    },
+    "submitted_at": "2026-09-10 07:15:43.039000",
+    "updated_at": "2026-09-10 07:15:43.039000",
+    "documents": []
+  },
+  {
+    "_id": "6aa2591f7ae7692e8e5a3601",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 10",
+    "register_number": "AUDIT_THREAD_10_43046",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_10_43046",
+      "Student Name": "Audit Student 10"
+    },
+    "submitted_at": "2026-09-10 07:15:43.286000",
+    "updated_at": "2026-09-10 07:15:43.286000",
+    "documents": []
+  },
+  {
+    "_id": "6aa2591f7ae7692e8e5a3602",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 11",
+    "register_number": "AUDIT_THREAD_11_43165",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_11_43165",
+      "Student Name": "Audit Student 11"
+    },
+    "submitted_at": "2026-09-10 07:15:43.408000",
+    "updated_at": "2026-09-10 07:15:43.408000",
+    "documents": []
+  },
+  {
+    "_id": "6aa2591f7ae7692e8e5a3603",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 12",
+    "register_number": "AUDIT_THREAD_12_43283",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_12_43283",
+      "Student Name": "Audit Student 12"
+    },
+    "submitted_at": "2026-09-10 07:15:43.533000",
+    "updated_at": "2026-09-10 07:15:43.533000",
+    "documents": []
+  },
+  {
+    "_id": "6aa2591f7ae7692e8e5a3604",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 13",
+    "register_number": "AUDIT_THREAD_13_43404",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_13_43404",
+      "Student Name": "Audit Student 13"
+    },
+    "submitted_at": "2026-09-10 07:15:43.676000",
+    "updated_at": "2026-09-10 07:15:43.676000",
+    "documents": []
+  },
+  {
+    "_id": "6aa2591f7ae7692e8e5a3605",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 14",
+    "register_number": "AUDIT_THREAD_14_43525",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_14_43525",
+      "Student Name": "Audit Student 14"
+    },
+    "submitted_at": "2026-09-10 07:15:43.826000",
+    "updated_at": "2026-09-10 07:15:43.826000",
+    "documents": []
+  },
+  {
+    "_id": "6aa259207ae7692e8e5a3606",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 15",
+    "register_number": "AUDIT_THREAD_15_43669",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_15_43669",
+      "Student Name": "Audit Student 15"
+    },
+    "submitted_at": "2026-09-10 07:15:44.081000",
+    "updated_at": "2026-09-10 07:15:44.081000",
+    "documents": []
+  },
+  {
+    "_id": "6aa259207ae7692e8e5a3607",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 16",
+    "register_number": "AUDIT_THREAD_16_43822",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_16_43822",
+      "Student Name": "Audit Student 16"
+    },
+    "submitted_at": "2026-09-10 07:15:44.223000",
+    "updated_at": "2026-09-10 07:15:44.223000",
+    "documents": []
+  },
+  {
+    "_id": "6aa259207ae7692e8e5a3608",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 17",
+    "register_number": "AUDIT_THREAD_17_44077",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_17_44077",
+      "Student Name": "Audit Student 17"
+    },
+    "submitted_at": "2026-09-10 07:15:44.339000",
+    "updated_at": "2026-09-10 07:15:44.339000",
+    "documents": []
+  },
+  {
+    "_id": "6aa259207ae7692e8e5a3609",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 18",
+    "register_number": "AUDIT_THREAD_18_44218",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_18_44218",
+      "Student Name": "Audit Student 18"
+    },
+    "submitted_at": "2026-09-10 07:15:44.468000",
+    "updated_at": "2026-09-10 07:15:44.468000",
+    "documents": []
+  },
+  {
+    "_id": "6aa259207ae7692e8e5a360a",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 19",
+    "register_number": "AUDIT_THREAD_19_44336",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_19_44336",
+      "Student Name": "Audit Student 19"
+    },
+    "submitted_at": "2026-09-10 07:15:44.576000",
+    "updated_at": "2026-09-10 07:15:44.576000",
+    "documents": []
+  },
+  {
+    "_id": "6aa259207ae7692e8e5a360b",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 20",
+    "register_number": "AUDIT_THREAD_20_44465",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_20_44465",
+      "Student Name": "Audit Student 20"
+    },
+    "submitted_at": "2026-09-10 07:15:44.690000",
+    "updated_at": "2026-09-10 07:15:44.690000",
+    "documents": []
+  },
+  {
+    "_id": "6aa259207ae7692e8e5a360c",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 21",
+    "register_number": "AUDIT_THREAD_21_44573",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_21_44573",
+      "Student Name": "Audit Student 21"
+    },
+    "submitted_at": "2026-09-10 07:15:44.816000",
+    "updated_at": "2026-09-10 07:15:44.816000",
+    "documents": []
+  },
+  {
+    "_id": "6aa259207ae7692e8e5a360d",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 22",
+    "register_number": "AUDIT_THREAD_22_44685",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_22_44685",
+      "Student Name": "Audit Student 22"
+    },
+    "submitted_at": "2026-09-10 07:15:44.941000",
+    "updated_at": "2026-09-10 07:15:44.941000",
+    "documents": []
+  },
+  {
+    "_id": "6aa259217ae7692e8e5a360e",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 23",
+    "register_number": "AUDIT_THREAD_23_44812",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_23_44812",
+      "Student Name": "Audit Student 23"
+    },
+    "submitted_at": "2026-09-10 07:15:45.070000",
+    "updated_at": "2026-09-10 07:15:45.070000",
+    "documents": []
+  },
+  {
+    "_id": "6aa259217ae7692e8e5a360f",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 24",
+    "register_number": "AUDIT_THREAD_24_44937",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_24_44937",
+      "Student Name": "Audit Student 24"
+    },
+    "submitted_at": "2026-09-10 07:15:45.183000",
+    "updated_at": "2026-09-10 07:15:45.183000",
+    "documents": []
+  },
+  {
+    "_id": "6aa259217ae7692e8e5a3610",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 25",
+    "register_number": "AUDIT_THREAD_25_45063",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_25_45063",
+      "Student Name": "Audit Student 25"
+    },
+    "submitted_at": "2026-09-10 07:15:45.290000",
+    "updated_at": "2026-09-10 07:15:45.290000",
+    "documents": []
+  },
+  {
+    "_id": "6aa259217ae7692e8e5a3611",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 26",
+    "register_number": "AUDIT_THREAD_26_45173",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_26_45173",
+      "Student Name": "Audit Student 26"
+    },
+    "submitted_at": "2026-09-10 07:15:45.408000",
+    "updated_at": "2026-09-10 07:15:45.408000",
+    "documents": []
+  },
+  {
+    "_id": "6aa259217ae7692e8e5a3612",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 27",
+    "register_number": "AUDIT_THREAD_27_45285",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_27_45285",
+      "Student Name": "Audit Student 27"
+    },
+    "submitted_at": "2026-09-10 07:15:45.524000",
+    "updated_at": "2026-09-10 07:15:45.524000",
+    "documents": []
+  },
+  {
+    "_id": "6aa259217ae7692e8e5a3613",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 28",
+    "register_number": "AUDIT_THREAD_28_45402",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_28_45402",
+      "Student Name": "Audit Student 28"
+    },
+    "submitted_at": "2026-09-10 07:15:45.648000",
+    "updated_at": "2026-09-10 07:15:45.648000",
+    "documents": []
+  },
+  {
+    "_id": "6aa259217ae7692e8e5a3614",
+    "batch_id": "batch_86af2ab0",
+    "batch_name": "Audit Batch",
+    "class_id": null,
+    "class_name": null,
+    "department_id": "AIML",
+    "student_name": "Audit Student 29",
+    "register_number": "AUDIT_THREAD_29_45521",
+    "mobile_number": "9000000000",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa25499ca7a6112d38812af",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Register Number": "AUDIT_THREAD_29_45521",
+      "Student Name": "Audit Student 29"
+    },
+    "submitted_at": "2026-09-10 07:15:45.768000",
+    "updated_at": "2026-09-10 07:15:45.768000",
+    "documents": []
+  },
+  {
+    "_id": "6aa4dadbb9bab894cc5bcc38",
+    "batch_id": "batch_1c47c721",
+    "batch_name": "E2E Audit Batch 2026",
+    "class_id": "class_batch_1c47c721_aiml_a",
+    "class_name": "AIML-A",
+    "department_id": "AIML",
+    "student_name": "Test Student",
+    "register_number": "REG9999",
+    "mobile_number": "9876543210",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Processing",
+    "document_version": 1,
+    "document_version_id": "6aa4dadbb9bab894cc5bcc37",
+    "document_requirements_snapshot": [
+      {
+        "id": "req_1",
+        "name": "Aadhaar Card",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Aadhaar card front and back",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_2",
+        "name": "SSLC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "10th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_3",
+        "name": "HSC Marksheet",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "12th official marks statement",
+        "type": "MANDATORY"
+      },
+      {
+        "id": "req_4",
+        "name": "Community Certificate",
+        "required": true,
+        "allowed_types": [
+          "PDF",
+          "JPG",
+          "PNG"
+        ],
+        "max_size_mb": 5.0,
+        "description": "Community reservation certificate",
+        "type": "MANDATORY"
+      }
+    ],
+    "extracted_data": {
+      "Aadhaar Card": "1234 5678 9012"
+    },
+    "submitted_at": "2026-09-12 04:53:47.934000",
+    "updated_at": "2026-09-12 04:53:47.934000",
+    "documents": [
+      {
+        "document_name": "Aadhaar Card",
+        "status": "Uploaded",
+        "file_path": "uploads/batch_1c47c721/REG9999/aadhaar.pdf",
+        "file_size_mb": 1.2,
+        "file_type": "PDF",
+        "uploaded_at": null
+      }
+    ]
+  },
+  {
+    "_id": "6aaa0d688658720054c1cfbc",
+    "batch_id": "batch_b988676d",
+    "batch_name": "AIML-2024-2028",
+    "class_id": "class_batch_b988676d_section_b",
+    "class_name": "Section B",
+    "department_id": null,
+    "upload_link_id": null,
+    "student_name": "Concur Student 1",
+    "register_number": "CONCUR_01_45AC",
+    "mobile_number": "9876543200",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Complete",
+    "document_version": 1,
+    "document_version_id": null,
+    "document_requirements_snapshot": [],
+    "extracted_data": {
+      "Student Name": "Concur Student 1",
+      "Register Number": "CONCUR_01_45AC"
+    },
+    "submitted_at": "2026-09-16 03:30:48.286000",
+    "updated_at": "2026-09-16 03:30:48.286000",
+    "documents": []
+  },
+  {
+    "_id": "6aaa0d688658720054c1cfbd",
+    "batch_id": "batch_b988676d",
+    "batch_name": "AIML-2024-2028",
+    "class_id": "class_batch_b988676d_section_a",
+    "class_name": "Section A",
+    "department_id": null,
+    "upload_link_id": null,
+    "student_name": "Concur Student 2",
+    "register_number": "CONCUR_02_A2AE",
+    "mobile_number": "9876543200",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Complete",
+    "document_version": 1,
+    "document_version_id": null,
+    "document_requirements_snapshot": [],
+    "extracted_data": {
+      "Student Name": "Concur Student 2",
+      "Register Number": "CONCUR_02_A2AE"
+    },
+    "submitted_at": "2026-09-16 03:30:48.383000",
+    "updated_at": "2026-09-16 03:30:48.383000",
+    "documents": []
+  },
+  {
+    "_id": "6aaa0d688658720054c1cfbe",
+    "batch_id": "batch_b988676d",
+    "batch_name": "AIML-2024-2028",
+    "class_id": "class_batch_b988676d_section_b",
+    "class_name": "Section B",
+    "department_id": null,
+    "upload_link_id": null,
+    "student_name": "Concur Student 3",
+    "register_number": "CONCUR_03_D63C",
+    "mobile_number": "9876543200",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Complete",
+    "document_version": 1,
+    "document_version_id": null,
+    "document_requirements_snapshot": [],
+    "extracted_data": {
+      "Student Name": "Concur Student 3",
+      "Register Number": "CONCUR_03_D63C"
+    },
+    "submitted_at": "2026-09-16 03:30:48.477000",
+    "updated_at": "2026-09-16 03:30:48.477000",
+    "documents": []
+  },
+  {
+    "_id": "6aaa0d688658720054c1cfbf",
+    "batch_id": "batch_b988676d",
+    "batch_name": "AIML-2024-2028",
+    "class_id": "class_batch_b988676d_section_a",
+    "class_name": "Section A",
+    "department_id": null,
+    "upload_link_id": null,
+    "student_name": "Concur Student 4",
+    "register_number": "CONCUR_04_C8B0",
+    "mobile_number": "9876543200",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Complete",
+    "document_version": 1,
+    "document_version_id": null,
+    "document_requirements_snapshot": [],
+    "extracted_data": {
+      "Student Name": "Concur Student 4",
+      "Register Number": "CONCUR_04_C8B0"
+    },
+    "submitted_at": "2026-09-16 03:30:48.620000",
+    "updated_at": "2026-09-16 03:30:48.620000",
+    "documents": []
+  },
+  {
+    "_id": "6aaa0d688658720054c1cfc0",
+    "batch_id": "batch_b988676d",
+    "batch_name": "AIML-2024-2028",
+    "class_id": "class_batch_b988676d_section_b",
+    "class_name": "Section B",
+    "department_id": null,
+    "upload_link_id": null,
+    "student_name": "Concur Student 5",
+    "register_number": "CONCUR_05_4B41",
+    "mobile_number": "9876543200",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Complete",
+    "document_version": 1,
+    "document_version_id": null,
+    "document_requirements_snapshot": [],
+    "extracted_data": {
+      "Student Name": "Concur Student 5",
+      "Register Number": "CONCUR_05_4B41"
+    },
+    "submitted_at": "2026-09-16 03:30:48.754000",
+    "updated_at": "2026-09-16 03:30:48.754000",
+    "documents": []
+  },
+  {
+    "_id": "6aaa0d688658720054c1cfc1",
+    "batch_id": "batch_b988676d",
+    "batch_name": "AIML-2024-2028",
+    "class_id": "class_batch_b988676d_section_a",
+    "class_name": "Section A",
+    "department_id": null,
+    "upload_link_id": null,
+    "student_name": "Concur Student 6",
+    "register_number": "CONCUR_06_503E",
+    "mobile_number": "9876543200",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Complete",
+    "document_version": 1,
+    "document_version_id": null,
+    "document_requirements_snapshot": [],
+    "extracted_data": {
+      "Student Name": "Concur Student 6",
+      "Register Number": "CONCUR_06_503E"
+    },
+    "submitted_at": "2026-09-16 03:30:48.861000",
+    "updated_at": "2026-09-16 03:30:48.861000",
+    "documents": []
+  },
+  {
+    "_id": "6aaa0d688658720054c1cfc2",
+    "batch_id": "batch_b988676d",
+    "batch_name": "AIML-2024-2028",
+    "class_id": "class_batch_b988676d_section_b",
+    "class_name": "Section B",
+    "department_id": null,
+    "upload_link_id": null,
+    "student_name": "Concur Student 7",
+    "register_number": "CONCUR_07_F674",
+    "mobile_number": "9876543200",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Complete",
+    "document_version": 1,
+    "document_version_id": null,
+    "document_requirements_snapshot": [],
+    "extracted_data": {
+      "Student Name": "Concur Student 7",
+      "Register Number": "CONCUR_07_F674"
+    },
+    "submitted_at": "2026-09-16 03:30:48.957000",
+    "updated_at": "2026-09-16 03:30:48.958000",
+    "documents": []
+  },
+  {
+    "_id": "6aaa0d698658720054c1cfc3",
+    "batch_id": "batch_b988676d",
+    "batch_name": "AIML-2024-2028",
+    "class_id": "class_batch_b988676d_section_a",
+    "class_name": "Section A",
+    "department_id": null,
+    "upload_link_id": null,
+    "student_name": "Concur Student 8",
+    "register_number": "CONCUR_08_EF22",
+    "mobile_number": "9876543200",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Complete",
+    "document_version": 1,
+    "document_version_id": null,
+    "document_requirements_snapshot": [],
+    "extracted_data": {
+      "Student Name": "Concur Student 8",
+      "Register Number": "CONCUR_08_EF22"
+    },
+    "submitted_at": "2026-09-16 03:30:49.061000",
+    "updated_at": "2026-09-16 03:30:49.061000",
+    "documents": []
+  },
+  {
+    "_id": "6aaa0d698658720054c1cfc4",
+    "batch_id": "batch_b988676d",
+    "batch_name": "AIML-2024-2028",
+    "class_id": "class_batch_b988676d_section_b",
+    "class_name": "Section B",
+    "department_id": null,
+    "upload_link_id": null,
+    "student_name": "Concur Student 9",
+    "register_number": "CONCUR_09_66DD",
+    "mobile_number": "9876543200",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Complete",
+    "document_version": 1,
+    "document_version_id": null,
+    "document_requirements_snapshot": [],
+    "extracted_data": {
+      "Student Name": "Concur Student 9",
+      "Register Number": "CONCUR_09_66DD"
+    },
+    "submitted_at": "2026-09-16 03:30:49.218000",
+    "updated_at": "2026-09-16 03:30:49.218000",
+    "documents": []
+  },
+  {
+    "_id": "6aaa0d698658720054c1cfc5",
+    "batch_id": "batch_b988676d",
+    "batch_name": "AIML-2024-2028",
+    "class_id": "class_batch_b988676d_section_a",
+    "class_name": "Section A",
+    "department_id": null,
+    "upload_link_id": null,
+    "student_name": "Concur Student 10",
+    "register_number": "CONCUR_10_69D0",
+    "mobile_number": "9876543200",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Complete",
+    "document_version": 1,
+    "document_version_id": null,
+    "document_requirements_snapshot": [],
+    "extracted_data": {
+      "Student Name": "Concur Student 10",
+      "Register Number": "CONCUR_10_69D0"
+    },
+    "submitted_at": "2026-09-16 03:30:49.325000",
+    "updated_at": "2026-09-16 03:30:49.325000",
+    "documents": []
+  },
+  {
+    "_id": "6aaa0d698658720054c1cfc6",
+    "batch_id": "batch_b988676d",
+    "batch_name": "AIML-2024-2028",
+    "class_id": "class_batch_b988676d_section_b",
+    "class_name": "Section B",
+    "department_id": null,
+    "upload_link_id": null,
+    "student_name": "Concur Student 11",
+    "register_number": "CONCUR_11_6E4F",
+    "mobile_number": "9876543200",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Complete",
+    "document_version": 1,
+    "document_version_id": null,
+    "document_requirements_snapshot": [],
+    "extracted_data": {
+      "Student Name": "Concur Student 11",
+      "Register Number": "CONCUR_11_6E4F"
+    },
+    "submitted_at": "2026-09-16 03:30:49.422000",
+    "updated_at": "2026-09-16 03:30:49.422000",
+    "documents": []
+  },
+  {
+    "_id": "6aaa0d698658720054c1cfc7",
+    "batch_id": "batch_b988676d",
+    "batch_name": "AIML-2024-2028",
+    "class_id": "class_batch_b988676d_section_a",
+    "class_name": "Section A",
+    "department_id": null,
+    "upload_link_id": null,
+    "student_name": "Concur Student 12",
+    "register_number": "CONCUR_12_3FFA",
+    "mobile_number": "9876543200",
+    "email": null,
+    "submission_status": "Verified",
+    "ai_status": "Complete",
+    "document_version": 1,
+    "document_version_id": null,
+    "document_requirements_snapshot": [],
+    "extracted_data": {
+      "Student Name": "Concur Student 12",
+      "Register Number": "CONCUR_12_3FFA"
+    },
+    "submitted_at": "2026-09-16 03:30:49.560000",
+    "updated_at": "2026-09-16 03:30:49.560000",
+    "documents": []
+  }
+]

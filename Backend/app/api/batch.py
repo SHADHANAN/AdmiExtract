@@ -151,6 +151,7 @@ from app.schemas.doc_config_version import DocConfigVersionResponse, DocRequirem
 async def get_public_current_doc_version(
     batchId: str,
     classId: Optional[str] = None,
+    class_id: Optional[str] = None,
 ):
     """
     Public lookup for a batch's active document configuration requirements version.
@@ -159,7 +160,8 @@ async def get_public_current_doc_version(
     try:
         from app.services.wanted_field_service import WantedFieldService
         wanted_service = WantedFieldService()
-        reqs = await wanted_service.get_student_document_requirements(batchId, class_id=classId)
+        target_class = classId or class_id
+        reqs = await wanted_service.get_student_document_requirements(batchId, class_id=target_class)
         return DocConfigVersionResponse(
             id=batchId,
             batch_id=batchId,
@@ -193,6 +195,7 @@ async def get_public_current_doc_version(
 async def get_public_document_configurations(
     batchId: str,
     classId: Optional[str] = None,
+    class_id: Optional[str] = None,
 ):
     """
     Public clean endpoint returning active configured document types for Student Portal.
@@ -200,10 +203,11 @@ async def get_public_document_configurations(
     try:
         from app.services.wanted_field_service import WantedFieldService
         wanted_service = WantedFieldService()
-        reqs = await wanted_service.get_student_document_requirements(batchId, class_id=classId)
+        target_class = classId or class_id
+        reqs = await wanted_service.get_student_document_requirements(batchId, class_id=target_class)
         return {
             "batch_id": batchId,
-            "class_id": classId,
+            "class_id": target_class,
             "count": len(reqs),
             "documents": reqs,
         }
@@ -212,4 +216,5 @@ async def get_public_document_configurations(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Failed to load document configurations for batch '{batchId}': {str(e)}",
         )
+
 

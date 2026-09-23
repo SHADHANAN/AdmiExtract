@@ -299,27 +299,6 @@ export const Batches: React.FC = () => {
                     {classesList.length} {classesList.length === 1 ? 'Section' : 'Sections'}
                   </span>
                 </div>
-
-                {/* Real Stats Section (No Fake Analytics) */}
-                <div className="grid grid-cols-4 gap-1.5 bg-[#0F172A]/50 p-2.5 rounded-xl border border-white/[0.06] text-center">
-                  <div>
-                    <div className="text-[10px] uppercase font-semibold text-slate-500">Students</div>
-                    <div className="text-sm font-bold text-white mt-0.5">{batch.stats.students}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] uppercase font-semibold text-slate-500">Pending</div>
-                    <div className="text-sm font-bold text-amber-400 mt-0.5">{batch.stats.pending}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] uppercase font-semibold text-slate-500">Verified</div>
-                    <div className="text-sm font-bold text-emerald-400 mt-0.5">{batch.stats.verified}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] uppercase font-semibold text-slate-500">Rejected</div>
-                    <div className="text-sm font-bold text-rose-400 mt-0.5">{batch.stats.rejected}</div>
-                  </div>
-                </div>
-
                 <div className="flex justify-between items-center text-xs text-slate-400 pt-3 border-t border-white/[0.08]">
                   <div className="flex items-center gap-1.5 font-medium">
                     <Calendar className="h-3.5 w-3.5 text-indigo-400" />

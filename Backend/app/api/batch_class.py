@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.dependencies import get_current_user, RoleChecker
 from app.models.user import User, UserRole
-from app.schemas.batch_class import ClassCreate, ClassUpdate, ClassResponse
+from app.models.batch_class import BatchClass
+from app.models.student_submission import StudentSubmission
+from app.schemas.batch_class import ClassCreate, ClassUpdate, ClassResponse, ClassStats
 from app.services.batch_class_service import BatchClassService, ClassNotFoundException
 from app.services.batch_service import BatchService, BatchNotFoundException
 
@@ -33,6 +35,34 @@ async def _verify_batch_department_access(batch_id: str, user: User, batch_servi
             )
 
 
+async def _build_class_response(cls: BatchClass) -> ClassResponse:
+    """Build ClassResponse with section-isolated student statistics strictly from MongoDB."""
+    submissions = await StudentSubmission.find(
+        StudentSubmission.batch_id == cls.batch_id,
+        StudentSubmission.class_id == cls.id,
+    ).to_list()
+    total = len(submissions)
+    verified = sum(1 for s in submissions if s.submission_status == "Verified")
+    rejected = sum(1 for s in submissions if s.submission_status == "Rejected")
+    pending = total - verified - rejected
+    return ClassResponse(
+        id=cls.id,
+        batch_id=cls.batch_id,
+        class_name=cls.class_name,
+        department=cls.department,
+        section=cls.section,
+        academic_year=cls.academic_year,
+        stats=ClassStats(
+            students=total,
+            pending=max(0, pending),
+            verified=verified,
+            rejected=rejected,
+        ),
+        created_at=cls.created_at,
+        updated_at=cls.updated_at,
+    )
+
+
 @router.post("/batches/{batch_id}/classes", response_model=ClassResponse, status_code=status.HTTP_201_CREATED)
 async def create_class(
     batch_id: str,
@@ -46,7 +76,8 @@ async def create_class(
     """
     await _verify_batch_department_access(batch_id, current_user, batch_service)
     try:
-        return await service.create_class(batch_id, data)
+        new_class = await service.create_class(batch_id, data)
+        return await _build_class_response(new_class)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
@@ -61,10 +92,11 @@ async def list_classes_by_batch(
     batch_service: BatchService = Depends(get_batch_service),
 ):
     """
-    List all classes for the selected batch.
+    List all classes for the selected batch with section-isolated student statistics.
     """
     await _verify_batch_department_access(batch_id, current_user, batch_service)
-    return await service.get_classes_by_batch(batch_id)
+    classes = await service.get_classes_by_batch(batch_id)
+    return [await _build_class_response(c) for c in classes]
 
 
 @router.get("/classes/{class_id}", response_model=ClassResponse)
@@ -75,14 +107,42 @@ async def get_class_by_id(
     batch_service: BatchService = Depends(get_batch_service),
 ):
     """
-    Get class details.
+    Get class details with section-isolated student statistics.
     """
     try:
         class_doc = await service.get_class_by_id(class_id)
         await _verify_batch_department_access(class_doc.batch_id, current_user, batch_service)
-        return class_doc
+        return await _build_class_response(class_doc)
     except ClassNotFoundException as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=e.message)
+
+
+@router.get("/classes/{class_id}/stats", response_model=ClassStats)
+async def get_class_stats(
+    class_id: str,
+    current_user: User = Depends(get_current_user),
+    service: BatchClassService = Depends(get_class_service),
+    batch_service: BatchService = Depends(get_batch_service),
+):
+    """
+    Get statistics for a specific class (strictly filtered by batch_id and class_id).
+    """
+    class_doc = await service.get_class_by_id(class_id)
+    await _verify_batch_department_access(class_doc.batch_id, current_user, batch_service)
+    submissions = await StudentSubmission.find(
+        StudentSubmission.batch_id == class_doc.batch_id,
+        StudentSubmission.class_id == class_id,
+    ).to_list()
+    total = len(submissions)
+    verified = sum(1 for s in submissions if s.submission_status == "Verified")
+    rejected = sum(1 for s in submissions if s.submission_status == "Rejected")
+    pending = total - verified - rejected
+    return ClassStats(
+        students=total,
+        pending=max(0, pending),
+        verified=verified,
+        rejected=rejected,
+    )
 
 
 @router.put("/classes/{class_id}", response_model=ClassResponse)
@@ -99,7 +159,8 @@ async def update_class(
     try:
         class_doc = await service.get_class_by_id(class_id)
         await _verify_batch_department_access(class_doc.batch_id, current_user, batch_service)
-        return await service.update_class(class_id, data)
+        updated = await service.update_class(class_id, data)
+        return await _build_class_response(updated)
     except ClassNotFoundException as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=e.message)
     except ValueError as e:
@@ -160,12 +221,10 @@ async def get_class_students(
     """
     class_doc = await service.get_class_by_id(class_id)
     await _verify_batch_department_access(class_doc.batch_id, current_user, batch_service)
-    submissions = await StudentSubmission.find(StudentSubmission.class_id == class_id).to_list()
-    if not submissions:
-        submissions = await StudentSubmission.find(
-            StudentSubmission.batch_id == class_doc.batch_id,
-            StudentSubmission.class_name == class_doc.class_name
-        ).to_list()
+    submissions = await StudentSubmission.find(
+        StudentSubmission.batch_id == class_doc.batch_id,
+        StudentSubmission.class_id == class_id
+    ).to_list()
     return [_to_response(s) for s in submissions]
 
 
@@ -181,7 +240,10 @@ async def get_class_verification_queue(
     """
     class_doc = await service.get_class_by_id(class_id)
     await _verify_batch_department_access(class_doc.batch_id, current_user, batch_service)
-    submissions = await StudentSubmission.find(StudentSubmission.class_id == class_id).to_list()
+    submissions = await StudentSubmission.find(
+        StudentSubmission.batch_id == class_doc.batch_id,
+        StudentSubmission.class_id == class_id
+    ).to_list()
     return [_to_response(s) for s in submissions]
 
 

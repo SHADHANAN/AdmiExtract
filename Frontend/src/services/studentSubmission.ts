@@ -49,6 +49,16 @@ export const studentSubmissionService = {
     const response = await api.patch(`/student-submissions/${id}/status`, { submission_status: status })
     return formatSubmissionResponse(response.data)
   },
+
+  // Safely delete student submission
+  async deleteSubmission(id: string, batchId?: string, classId?: string): Promise<{ success: boolean; message: string; submission_id: string }> {
+    const params = new URLSearchParams()
+    if (batchId) params.append('batch_id', batchId)
+    if (classId) params.append('class_id', classId)
+    const queryString = params.toString() ? `?${params.toString()}` : ''
+    const response = await api.delete(`/student-submissions/${id}${queryString}`)
+    return response.data
+  },
 }
 
 // Convert backend response model to Frontend StudentSubmission format
@@ -57,6 +67,8 @@ function formatSubmissionResponse(item: any): StudentSubmission {
     id: item.id,
     batchId: item.batch_id,
     batchName: item.batch_name || item.batch_id,
+    classId: item.class_id,
+    className: item.class_name,
     registerNum: item.register_number,
     name: item.student_name,
     mobile: item.mobile_number,
@@ -64,14 +76,18 @@ function formatSubmissionResponse(item: any): StudentSubmission {
     status: item.submission_status,
     aiStatus: item.ai_status || 'Complete',
     submittedAt: typeof item.submitted_at === 'string' ? item.submitted_at.replace('T', ' ').substring(0, 16) : item.submitted_at,
-    documents: (item.documents || []).map((d: any) => ({
+    extractedData: item.extracted_data || {},
+    extracted_data: item.extracted_data || {},
+    documents: (item.documents || []).map((d: any, index: number) => ({
       reqName: d.document_name,
-      fileName: d.file_path ? d.file_path.split('/').pop() : `${d.document_name.replace(/\s+/g, '_')}.pdf`,
-      fileSizeMb: d.file_size_mb || 2.5,
-      fileType: d.file_type || 'PDF',
+      // fileName: expose only the bare filename, never the full path
+      fileName: d.file_path ? d.file_path.split(/[\\/]/).pop() : undefined,
+      fileSizeMb: d.file_size_mb || undefined,
+      fileType: d.file_type || (d.file_path ? (d.file_path.split('.').pop() || '').toUpperCase() : undefined),
       status: d.status,
       uploadedAt: d.uploaded_at ? String(d.uploaded_at).replace('T', ' ').substring(0, 16) : undefined,
-      fileUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800',
+      // documentIndex enables the DocumentPreviewModal to construct the correct authenticated URL
+      documentIndex: index,
     })),
   }
 }

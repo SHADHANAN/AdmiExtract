@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -17,12 +18,23 @@ from app.api.batch_class import router as batch_class_router
 from app.api.upload_link import router as upload_link_router
 from app.api.wanted_field import router as wanted_field_router
 
+from app.services.document_worker_pool import DocumentWorkerPool
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 1. Database connection
     await init_db()
+
+    # 2. Worker pool startup
+    worker_pool = DocumentWorkerPool.get_instance()
+    await worker_pool.start()
+
     yield
+
+    # 3. Graceful shutdown
     print("Application shutting down...")
+    await worker_pool.stop()
     await close_db()
 
 
@@ -33,6 +45,7 @@ app = FastAPI(
 )
 
 allowed_origins = [
+    "https://admiextract.pages.dev",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:5174",
@@ -56,7 +69,7 @@ if getattr(settings, "CORS_ORIGINS", None) and settings.CORS_ORIGINS.strip():
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=r"^https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|.*\.trycloudflare\.com)(:\d+)?$",
+    allow_origin_regex=r"^https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|.*\.trycloudflare\.com|.*\.pages\.dev)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -69,8 +82,8 @@ async def check_database_availability(request: Request, call_next):
     Middleware interceptor to gracefully return HTTP 503 if an API endpoint
     is invoked while MongoDB is offline, avoiding unhandled 500 server crashes.
     """
-    # Allow root, documentation, and OpenAPI paths regardless of database status
-    whitelisted_prefixes = ("/", "/docs", "/redoc", "/openapi.json")
+    # Allow root, health, documentation, and OpenAPI paths regardless of database status
+    whitelisted_prefixes = ("/", "/health", "/docs", "/redoc", "/openapi.json")
     if request.url.path in whitelisted_prefixes:
         return await call_next(request)
 
@@ -105,6 +118,7 @@ app.include_router(wanted_field_router)
 
 
 @app.get("/")
+@app.get("/health")
 async def root():
     connected = is_mongodb_connected()
     return {

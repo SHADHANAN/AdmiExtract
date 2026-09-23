@@ -52,6 +52,8 @@ async def _run_db_setup():
     from app.models.batch import AdmissionBatch
     from app.models.batch_class import BatchClass
     from app.models.wanted_field_config import DocumentFieldConfiguration
+    from app.models.document_job import DocumentProcessingJob, SubmissionSession
+    from app.models.audit_log import AuditLog
     from app.core.security import get_password_hash
 
     # Clean up legacy user documents with missing or null username to allow unique index creation
@@ -73,7 +75,7 @@ async def _run_db_setup():
     # Drop legacy unique batch_id_1 index on excel_templates to allow non-unique per-class template index creation
     try:
         index_info = await db["excel_templates"].index_information()
-        if "batch_id_1" in index_info and index_info["batch_id_1"].get("unique"):
+        if "batch_id_1" in index_info:
             await db["excel_templates"].drop_index("batch_id_1")
     except Exception:
         pass
@@ -90,6 +92,9 @@ async def _run_db_setup():
             AdmissionBatch,
             BatchClass,
             DocumentFieldConfiguration,
+            DocumentProcessingJob,
+            SubmissionSession,
+            AuditLog,
         ],
         allow_index_dropping=True,
     )

@@ -6,13 +6,6 @@ import { api } from '../services/api'
 
 
 
-const defaultRequirements: DocumentRequirement[] = [
-  { id: 'req_1', name: 'Aadhaar Card', required: true, allowedTypes: ['PDF', 'JPG', 'PNG'], maxSizeMb: 5, description: 'Upload front and back side of Aadhaar card', type: 'MANDATORY' },
-  { id: 'req_2', name: 'SSLC Marksheet', required: true, allowedTypes: ['PDF', 'JPG', 'PNG'], maxSizeMb: 5, description: '10th grade official marks statement', type: 'MANDATORY' },
-  { id: 'req_3', name: 'HSC Marksheet', required: true, allowedTypes: ['PDF', 'JPG', 'PNG'], maxSizeMb: 5, description: '12th grade / Diploma final marks statement', type: 'MANDATORY' },
-  { id: 'req_4', name: 'Community Certificate', required: true, allowedTypes: ['PDF', 'JPG'], maxSizeMb: 5, description: 'Caste / Community reservation proof', type: 'MANDATORY' },
-]
-
 const initialDocVersions: Record<string, DocumentConfigurationVersion[]> = {}
 
 const initialBatches: Batch[] = []
@@ -34,19 +27,28 @@ export const useBatchStore = create<BatchState>((set, get) => ({
           let version = 1
           try {
             const currentV = await batchService.getCurrentDocVersion(b.id)
-            requirements = (currentV.documents || []).map((d: any) => ({
-              id: d.id,
-              name: d.name,
-              required: d.required,
-              allowedTypes: d.allowed_types || ['PDF', 'JPG', 'PNG'],
-              maxSizeMb: d.max_size_mb || 5,
-              description: d.description || '',
-              type: d.type || 'MANDATORY',
-            }))
+            const rawReqs = currentV.documents || []
+            const dedupedReqs = new Map<string, DocumentRequirement>()
+            for (const d of rawReqs) {
+              const code = (d.code || d.id || d.name || '').trim().toUpperCase()
+              if (!dedupedReqs.has(code)) {
+                dedupedReqs.set(code, {
+                  id: d.id || d.code || d.name,
+                  name: d.name,
+                  required: d.required,
+                  allowedTypes: d.allowed_types || ['PDF', 'JPG', 'PNG'],
+                  maxSizeMb: d.max_size_mb || 5,
+                  description: d.description || '',
+                  type: d.type || 'MANDATORY',
+                })
+              }
+            }
+            requirements = Array.from(dedupedReqs.values())
             version = currentV.version || 1
           } catch {
-            requirements = [...defaultRequirements]
+            requirements = []
           }
+
 
           // Fetch classes for this batch
           let classes: BatchClass[] = []
@@ -194,7 +196,7 @@ export const useBatchStore = create<BatchState>((set, get) => ({
         stats: { students: 0, pending: 0, verified: 0, rejected: 0 },
         classes: [],
         currentDocVersion: 1,
-        docRequirements: [...defaultRequirements],
+        docRequirements: [],
       }
       set((state) => ({ batches: [newBatch, ...state.batches] }))
     }

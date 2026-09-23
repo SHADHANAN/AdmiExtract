@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     PUBLIC_APP_URL: str = "http://localhost:5173"
     CORS_ORIGINS: str = ""
 
+    # 7. Concurrent Worker Pool & Queue Settings
+    EXTRACTION_WORKER_CONCURRENCY: int = 4
+    GEMINI_CONCURRENCY_LIMIT: int = 3
+    JOB_TIMEOUT_SECONDS: int = 300
+
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE),
         env_file_encoding="utf-8",

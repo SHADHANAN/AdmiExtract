@@ -1,33 +1,36 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { PageHeader } from '../components/PageHeader'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/Card'
+import { useNavigate } from 'react-router-dom'
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
+import { Button } from '../components/ui/Button'
 import { EmptyState } from '../components/ui/EmptyState'
 import { departmentService } from '../services/department'
 import { userService } from '../services/user'
-import { batchService } from '../services/batch'
 import { studentSubmissionService } from '../services/studentSubmission'
 import { useAuthStore } from '../store/useAuthStore'
 import { useBatchStore } from '../store/useBatchStore'
 import {
   Users,
   Building2,
-  Link as LinkIcon,
-  AlertCircle,
-  CheckCircle2,
   FolderOpen,
-  CheckSquare,
-  FileText,
-  ArrowUpRight,
-  ShieldCheck,
+  ArrowRight,
+  Layers,
+  Calendar,
+  Plus,
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
 
 export const Dashboard: React.FC = () => {
+  const navigate = useNavigate()
   const { user } = useAuthStore()
   const isSuperAdmin = user?.role === 'super_admin'
 
-  // 1. Super Admin Queries
+  const { batches, fetchBatches } = useBatchStore()
+
+  useEffect(() => {
+    fetchBatches()
+  }, [fetchBatches])
+
+  // Queries
   const { data: departments = [], isLoading: isDeptsLoading } = useQuery({
     queryKey: ['departments'],
     queryFn: departmentService.getAll,
@@ -40,143 +43,108 @@ export const Dashboard: React.FC = () => {
     enabled: isSuperAdmin,
   })
 
-  // 2. Department Admin Queries
-  const { data: batches = [], isLoading: isBatchesLoading } = useQuery({
-    queryKey: ['batches'],
-    queryFn: batchService.getAll,
-    enabled: !isSuperAdmin,
-  })
-
   const { data: submissions = [], isLoading: isSubmissionsLoading } = useQuery({
     queryKey: ['submissions'],
     queryFn: studentSubmissionService.getAllSubmissions,
   })
 
-  // 3. Read link stats from state store
-  const { uploadLinks } = useBatchStore()
+  // Live Statistics (100% backend data, zero hardcoded values)
+  const totalStudents = submissions.length
+  const totalBatches = batches.length
+  const totalSections = batches.reduce((acc, b) => acc + (b.classes?.length || 0), 0)
 
-  // Real Stats generation based on role (zero hardcoded values)
-  let stats: any[] = []
-
-  if (isSuperAdmin) {
-    const studentsCount = submissions.length
-    const totalUsersCount = users.length
-
-    stats = [
-      {
-        title: 'Total System Users',
-        value: totalUsersCount.toString(),
-        isLoading: isUsersLoading,
-        icon: Users,
-        color: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
-      },
-      {
-        title: 'Departments Registered',
-        value: departments.length.toString(),
-        isLoading: isDeptsLoading,
-        icon: Building2,
-        color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20',
-      },
-      {
-        title: 'Active Upload Portals',
-        value: uploadLinks.filter((l) => l.isActive).length.toString(),
-        isLoading: false,
-        icon: LinkIcon,
-        color: 'text-purple-400 bg-purple-500/10 border-purple-500/20',
-      },
-      {
-        title: 'Students Registered',
-        value: studentsCount.toString(),
-        isLoading: isSubmissionsLoading,
-        icon: CheckCircle2,
-        color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-      },
-    ]
-  } else {
-    // Department Admin Real Stats
-    const totalStudents = submissions.length
-    const pendingVerification = submissions.filter(
-      (s) => s.status === 'Verification Pending' || s.status === 'Submitted' || s.status === 'AI Processing'
-    ).length
-    const verifiedStudents = submissions.filter((s) => s.status === 'Verified').length
-
-    stats = [
-      {
-        title: 'Admission Batches',
-        value: batches.length.toString(),
-        isLoading: isBatchesLoading,
-        icon: FolderOpen,
-        color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20',
-      },
-      {
-        title: 'Registered Students',
-        value: totalStudents.toString(),
-        isLoading: isSubmissionsLoading,
-        icon: Users,
-        color: 'text-purple-400 bg-purple-500/10 border-purple-500/20',
-      },
-      {
-        title: 'Pending Verification',
-        value: pendingVerification.toString(),
-        isLoading: isSubmissionsLoading,
-        icon: AlertCircle,
-        color: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-      },
-      {
-        title: 'Verified Candidates',
-        value: verifiedStudents.toString(),
-        isLoading: isSubmissionsLoading,
-        icon: CheckSquare,
-        color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-      },
-    ]
-  }
-
-  // Real recent submissions (zero mock data)
-  const recentSubmissions = [...submissions].slice(0, 6)
-
-  // Real counts for breakdown summary
-  const verifiedCount = submissions.filter((s) => s.status === 'Verified').length
-  const pendingCount = submissions.filter(
-    (s) => s.status === 'Verification Pending' || s.status === 'Submitted'
-  ).length
-  const processingCount = submissions.filter((s) => s.status === 'AI Processing').length
-  const rejectedCount = submissions.filter((s) => s.status === 'Rejected').length
-  const totalUploadedDocs = submissions.reduce(
-    (acc, s) => acc + (s.documents ? s.documents.filter((d) => d.status === 'Uploaded').length : 0),
-    0
-  )
+  const statsCards = [
+    {
+      title: 'Total Students',
+      value: totalStudents.toString(),
+      isLoading: isSubmissionsLoading,
+      icon: Users,
+      color: 'text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+      badge: 'All Cohorts',
+    },
+    {
+      title: 'Admission Batches',
+      value: totalBatches.toString(),
+      isLoading: false,
+      icon: FolderOpen,
+      color: 'text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+      badge: 'Active Cohorts',
+    },
+    {
+      title: 'Total Sections',
+      value: totalSections.toString(),
+      isLoading: false,
+      icon: Layers,
+      color: 'text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+      badge: 'Allocated',
+    },
+  ]
 
   return (
     <div className="space-y-8">
-      <PageHeader
-        title="Admission Overview"
-        description="Monitor student document uploads, extraction tasks, and verification statuses in real time."
-      />
+      {/* SaaS Dashboard Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-border pb-5">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+              Welcome back, {user?.name || user?.username || 'Admin'}
+            </h1>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            Manage student admissions, documents and verification from one place.
+          </p>
+        </div>
 
-      {/* Stats Grid */}
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat, idx) => {
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/students')}
+            className="text-xs font-semibold"
+          >
+            <Users className="h-4 w-4 mr-1.5 text-muted-foreground" />
+            View All Students
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => navigate('/batches')}
+            className="text-xs font-semibold"
+          >
+            <FolderOpen className="h-4 w-4 mr-1.5" />
+            Manage Batches
+          </Button>
+        </div>
+      </div>
+
+      {/* Core Admission Metrics Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {statsCards.map((stat, idx) => {
           const Icon = stat.icon
           return (
             <Card
               key={idx}
-              className="hover:-translate-y-0.5 hover:shadow-md transition-all duration-200 border-border/80"
+              className="hover:border-border/90 hover:shadow-sm transition-all duration-150 relative overflow-hidden"
             >
               <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                   {stat.title}
                 </span>
-                <div className={`p-2.5 rounded-xl border ${stat.color}`}>
-                  <Icon className="h-4.5 w-4.5" />
+                <div className={`p-2 rounded-lg border ${stat.color} shrink-0`}>
+                  <Icon className="h-4 w-4" />
                 </div>
               </CardHeader>
               <CardContent>
                 {stat.isLoading ? (
-                  <div className="h-9 w-20 bg-muted animate-pulse rounded-lg mt-1" />
+                  <div className="h-9 w-20 bg-secondary animate-pulse rounded-md mt-1" />
                 ) : (
-                  <div className="text-3xl font-extrabold tracking-tight text-foreground mt-1">
-                    {stat.value}
+                  <div className="flex items-baseline justify-between mt-1">
+                    <span className="text-3xl font-extrabold tracking-tight text-foreground font-mono">
+                      {stat.value}
+                    </span>
+                    <span className="text-[11px] font-medium text-muted-foreground">
+                      {stat.badge}
+                    </span>
                   </div>
                 )}
               </CardContent>
@@ -185,141 +153,177 @@ export const Dashboard: React.FC = () => {
         })}
       </div>
 
-      {/* Main Sections */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Real Recent Submissions List */}
-        <Card className="lg:col-span-2 shadow-xs border-border/80">
-          <CardHeader className="flex flex-row items-center justify-between pb-4 border-b border-border/60">
-            <div>
-              <CardTitle>Recent Student Submissions</CardTitle>
-              <CardDescription>Latest candidate submissions received across active batches</CardDescription>
-            </div>
-            <Link
-              to="/students"
-              className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary-hover transition-colors"
-            >
-              <span>View All</span>
-              <ArrowUpRight className="h-3.5 w-3.5" />
-            </Link>
-          </CardHeader>
-          <CardContent className="p-0">
-            {isSubmissionsLoading ? (
-              <div className="p-8 space-y-4">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-12 bg-muted/60 animate-pulse rounded-xl" />
-                ))}
+      {/* Super Admin Institutional Overview (if applicable) */}
+      {isSuperAdmin && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Departments</span>
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-extrabold text-foreground font-mono">
+                {isDeptsLoading ? '...' : departments.length}
               </div>
-            ) : recentSubmissions.length === 0 ? (
-              <div className="p-8">
-                <EmptyState
-                  title="No submissions recorded yet"
-                  description="When applicants upload their identity and academic documents through the admission link, their records will appear here automatically."
-                  icon={<FileText className="h-7 w-7 text-muted-foreground/60" />}
-                />
-              </div>
-            ) : (
-              <div className="divide-y divide-white/[0.06]">
-                {recentSubmissions.map((sub) => {
-                  const statusStyles: Record<string, string> = {
-                    Verified: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-                    'Verification Pending': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-                    Submitted: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-                    'AI Processing': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-                    Rejected: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
-                  }
-                  const badgeClass = statusStyles[sub.status] || 'bg-slate-800 text-slate-300 border-slate-700'
+              <p className="text-xs text-muted-foreground mt-1">Registered academic departments</p>
+            </CardContent>
+          </Card>
 
-                  return (
-                    <div
-                      key={sub.id}
-                      className="flex items-center justify-between p-4 px-6 hover:bg-white/[0.03] transition-colors"
-                    >
-                      <div className="flex items-center gap-3.5 min-w-0">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-400 font-bold text-xs shrink-0 border border-indigo-500/20">
-                          {sub.name ? sub.name.charAt(0).toUpperCase() : 'S'}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">System Users</span>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-extrabold text-foreground font-mono">
+                {isUsersLoading ? '...' : users.length}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Staff and administrator accounts</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Total Batches</span>
+              <FolderOpen className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-extrabold text-foreground font-mono">
+                {batches.length}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Active admission cohorts configured</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Admission Batches Section */}
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+              <FolderOpen className="h-5 w-5 text-primary" />
+              <span>Admission Batches</span>
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Active cohorts, section allocations, and candidate verification progress
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/batches')}
+            className="text-xs self-start sm:self-auto"
+          >
+            <Plus className="h-3.5 w-3.5 mr-1" />
+            Create Cohort
+          </Button>
+        </div>
+
+        {batches.length === 0 ? (
+          <EmptyState
+            title="No Admission Batches"
+            description="Create your first batch to start managing admissions."
+            icon={<FolderOpen className="h-8 w-8 text-emerald-700" />}
+            action={
+              <Button variant="primary" size="md" onClick={() => navigate('/batches')}>
+                <Plus className="h-4 w-4 mr-1.5" />
+                Create Batch
+              </Button>
+            }
+          />
+        ) : (
+          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {batches.map((batch) => {
+              // Extract classes/sections for this batch
+              const batchClasses = batch.classes || []
+              
+              // Filter submissions belonging to this batch
+              const batchSubs = submissions.filter(
+                (s) => s.batchId === batch.id || s.batchName === batch.name
+              )
+              const batchStudentCount = batchSubs.length
+
+              return (
+                <Card
+                  key={batch.id}
+                  className="border-border hover:border-primary/50 hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+                >
+                  <CardHeader className="pb-3 border-b border-border/60">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 inline-block mb-1">
+                          {batch.department || 'General'}
+                        </span>
+                        <CardTitle className="text-base font-bold text-foreground">
+                          {batch.name}
+                        </CardTitle>
+                      </div>
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-secondary text-foreground/80 border border-border shrink-0">
+                        <Calendar className="h-3 w-3 text-muted-foreground" />
+                        {batch.academicYear || 'Academic Cohort'}
+                      </span>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="py-4 space-y-4 flex-1">
+                    {/* Sections Pill Container */}
+                    <div>
+                      <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
+                        <Layers className="h-3.5 w-3.5 text-primary" />
+                        <span>Sections</span>
+                      </div>
+                      {batchClasses.length === 0 ? (
+                        <span className="text-xs text-muted-foreground/60 italic">No sections created yet</span>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                          {batchClasses.map((cls) => (
+                            <span
+                              key={cls.id}
+                              className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-secondary text-foreground border border-border"
+                            >
+                              Section {cls.section || cls.class_name || 'A'}
+                            </span>
+                          ))}
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-white truncate">{sub.name}</p>
-                          <p className="text-xs text-slate-400 truncate font-mono">
-                            Reg: {sub.registerNum || 'N/A'} {sub.className ? `• ${sub.className}` : ''}
-                          </p>
+                      )}
+                    </div>
+
+                    {/* Statistics Grid */}
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border/60 text-center">
+                      <div className="p-2 rounded-lg bg-secondary/40 border border-border/60">
+                        <div className="text-[10px] font-bold text-muted-foreground uppercase">Students</div>
+                        <div className="text-sm font-extrabold text-foreground font-mono mt-0.5">
+                          {batchStudentCount}
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-4 shrink-0">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${badgeClass}`}
-                        >
-                          {sub.status}
-                        </span>
+                      <div className="p-2 rounded-lg bg-secondary/40 border border-border/60">
+                        <div className="text-[10px] font-bold text-muted-foreground uppercase">Sections</div>
+                        <div className="text-sm font-extrabold text-foreground font-mono mt-0.5">
+                          {batchClasses.length}
+                        </div>
                       </div>
                     </div>
-                  )
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  </CardContent>
 
-        {/* Real Status Overview Widget (Zero Fake Analytics) */}
-        <Card className="shadow-xs border-border/80 flex flex-col justify-between">
-          <div>
-            <CardHeader className="pb-4 border-b border-white/[0.08]">
-              <CardTitle>Cohort Summary</CardTitle>
-              <CardDescription>Live breakdown across active applicant submissions</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6 space-y-3.5">
-              <div className="flex items-center justify-between p-3 rounded-xl bg-[#0F172A]/70 border border-white/[0.08]">
-                <div className="flex items-center gap-2.5">
-                  <div className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                  <span className="text-xs font-medium text-slate-300">Verified Candidates</span>
-                </div>
-                <span className="text-xs font-bold text-white font-mono">{verifiedCount}</span>
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-xl bg-[#0F172A]/70 border border-white/[0.08]">
-                <div className="flex items-center gap-2.5">
-                  <div className="h-2.5 w-2.5 rounded-full bg-amber-400" />
-                  <span className="text-xs font-medium text-slate-300">Pending Review</span>
-                </div>
-                <span className="text-xs font-bold text-white font-mono">{pendingCount}</span>
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-xl bg-[#0F172A]/70 border border-white/[0.08]">
-                <div className="flex items-center gap-2.5">
-                  <div className="h-2.5 w-2.5 rounded-full bg-blue-400" />
-                  <span className="text-xs font-medium text-slate-300">AI Processing</span>
-                </div>
-                <span className="text-xs font-bold text-white font-mono">{processingCount}</span>
-              </div>
-
-              {rejectedCount > 0 && (
-                <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/50 border border-border/60">
-                  <div className="flex items-center gap-2.5">
-                    <div className="h-2.5 w-2.5 rounded-full bg-rose-500" />
-                    <span className="text-xs font-semibold text-foreground">Needs Re-upload</span>
+                  {/* Open Batch Action */}
+                  <div className="p-4 pt-0">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => navigate(`/batches/${batch.id}`)}
+                      className="w-full justify-center text-xs font-semibold gap-2 h-9"
+                    >
+                      <span>Open Batch</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
-                  <span className="text-xs font-bold text-foreground font-mono">{rejectedCount}</span>
-                </div>
-              )}
-
-              <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/50 border border-border/60">
-                <div className="flex items-center gap-2.5">
-                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-xs font-semibold text-foreground">Total Uploaded Docs</span>
-                </div>
-                <span className="text-xs font-bold text-foreground font-mono">{totalUploadedDocs}</span>
-              </div>
-            </CardContent>
+                </Card>
+              )
+            })}
           </div>
-
-          <div className="p-6 pt-0 border-t border-border/60 mt-4">
-            <div className="flex items-start gap-2.5 pt-4 text-xs text-muted-foreground leading-relaxed">
-              <ShieldCheck className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-              <span>Real-time records synchronized with MongoDB database and Excel template pipeline.</span>
-            </div>
-          </div>
-        </Card>
+        )}
       </div>
     </div>
   )

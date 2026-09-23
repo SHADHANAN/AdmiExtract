@@ -27,7 +27,6 @@ export default defineConfig(({ mode }) => {
         'localhost',
         '127.0.0.1',
         '.trycloudflare.com',
-        'fought-lock-pda-birthday.trycloudflare.com',
         ...customHosts,
       ],
     },

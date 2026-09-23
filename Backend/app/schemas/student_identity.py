@@ -23,3 +23,5 @@ class StudentIdentityVerifyResponse(BaseModel):
     batch_name: str
     class_id: str | None = None
     class_name: str | None = None
+    upload_link_id: str | None = None
+    token: str | None = None

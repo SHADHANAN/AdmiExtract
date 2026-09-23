@@ -51,3 +51,11 @@ class StudentSubmissionRepository:
         submission.extracted_data = extracted_data
         await submission.save()
         return submission
+
+    async def delete_submission(self, submission_id: PydanticObjectId) -> bool:
+        """Delete a student submission record from MongoDB."""
+        submission = await StudentSubmission.get(submission_id)
+        if not submission:
+            return False
+        await submission.delete()
+        return True

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from typing import Any, Dict
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
 from app.schemas.student_submission import (
     StudentSubmissionCreate,
     StudentSubmissionResponse,
@@ -31,12 +31,38 @@ from app.utils.field_canonicalizer import (
     get_allowed_sources_for_field,
 )
 
+import asyncio
+from app.models.document_job import (
+    DocumentProcessingJob,
+    JobStatus,
+    SubmissionSession,
+    SubmissionProcessingStatus,
+)
+from app.services.document_worker_pool import DocumentWorkerPool
+
 router = APIRouter(prefix="/student-submissions", tags=["Student Submissions"])
 service = StudentSubmissionService()
 batch_service = BatchService()
 _upload_link_service = UploadLinkService()
 _excel_service = ExcelTemplateService()
 _excel_repo = ExcelTemplateRepository()
+
+# Per-batch lock guaranteeing safe serialized Excel workbook updates under high concurrency
+_excel_write_locks: dict[str, tuple[asyncio.Lock, Any]] = {}
+
+def _get_batch_excel_lock(batch_id: str) -> asyncio.Lock:
+    clean_id = (batch_id or "").strip()
+    try:
+        current_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        current_loop = None
+
+    entry = _excel_write_locks.get(clean_id)
+    if entry is None or entry[1] != current_loop:
+        lock = asyncio.Lock()
+        _excel_write_locks[clean_id] = (lock, current_loop)
+        return lock
+    return entry[0]
 
 
 def _to_response(s) -> StudentSubmissionResponse:
@@ -46,6 +72,7 @@ def _to_response(s) -> StudentSubmissionResponse:
         batch_name=s.batch_name,
         class_id=getattr(s, "class_id", None),
         class_name=getattr(s, "class_name", None),
+        upload_link_id=getattr(s, "upload_link_id", None),
         student_name=s.student_name,
         register_number=s.register_number,
         mobile_number=s.mobile_number,
@@ -186,6 +213,8 @@ async def verify_student_identity(data: StudentIdentityVerifyRequest):
         batch_name=batch.name,
         class_id=class_id,
         class_name=class_name,
+        upload_link_id=str(link.id) if hasattr(link, "id") and link.id else None,
+        token=data.token,
     )
 
 
@@ -288,6 +317,136 @@ async def get_student_submission_by_id(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
+@router.get(
+    "/{submission_id}/documents/{document_index}/file",
+    dependencies=[Depends(RoleChecker([UserRole.SUPER_ADMIN, UserRole.DEPARTMENT_ADMIN, UserRole.STUDENT]))],
+)
+async def serve_submission_document(
+    submission_id: str,
+    document_index: int,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Securely serve an uploaded student document file for authenticated staff or the student owner.
+
+    Authorization chain:
+      1. JWT required (401 if missing/invalid).
+      2. RBAC: SUPER_ADMIN, DEPARTMENT_ADMIN, or student owner.
+      3. Submission ownership: loads the submission from DB — never client-trusted.
+      4. Student isolation: Students can ONLY access their own submissions.
+      5. Department isolation: DEPARTMENT_ADMIN can ONLY access their department's submissions.
+      6. Document bounds check: document_index must be within range.
+      7. File existence & readability check: verified physical file on disk (non-zero bytes).
+
+    Never exposes raw filesystem paths, MongoDB IDs, or internal storage details to the client.
+    """
+    import mimetypes
+    import re
+    from fastapi.responses import FileResponse
+    from app.utils.storage_resolver import resolve_document_file_path
+
+    # 1. Load submission from DB (trust DB, not client-supplied path)
+    try:
+        s = await service.get_submission_by_id(submission_id)
+    except StudentSubmissionNotFoundException:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found.")
+
+    # 2. RBAC isolation
+    if current_user.role == UserRole.STUDENT:
+        user_reg = current_user.register_number or current_user.username
+        if not user_reg or (s.register_number != user_reg):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Forbidden: You do not have permission to view another student's documents.",
+            )
+    elif current_user.role == UserRole.DEPARTMENT_ADMIN:
+        dept_id = s.department_id
+        if not dept_id and s.batch_id:
+            try:
+                from app.models.batch import AdmissionBatch
+                b = await AdmissionBatch.get(s.batch_id)
+                if b:
+                    dept_id = b.department_id
+            except Exception:
+                pass
+        if dept_id and dept_id != current_user.department_code:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Forbidden: You do not have permission to access another department's resources.",
+            )
+
+    # 3. Validate document index
+    if document_index < 0 or document_index >= len(s.documents):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+
+    doc = s.documents[document_index]
+
+    # 4. Ensure document was actually uploaded
+    if doc.status != "Uploaded" or not doc.file_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document file not available.",
+        )
+
+    # 5. Resolve verified physical file on disk
+    resolved_path = resolve_document_file_path(
+        raw_path=doc.file_path,
+        batch_id=s.batch_id,
+        register_number=s.register_number,
+        document_name=doc.document_name,
+    )
+    if not resolved_path or not resolved_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document file not found on server.",
+        )
+
+    # 6. Verify file is readable and not zero bytes
+    try:
+        file_size = resolved_path.stat().st_size
+        if file_size == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document file is empty (0 bytes).",
+            )
+        # Check readability
+        with open(resolved_path, "rb") as f:
+            f.read(1024)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document file is unreadable.",
+        )
+
+    # 7. Determine media type from file extension
+    file_ext = resolved_path.suffix.lower()
+    media_type_map = {
+        ".pdf": "application/pdf",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+    }
+    media_type = media_type_map.get(file_ext) or mimetypes.guess_type(str(resolved_path))[0] or "application/octet-stream"
+
+    # 8. Safe filename for Content-Disposition (no path exposure)
+    clean_name = re.sub(r'[^a-zA-Z0-9_-]', '_', doc.document_name)
+    safe_filename = f"{clean_name}{file_ext}"
+
+    return FileResponse(
+        path=str(resolved_path),
+        media_type=media_type,
+        filename=safe_filename,
+        headers={
+            "Content-Disposition": f'inline; filename="{safe_filename}"',
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, no-store",
+        },
+    )
+
+
 @router.patch("/{id}/status", response_model=StudentSubmissionResponse, dependencies=[Depends(RoleChecker([UserRole.SUPER_ADMIN, UserRole.DEPARTMENT_ADMIN]))])
 async def update_student_submission_status(
     id: str,
@@ -314,6 +473,39 @@ async def update_student_submission_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=e.message)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.delete(
+    "/{id}",
+    dependencies=[Depends(RoleChecker([UserRole.SUPER_ADMIN, UserRole.DEPARTMENT_ADMIN]))],
+)
+async def delete_student_submission(
+    id: str,
+    batch_id: str | None = Query(None),
+    class_id: str | None = Query(None),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Permanently and safely delete a student submission and linked data.
+    Enforces staff authorization, active processing checks, file reference counting, and audit logging.
+    Students cannot delete records.
+    """
+    try:
+        result = await service.delete_student_submission(
+            id, current_user, batch_id=batch_id, class_id=class_id
+        )
+        if not result.get("success", True):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.get("message", "Student deletion requires cleanup retry. Please contact an administrator."),
+            )
+        return result
+    except HTTPException:
+        raise
+    except StudentSubmissionNotFoundException as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=e.message)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Unable to delete this student: {str(e)}")
 
 
 from app.services.document_processing_pipeline import DocumentProcessingPipeline
@@ -354,6 +546,82 @@ async def extract_student_documents(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
+@router.post("/extract-async")
+async def extract_student_documents_async(
+    batch_id: str = Form(...),
+    register_number: str = Form(...),
+    student_name: str = Form(...),
+    mobile_number: str | None = Form(None),
+    email: str | None = Form(None),
+    files: list[UploadFile] = File(...),
+    force_refresh: bool = Form(False),
+):
+    """
+    Asynchronous Multi-Student Document Extraction endpoint.
+    Absorbs spikes by saving isolated uploads and queuing jobs into MongoDB.
+    Returns immediately with submission_id for frontend polling.
+    """
+    try:
+        worker_pool = DocumentWorkerPool.get_instance()
+        submission_id = await worker_pool.enqueue_submission(
+            batch_id=batch_id,
+            register_number=register_number,
+            student_name=student_name,
+            mobile_number=mobile_number,
+            email=email,
+            files=files,
+            force_refresh=force_refresh,
+        )
+        return {
+            "status": "QUEUED",
+            "submission_id": submission_id,
+            "message": "Documents enqueued for concurrent extraction.",
+        }
+    except Exception as e:
+        print(f"[Extract Async Error] {e}", flush=True)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/{submission_id}/status")
+async def get_submission_processing_status(submission_id: str):
+    """
+    Poll processing status of a multi-document submission session.
+    Provides live overall status, completion counters, and per-document breakdown.
+    """
+    session = await SubmissionSession.find_one(SubmissionSession.submission_id == submission_id)
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission session not found.")
+
+    jobs = await DocumentProcessingJob.find(
+        DocumentProcessingJob.submission_id == submission_id
+    ).sort("+created_at").to_list()
+
+    docs_status = [
+        {
+            "job_id": j.job_id,
+            "document_name": j.document_name,
+            "document_type": j.document_type or "UNKNOWN",
+            "status": j.status.value if hasattr(j.status, "value") else str(j.status),
+            "error": j.error_info,
+        }
+        for j in jobs
+    ]
+
+    status_str = session.status.value if hasattr(session.status, "value") else str(session.status)
+
+    return {
+        "submission_id": session.submission_id,
+        "status": status_str,
+        "total_documents": session.total_documents,
+        "completed_documents": session.completed_documents,
+        "failed_documents": session.failed_documents,
+        "documents": docs_status,
+        "verification_fields": session.verification_fields,
+        "extracted_data": session.verification_fields,
+        "detected_documents": session.detected_documents,
+    }
+
+
 @router.get("/batch/{batch_id}/excel-headers")
 async def get_batch_excel_headers(batch_id: str):
     """
@@ -390,6 +658,37 @@ async def confirm_student_submission(
             if current_user.email:
                 data.email = current_user.email
 
+        # Resolve section and batch strictly on the server from upload link token / ID
+        if data.token or data.upload_link_id:
+            try:
+                link = None
+                if data.token:
+                    link = await _upload_link_service.get_link_by_slug_or_token(data.token)
+                elif data.upload_link_id:
+                    from bson import ObjectId
+                    try:
+                        from app.models.upload_link import UploadLink
+                        link = await UploadLink.get(ObjectId(data.upload_link_id))
+                    except Exception:
+                        link = None
+
+                if link:
+                    if link.batch_id:
+                        data.batch_id = link.batch_id
+                    if link.class_id:
+                        data.class_id = link.class_id
+                    data.upload_link_id = str(link.id)
+                    if link.class_id and not data.class_name:
+                        from app.models.batch_class import BatchClass
+                        class_doc = await BatchClass.get(link.class_id)
+                        if class_doc:
+                            data.class_name = class_doc.class_name
+
+                    link.submission_count = (link.submission_count or 0) + 1
+                    await link.save()
+            except Exception as link_resolve_err:
+                print(f"[confirm_student_submission] Warning resolving link: {link_resolve_err}", flush=True)
+
         # --- STAGE 9: DATA SAVED TO DATABASE ---
         if getattr(settings, "APP_ENV", "development") == "development":
             print("\n" + "=" * 24, flush=True)
@@ -417,12 +716,14 @@ async def confirm_student_submission(
                 print(json.dumps(excel_updates, indent=2, default=str), flush=True)
                 print("===================================================\n", flush=True)
 
-            await excel_template_service.append_or_update_student_row_in_excel(
-                batch_id=data.batch_id,
-                register_number=data.register_number,
-                student_data=excel_updates,
-                class_id=data.class_id,
-            )
+            batch_excel_lock = _get_batch_excel_lock(data.batch_id)
+            async with batch_excel_lock:
+                await excel_template_service.append_or_update_student_row_in_excel(
+                    batch_id=data.batch_id,
+                    register_number=data.register_number,
+                    student_data=excel_updates,
+                    class_id=data.class_id,
+                )
         except Exception as excel_err:
             print(f"[confirm_student_submission Excel Error] Warning: Failed to update Excel workbook: {excel_err}", flush=True)
 
@@ -430,6 +731,8 @@ async def confirm_student_submission(
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
@@ -595,6 +898,8 @@ async def verify_student_identity(data: StudentIdentityVerifyRequest):
         batch_name=batch.name,
         class_id=class_id,
         class_name=class_name,
+        upload_link_id=str(link.id) if hasattr(link, "id") and link.id else None,
+        token=data.token,
     )
 
 

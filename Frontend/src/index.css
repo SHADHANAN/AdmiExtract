@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -12,6 +14,7 @@
   
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
   
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -21,92 +24,169 @@
   
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-accent-lime: var(--accent-lime);
   
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --color-info: var(--info);
+  
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
   
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   LIGHT THEME — Clean, Trustworthy, Institutional SaaS
+   ═══════════════════════════════════════════════════════════════ */
 :root {
-  --background: #050816;
-  --foreground: #ffffff;
-  
-  --card: #111827;
-  --card-foreground: #ffffff;
-  
-  --popover: #0f172a;
-  --popover-foreground: #ffffff;
-  
-  --primary: #6366f1;
+  /* Page background — very light neutral */
+  --background: #f5f7f5;
+  --foreground: #0d1f17;
+
+  /* Card — white, elevated */
+  --card: #ffffff;
+  --card-foreground: #0d1f17;
+
+  /* Popover / Dropdown */
+  --popover: #ffffff;
+  --popover-foreground: #0d1f17;
+
+  /* Primary — Deep institutional green */
+  --primary: #065f46;
   --primary-foreground: #ffffff;
-  
-  --secondary: #0f172a;
-  --secondary-foreground: #ffffff;
-  
-  --muted: #0f172a;
-  --muted-foreground: #94a3b8;
-  
-  --accent: #1e1b4b;
-  --accent-foreground: #c7d2fe;
-  
-  --destructive: #ef4444;
+  --primary-hover: #064e3b;
+
+  /* Secondary — soft neutral surface */
+  --secondary: #eef2ef;
+  --secondary-foreground: #0d1f17;
+
+  /* Muted — subtle placeholder / backgrounds */
+  --muted: #eef2ef;
+  --muted-foreground: #5a7065;
+
+  /* Accent — Lime / green-yellow */
+  --accent: #ecfccb;
+  --accent-foreground: #14532d;
+  --accent-lime: #84cc16;
+
+  /* Danger */
+  --destructive: #dc2626;
   --destructive-foreground: #ffffff;
-  
-  --border: rgba(255, 255, 255, 0.08);
-  --input: rgba(255, 255, 255, 0.08);
-  --ring: #6366f1;
-  
-  --radius: 0.875rem;
+
+  /* Status semantics */
+  --success: #16a34a;
+  --warning: #d97706;
+  --error: #dc2626;
+  --info: #0284c7;
+
+  /* Sidebar — subtle green-tinted surface */
+  --sidebar: #f0f5f1;
+  --sidebar-foreground: #0d1f17;
+  --sidebar-border: #dce8de;
+
+  /* Form inputs / borders */
+  --border: #dce8de;
+  --input: #dce8de;
+  --ring: #047857;
+
+  --radius: 0.75rem;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   DARK THEME — Deep Charcoal/Slate with Emerald Accent
+   Layered surfaces for real depth (not just color inversion)
+   ═══════════════════════════════════════════════════════════════ */
 .dark {
-  --background: #050816;
-  --foreground: #ffffff;
-  
-  --card: #111827;
-  --card-foreground: #ffffff;
-  
-  --popover: #0f172a;
-  --popover-foreground: #ffffff;
-  
-  --primary: #6366f1;
-  --primary-foreground: #ffffff;
-  
-  --secondary: #0f172a;
-  --secondary-foreground: #ffffff;
-  
-  --muted: #0f172a;
-  --muted-foreground: #94a3b8;
-  
-  --accent: #1e1b4b;
-  --accent-foreground: #c7d2fe;
-  
+  /* Page background — deep dark slate */
+  --background: #0c1410;
+  --foreground: #e8f0ea;
+
+  /* Card — elevated surface, one layer above background */
+  --card: #131f1b;
+  --card-foreground: #e8f0ea;
+
+  /* Popover / Dropdown — slightly elevated above card */
+  --popover: #192820;
+  --popover-foreground: #e8f0ea;
+
+  /* Primary — Vibrant emerald for dark mode */
+  --primary: #10b981;
+  --primary-foreground: #022c22;
+  --primary-hover: #34d399;
+
+  /* Secondary — interactive surface */
+  --secondary: #1a2e24;
+  --secondary-foreground: #e8f0ea;
+
+  /* Muted — placeholder / non-interactive areas */
+  --muted: #1a2e24;
+  --muted-foreground: #7aab8e;
+
+  /* Accent — lime accent on dark */
+  --accent: #1a3a28;
+  --accent-foreground: #bef264;
+  --accent-lime: #a3e635;
+
+  /* Danger */
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  
-  --border: rgba(255, 255, 255, 0.08);
-  --input: rgba(255, 255, 255, 0.08);
-  --ring: #6366f1;
+
+  /* Status semantics — slightly brighter for dark contrast */
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #38bdf8;
+
+  /* Sidebar — deepest dark surface */
+  --sidebar: #0e1a14;
+  --sidebar-foreground: #e8f0ea;
+  --sidebar-border: #1e3328;
+
+  /* Form inputs / borders */
+  --border: #1e3328;
+  --input: #1a2e24;
+  --ring: #10b981;
 }
 
-* {
+/* ═══════════════════════════════════════════════════════════════
+   BASE RESET
+   ═══════════════════════════════════════════════════════════════ */
+*,
+*::before,
+*::after {
   border-color: var(--border);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  letter-spacing: -0.01em;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, sans-serif;
+  letter-spacing: -0.011em;
   min-height: 100vh;
 }
 
-/* Custom Luxury Dark scrollbar */
+/* ═══════════════════════════════════════════════════════════════
+   SCROLLBAR
+   ═══════════════════════════════════════════════════════════════ */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -115,9 +195,33 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(100, 116, 139, 0.2);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(100, 116, 139, 0.4);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   THEME-AWARE UTILITY HELPERS
+   These ensure selects, textareas, and native form elements
+   respect the active theme without needing Tailwind overrides
+   ═══════════════════════════════════════════════════════════════ */
+select,
+textarea {
+  background-color: var(--card);
+  color: var(--foreground);
+  border-color: var(--border);
+}
+
+select option {
+  background-color: var(--popover);
+  color: var(--foreground);
+}
+
+/* Ensure dialogs/modals respect theme */
+dialog {
+  background-color: var(--card);
+  color: var(--foreground);
+  border-color: var(--border);
 }

@@ -940,3 +940,21 @@ The JSON must follow this exact structure:
                     pass
 
         return None
+
+    def invalidate_cache_for_hashes(self, hashes: list[str]) -> int:
+        """
+        Safely removes response cache entries matching specific document hashes
+        without flushing the global cache or affecting other documents/students.
+        """
+        if not hashes:
+            return 0
+        cleaned = 0
+        with self._cache_lock:
+            keys_to_remove = [
+                k for k in self._response_cache.keys()
+                if any(k.startswith(f"{h}_") or k == h for h in hashes)
+            ]
+            for k in keys_to_remove:
+                self._response_cache.pop(k, None)
+                cleaned += 1
+        return cleaned

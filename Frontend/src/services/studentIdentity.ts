@@ -13,6 +13,8 @@ export interface VerifyIdentityResponse {
   batch_name: string
   class_id?: string | null
   class_name?: string | null
+  upload_link_id?: string | null
+  token?: string | null
 }
 
 /** Session key used to persist the student's temporary submission context in sessionStorage. */
@@ -23,6 +25,8 @@ export interface StudentSubmissionSession {
   batch_name: string
   class_id?: string | null
   class_name?: string | null
+  upload_link_id?: string | null
+  token?: string | null
   register_number: string
   student_name: string
   mobile_number: string

@@ -13,7 +13,6 @@ import {
   Users,
   Link as LinkIcon,
   FileText,
-  CheckSquare,
   Download,
   Copy,
   Trash2,
@@ -28,9 +27,7 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  ShieldCheck,
   Maximize2,
-  Sparkles,
   Loader2,
   Upload,
   FileSpreadsheet,
@@ -42,7 +39,9 @@ import {
   AlertTriangle,
   AlertCircle,
   RefreshCw,
+  ArrowRight,
 } from 'lucide-react'
+import { DocumentPreviewModal, type DocumentPreviewTarget } from '../components/ui/DocumentPreviewModal'
 
 import type { DocumentRequirement, StudentSubmission } from '../types'
 import { excelTemplateService, type ExcelTemplateResponse } from '../services/excelTemplate'
@@ -67,7 +66,7 @@ export const BatchDetails: React.FC = () => {
     createClass,
     deleteClass,
   } = useBatchStore()
-  const { submissions, updateStudentStatus, startAiProcessing, fetchSubmissionsByBatch } = useStudentStore()
+  const { submissions, updateStudentStatus, fetchSubmissionsByBatch } = useStudentStore()
   const { addToast } = useToastStore()
 
   const [selectedClassId, setSelectedClassId] = useState<string>('all')
@@ -104,7 +103,7 @@ export const BatchDetails: React.FC = () => {
   const initialTab = searchParams.get('tab')
 
   // Active Tab state — Default to 'sections' or URL parameter
-  const [activeTab, setActiveTab] = useState<'sections' | 'students' | 'links' | 'documents' | 'verification' | 'exports'>(
+  const [activeTab, setActiveTab] = useState<'sections' | 'students' | 'links' | 'documents' | 'exports'>(
     (initialTab as any) || 'sections'
   )
 
@@ -215,7 +214,7 @@ export const BatchDetails: React.FC = () => {
   const [selectedStudent, setSelectedStudent] = useState<StudentSubmission | null>(null)
   
   // Preview Modal state
-  const [previewDoc, setPreviewDoc] = useState<{ title: string; url?: string; type?: string; studentName?: string } | null>(null)
+  const [previewTarget, setPreviewTarget] = useState<DocumentPreviewTarget | null>(null)
 
   // Find batch
   const batch = batches.find((b) => b.id === batchId)
@@ -294,18 +293,29 @@ export const BatchDetails: React.FC = () => {
     try {
       const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
       const overview = await wantedFieldService.getBatchOverview(batchId, classIdParam)
-      setWantedOverview(overview)
+      
+      // Defensively deduplicate by document_type
+      const deduped: DocumentTypeOverviewItem[] = []
+      const seen = new Set<string>()
+      for (const item of overview) {
+        const code = (item.document_type || '').toUpperCase().trim()
+        if (!seen.has(code)) {
+          seen.add(code)
+          deduped.push(item)
+        }
+      }
+      setWantedOverview(deduped)
       
       const docToFind = targetDocToSelect || selectedDocType
-      const current = overview.find((o) => o.document_type === docToFind)
+      const current = deduped.find((o) => o.document_type === docToFind)
       if (current) {
         setSelectedDocType(current.document_type)
         setActiveDocFields(current.fields)
         setActiveDocRequirementStatus(current.requirement_status || 'REQUIRED')
-      } else if (overview.length > 0) {
-        setSelectedDocType(overview[0].document_type)
-        setActiveDocFields(overview[0].fields)
-        setActiveDocRequirementStatus(overview[0].requirement_status || 'REQUIRED')
+      } else if (deduped.length > 0) {
+        setSelectedDocType(deduped[0].document_type)
+        setActiveDocFields(deduped[0].fields)
+        setActiveDocRequirementStatus(deduped[0].requirement_status || 'REQUIRED')
       } else {
         setSelectedDocType('')
         setActiveDocFields([])
@@ -376,20 +386,52 @@ export const BatchDetails: React.FC = () => {
       return
     }
 
+    const normCode = trimmedCode.toUpperCase().replace(/[\s-]+/g, '_').replace(/[^A-Z0-9_]/g, '')
+
+    // Check if document already exists in current overview
+    const existingDoc = wantedOverview.find(
+      (d) =>
+        d.document_type.toUpperCase().trim() === normCode ||
+        d.display_name.trim().toLowerCase() === trimmedName.toLowerCase()
+    )
+
     setIsCreatingDoc(true)
     try {
       const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
+      if (existingDoc) {
+        // Document already exists in current configuration -> update it instead of appending another record
+        const res = await wantedFieldService.saveDocumentConfig(
+          batchId,
+          existingDoc.document_type,
+          existingDoc.fields,
+          classIdParam,
+          {
+            display_name: trimmedName,
+            description: newDocDescription.trim() || undefined,
+            requirement_status: newDocRequirementStatus,
+          }
+        )
+        addToast(`Document "${res.display_name}" updated (${newDocRequirementStatus}).`, 'success')
+        setIsAddDocModalOpen(false)
+        setNewDocName('')
+        setNewDocCode('')
+        setNewDocDescription('')
+        setNewDocRequirementStatus('REQUIRED')
+        await loadWantedOverview(res.document_type)
+        return
+      }
+
       const res = await wantedFieldService.createDocumentType(
         batchId,
         {
           name: trimmedName,
-          code: trimmedCode,
+          code: normCode,
           description: newDocDescription.trim() || undefined,
           requirement_status: newDocRequirementStatus,
         },
         classIdParam
       )
-      addToast(`Document "${res.display_name}" created (${newDocRequirementStatus}) with 0 wanted fields.`, 'success')
+      addToast(`Document "${res.display_name}" configured (${newDocRequirementStatus}) with 0 wanted fields.`, 'success')
       setIsAddDocModalOpen(false)
       setNewDocName('')
       setNewDocCode('')
@@ -397,11 +439,12 @@ export const BatchDetails: React.FC = () => {
       setNewDocRequirementStatus('REQUIRED')
       await loadWantedOverview(res.document_type)
     } catch (err: any) {
-      addToast(err?.response?.data?.detail || err?.message || 'Failed to create document type.', 'error')
+      addToast(err?.response?.data?.detail || err?.message || 'Failed to configure document type.', 'error')
     } finally {
       setIsCreatingDoc(false)
     }
   }
+
 
   const handleDeleteDocumentType = async (docType: string, docName: string) => {
     if (!batchId) return
@@ -751,7 +794,6 @@ export const BatchDetails: React.FC = () => {
             { id: 'students', label: `Students (${batchStudents.length})`, icon: Users },
             { id: 'links', label: `Upload Links (${batchLinks.length})`, icon: LinkIcon },
             { id: 'documents', label: 'Document Configuration', icon: FileText },
-            { id: 'verification', label: 'AI Audit Logs', icon: CheckSquare },
             { id: 'exports', label: 'Exports', icon: Download },
           ] as const
         ).map((tab) => {
@@ -796,16 +838,7 @@ export const BatchDetails: React.FC = () => {
             {batchClasses.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {batchClasses.map((cls) => {
-                  const secStudents = allBatchStudents.filter(
-                    (s) => s.classId === cls.id || (s.className === cls.class_name && (s.batchId === activeBatch.id || s.batchId === batchId))
-                  )
-                  const totalCount = secStudents.length
-                  const pendingCount = secStudents.filter(
-                    (s) => s.status === 'Submitted' || s.status === 'AI Processing' || s.status === 'Verification Pending' || s.status === 'Pending'
-                  ).length
-                  const verifiedCount = secStudents.filter((s) => s.status === 'Verified').length
-                  const rejectedCount = secStudents.filter((s) => s.status === 'Rejected').length
-
+                  const studentCount = cls.stats?.students ?? allBatchStudents.filter((s) => s.classId === cls.id).length
                   const secStr = cls.section ? cls.section.trim() : 'A'
                   const sectionLabel = secStr.toLowerCase().startsWith('section')
                     ? secStr
@@ -830,23 +863,9 @@ export const BatchDetails: React.FC = () => {
                         </span>
                       </div>
 
-                      <div className="space-y-1.5 text-xs font-semibold bg-muted/30 p-3 rounded-lg border border-border/40">
-                        <div className="flex justify-between py-0.5 border-b border-border/30">
-                          <span className="text-muted-foreground">Students</span>
-                          <span className="text-foreground font-extrabold">{totalCount}</span>
-                        </div>
-                        <div className="flex justify-between py-0.5 border-b border-border/30">
-                          <span className="text-muted-foreground">Pending</span>
-                          <span className="text-amber-600 font-extrabold">{pendingCount}</span>
-                        </div>
-                        <div className="flex justify-between py-0.5 border-b border-border/30">
-                          <span className="text-muted-foreground">Verified</span>
-                          <span className="text-green-600 font-extrabold">{verifiedCount}</span>
-                        </div>
-                        <div className="flex justify-between py-0.5">
-                          <span className="text-muted-foreground">Rejected</span>
-                          <span className="text-destructive font-extrabold">{rejectedCount}</span>
-                        </div>
+                      <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-secondary/40 border border-border/60 text-xs">
+                        <span className="font-semibold text-muted-foreground">Students</span>
+                        <span className="font-extrabold text-foreground font-mono text-sm">{studentCount}</span>
                       </div>
 
                       <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/40">
@@ -998,60 +1017,25 @@ export const BatchDetails: React.FC = () => {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => {
-                                  const firstUploaded = student.documents.find((d) => d.status === 'Uploaded')
-                                  setPreviewDoc({
-                                    title: firstUploaded ? firstUploaded.reqName : 'Uploaded Documents',
-                                    url: firstUploaded?.fileUrl,
-                                    type: firstUploaded?.fileType,
-                                    studentName: student.name,
-                                  })
+                                  const firstUploadedIdx = student.documents.findIndex((d) => d.status === 'Uploaded')
+                                  if (firstUploadedIdx !== -1) {
+                                    const doc = student.documents[firstUploadedIdx]
+                                    setPreviewTarget({
+                                      submissionId: student.id,
+                                      documentIndex: doc.documentIndex !== undefined ? doc.documentIndex : firstUploadedIdx,
+                                      documentName: doc.reqName,
+                                      fileType: doc.fileType,
+                                      fileName: doc.fileName,
+                                      studentName: student.name,
+                                    })
+                                  } else {
+                                    addToast('No uploaded documents available for preview.', 'info')
+                                  }
                                 }}
                                 className="cursor-pointer gap-1 text-xs py-1"
                                 title="Preview Documents"
                               >
                                 <Maximize2 className="h-3.5 w-3.5" /> Preview
-                              </Button>
-                              <Button
-                                variant="primary"
-                                size="sm"
-                                disabled={student.status === 'AI Processing' || student.status === 'Verified'}
-                                onClick={() => {
-                                  startAiProcessing(student.id)
-                                  addToast(`Started AI OCR extraction for ${student.name}...`, 'info')
-                                  if (excelTemplate && batchId) {
-                                    excelTemplateService
-                                      .updateStudentRow(batchId, student.registerNum, {
-                                        student_name: student.name,
-                                        register_number: student.registerNum,
-                                        mobile_number: student.mobile,
-                                        email: student.email || `${student.registerNum.toLowerCase()}@example.com`,
-                                        dob: '2005-04-12',
-                                        aadhaar_number: '5489 1234 9876',
-                                        community: 'BC',
-                                        annual_income: 120000,
-                                        sslc_marks: 94.5,
-                                        hsc_marks: 92.0,
-                                      })
-                                      .then((res) => {
-                                        if (res.updated) {
-                                          addToast(`Updated Excel row for candidate ${student.registerNum}!`, 'success')
-                                          loadExcelTemplateInfo()
-                                        }
-                                      })
-                                      .catch((err) => {
-                                        addToast(err.message || 'Row matching failed in Excel template', 'error')
-                                      })
-                                  }
-                                }}
-                                className="cursor-pointer gap-1 text-xs py-1"
-                                title="Start AI Verification"
-                              >
-                                {student.status === 'AI Processing' ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <Sparkles className="h-3.5 w-3.5" />
-                                )}
-                                Start AI
                               </Button>
                             </div>
                           </TableCell>
@@ -1799,21 +1783,6 @@ export const BatchDetails: React.FC = () => {
           </div>
         )}
 
-        {/* VERIFICATION TAB */}
-        {activeTab === 'verification' && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-bold text-foreground">AI OCR Verification Audit Logs</h2>
-            <div className="p-6 border border-border rounded-xl bg-card space-y-4">
-              <div className="flex items-center gap-3 text-green-600 font-bold text-sm">
-                <ShieldCheck className="h-5 w-5" /> All student document scans cross-checked with OCR models
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Automatic entity extraction is active for Aadhaar, Marksheets, and Certificates. Extracted candidate names match admission registry records.
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* EXPORTS & EXCEL TEMPLATE TAB */}
         {activeTab === 'exports' && (
           <div className="space-y-6">
@@ -2112,50 +2081,98 @@ export const BatchDetails: React.FC = () => {
 
             {/* Document list with Preview Action */}
             <div className="space-y-3">
-              <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Uploaded Documents</h4>
-              <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+              <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <FileText className="h-3.5 w-3.5" />
+                Uploaded Documents ({selectedStudent.documents.length})
+              </h4>
+              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                {selectedStudent.documents.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic py-2">No documents submitted.</p>
+                )}
                 {selectedStudent.documents.map((doc, idx) => {
                   const isUploaded = doc.status === 'Uploaded'
+                  const docIndex = doc.documentIndex !== undefined ? doc.documentIndex : idx
+                  const canPreview = isUploaded && docIndex !== undefined
+
                   return (
                     <div
                       key={idx}
-                      className="p-3 rounded-xl border border-border bg-card flex items-center justify-between gap-3 text-xs"
+                      onClick={() => {
+                        if (canPreview) {
+                          setPreviewTarget({
+                            submissionId: selectedStudent.id,
+                            documentIndex: docIndex,
+                            documentName: doc.reqName,
+                            fileType: doc.fileType,
+                            fileName: doc.fileName,
+                            studentName: selectedStudent.name,
+                          })
+                        }
+                      }}
+                      className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 shadow-2xs ${
+                        canPreview
+                          ? 'border-border bg-card hover:bg-secondary/40 hover:border-emerald-500/40 cursor-pointer'
+                          : 'border-border/60 bg-card/60 opacity-80 cursor-default'
+                      }`}
                     >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-foreground">{doc.reqName}</span>
-                          <span
-                            className={`px-2 py-0.5 rounded text-3xs font-extrabold uppercase ${
-                              isUploaded ? 'bg-green-100 text-green-800' : 'bg-secondary text-muted-foreground'
-                            }`}
-                          >
-                            {doc.status}
-                          </span>
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <div
+                          className={`flex h-8 w-8 items-center justify-center rounded-lg shrink-0 mt-0.5 ${
+                            isUploaded
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                              : 'bg-muted text-muted-foreground border border-border'
+                          }`}
+                        >
+                          <FileText className="h-4 w-4" />
                         </div>
-                        {doc.fileName && (
-                          <span className="text-3xs text-muted-foreground font-mono block mt-0.5 truncate">
-                            {doc.fileName} ({doc.fileSizeMb} MB)
-                          </span>
-                        )}
+                        <div className="min-w-0">
+                          <span className="font-bold text-foreground text-xs block truncate">{doc.reqName}</span>
+                          {doc.fileName ? (
+                            <span className="text-[11px] text-muted-foreground font-mono block mt-0.5 truncate">
+                              {doc.fileName}
+                              {doc.fileSizeMb ? ` · ${doc.fileSizeMb} MB` : ''}
+                            </span>
+                          ) : !isUploaded ? (
+                            <span className="text-[11px] text-muted-foreground/60 italic block mt-0.5">
+                              Document unavailable
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
 
-                      {isUploaded && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            setPreviewDoc({
-                              title: doc.reqName,
-                              url: doc.fileUrl,
-                              type: doc.fileType,
-                              studentName: selectedStudent.name,
-                            })
-                          }
-                          className="cursor-pointer gap-1 text-3xs py-1"
-                        >
-                          <Maximize2 className="h-3 w-3" /> Preview
-                        </Button>
-                      )}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isUploaded ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-800 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border dark:border-emerald-800/40">
+                            Uploaded
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-muted text-muted-foreground border border-border">
+                            Document unavailable
+                          </span>
+                        )}
+
+                        {canPreview && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setPreviewTarget({
+                                submissionId: selectedStudent.id,
+                                documentIndex: docIndex,
+                                documentName: doc.reqName,
+                                fileType: doc.fileType,
+                                fileName: doc.fileName,
+                                studentName: selectedStudent.name,
+                              })
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white dark:bg-emerald-500 dark:hover:bg-emerald-400 dark:text-slate-950 transition-colors shadow-2xs cursor-pointer"
+                            title={`Preview ${doc.reqName}`}
+                          >
+                            <span>Preview</span>
+                            <ArrowRight className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )
                 })}
@@ -2199,46 +2216,10 @@ export const BatchDetails: React.FC = () => {
       )}
 
       {/* MODAL: DOCUMENT PREVIEW MODAL */}
-      {previewDoc && (
-        <Modal
-          isOpen={!!previewDoc}
-          onClose={() => setPreviewDoc(null)}
-          title={`Document Preview: ${previewDoc.title}`}
-        >
-          <div className="space-y-4">
-            <div className="flex items-center justify-between text-xs text-muted-foreground border-b border-border pb-2">
-              <span>Candidate: <strong className="text-foreground">{previewDoc.studentName}</strong></span>
-              <span>Format: <strong className="font-mono text-foreground">{previewDoc.type || 'PDF'}</strong></span>
-            </div>
-
-            {/* Mock Viewer Container */}
-            <div className="relative w-full h-[320px] bg-slate-950 rounded-xl overflow-hidden border border-slate-800 flex flex-col items-center justify-center p-4">
-              <img
-                src={previewDoc.url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800'}
-                alt={previewDoc.title}
-                className="max-h-full max-w-full object-contain rounded shadow-lg"
-              />
-              <div className="absolute bottom-3 right-3 bg-card/80 backdrop-blur-sm border border-border px-3 py-1 rounded-lg text-3xs font-mono text-foreground flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 text-green-500" /> AI OCR Verified Scan
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center pt-2">
-              <span className="text-xs text-muted-foreground">Watermarked preview version</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  addToast(`Downloading ${previewDoc.title}...`, 'info')
-                }}
-                className="cursor-pointer gap-1.5"
-              >
-                <Download className="h-3.5 w-3.5" /> Download Document
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
+      <DocumentPreviewModal
+        target={previewTarget}
+        onClose={() => setPreviewTarget(null)}
+      />
 
       {/* MODAL: CREATE SECTION MODAL */}
       <Modal isOpen={isSectionModalOpen} onClose={() => setIsSectionModalOpen(false)} title={`Create Section in ${activeBatch.name}`}>

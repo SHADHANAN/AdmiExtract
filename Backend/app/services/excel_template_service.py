@@ -221,11 +221,28 @@ class ExcelTemplateService:
             )
         return updated
 
-    def _create_backup(self, file_path: str, batch_id: str) -> str:
-        """Create a timestamped backup before modifying the workbook."""
+    def _create_backup(self, file_path: str, batch_id: str, max_retained: int = 5) -> str:
+        """Create a timestamped backup before modifying the workbook, pruning older ones."""
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
         backup_path = os.path.join(BACKUP_DIR, f"{batch_id}_backup_{timestamp}.xlsx")
         shutil.copy2(file_path, backup_path)
+        
+        # Automatic backup rotation: keep latest N backups for this batch
+        try:
+            prefix = f"{batch_id}_backup_"
+            existing = sorted(
+                [f for f in os.listdir(BACKUP_DIR) if f.startswith(prefix) and f.endswith(".xlsx")],
+                reverse=True
+            )
+            for old_file in existing[max_retained:]:
+                old_p = os.path.join(BACKUP_DIR, old_file)
+                try:
+                    os.remove(old_p)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
         return backup_path
 
     async def register_number_exists(self, batch_id: str, register_number: str) -> bool:
@@ -807,3 +824,171 @@ class ExcelTemplateService:
             student_data=extracted_data,
             class_id=class_id,
         )
+
+    async def generate_dynamic_excel_export(
+        self, batch_id: str, class_id: str | None = None
+    ) -> tuple[Any, str]:
+        """
+        Dynamically generates an Excel workbook on demand for a section or batch:
+        - Retrieves configured columns from DocumentFieldConfiguration and ExcelBatchTemplate
+        - Filters submissions strictly by batch_id and optional class_id (preventing cross-section leaks)
+        - Resolves extracted values using existing multi-tier resolution logic
+        - Formats and styles the workbook cleanly
+        - Returns (BytesIO buffer, filename) without permanently storing a file on disk
+        """
+        import io
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+        from app.models.student_submission import StudentSubmission
+        from app.models.wanted_field_config import DocumentFieldConfiguration
+        from app.models.batch_class import BatchClass
+
+        # 1. Fetch class details if class_id is provided
+        section_name = None
+        if class_id:
+            try:
+                cls_doc = await BatchClass.get(class_id)
+                if cls_doc:
+                    section_name = cls_doc.class_name
+            except Exception:
+                pass
+
+        # 2. Collect field mappings and determine column headers
+        batch_template = await self.repository.get_by_batch_id(batch_id)
+        template_headers: list[str] = list(batch_template.headers) if (batch_template and batch_template.headers) else []
+        field_mappings: dict[str, str] = dict(batch_template.field_mappings or {}) if batch_template else {}
+
+        # Fetch all active DocumentFieldConfigurations for this batch
+        doc_configs = await DocumentFieldConfiguration.find(
+            DocumentFieldConfiguration.batch_id == batch_id,
+            DocumentFieldConfiguration.is_archived == False,
+        ).to_list()
+
+        # Collect configured columns from DocumentFieldConfiguration
+        configured_headers: list[str] = []
+        for cfg in doc_configs:
+            for item in cfg.fields:
+                if item.enabled:
+                    hdr = item.excel_header.strip() if item.excel_header else item.field.strip()
+                    if hdr and hdr not in configured_headers:
+                        configured_headers.append(hdr)
+                    if item.excel_header and item.field:
+                        field_mappings[item.field] = item.excel_header.strip()
+
+        # Combine headers preserving template ordering if template exists
+        final_headers: list[str] = []
+        standard_cols = ["Register Number", "Student Name", "Mobile Number", "Email", "Status"]
+
+        if template_headers:
+            for h in template_headers:
+                if h not in final_headers:
+                    final_headers.append(h)
+            for ch in configured_headers:
+                if ch not in final_headers:
+                    final_headers.append(ch)
+        else:
+            for sc in standard_cols:
+                if sc not in final_headers:
+                    final_headers.append(sc)
+            for ch in configured_headers:
+                if ch not in final_headers:
+                    final_headers.append(ch)
+
+        # 3. Query student submissions strictly for this batch & class
+        query_conditions = [StudentSubmission.batch_id == batch_id]
+        if class_id:
+            query_conditions.append(StudentSubmission.class_id == class_id)
+
+        submissions = await StudentSubmission.find(*query_conditions).to_list()
+
+        # 4. Create in-memory workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = f"{section_name[:28]}" if section_name else "Student Admissions"
+
+        # Styles
+        header_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+        header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+        header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+        data_font = Font(name="Calibri", size=10)
+        data_alignment_left = Alignment(horizontal="left", vertical="center")
+        data_alignment_center = Alignment(horizontal="center", vertical="center")
+
+        thin_side = Side(border_style="thin", color="CBD5E1")
+        cell_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+
+        alt_row_fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+        white_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+
+        # Write Header Row
+        ws.row_dimensions[1].height = 28
+        for col_idx, header_name in enumerate(final_headers, start=1):
+            cell = ws.cell(row=1, column=col_idx, value=header_name)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = cell_border
+
+        # 5. Populate Data Rows
+        for row_idx, student in enumerate(submissions, start=2):
+            ws.row_dimensions[row_idx].height = 20
+            row_fill = alt_row_fill if row_idx % 2 == 0 else white_fill
+
+            # Build student data pool
+            data_dict: dict[str, Any] = dict(student.extracted_data or {})
+            data_dict["Student Name"] = student.student_name
+            data_dict["Name"] = student.student_name
+            data_dict["Register Number"] = student.register_number
+            data_dict["Reg No"] = student.register_number
+            data_dict["Mobile Number"] = student.mobile_number
+            data_dict["Mobile"] = student.mobile_number
+            data_dict["Email"] = student.email or ""
+            data_dict["Email Address"] = student.email or ""
+            data_dict["Status"] = student.submission_status
+            data_dict["Submission Status"] = student.submission_status
+            data_dict["Class"] = student.class_name or section_name or ""
+            data_dict["Section"] = student.class_name or section_name or ""
+
+            for col_idx, header_name in enumerate(final_headers, start=1):
+                cell_value = self._resolve_header_value(header_name, data_dict, custom_mappings=field_mappings)
+                if cell_value is None:
+                    for dk, dv in data_dict.items():
+                        if dk.lower().strip() == header_name.lower().strip():
+                            cell_value = str(dv).strip() if dv is not None else ""
+                            break
+
+                cell = ws.cell(row=row_idx, column=col_idx, value=cell_value or "")
+                cell.font = data_font
+                cell.fill = row_fill
+                cell.border = cell_border
+
+                if any(k in header_name.lower() for k in ["register", "date", "status", "gender", "year"]):
+                    cell.alignment = data_alignment_center
+                else:
+                    cell.alignment = data_alignment_left
+
+        # Auto-adjust column widths
+        for col_idx, header_name in enumerate(final_headers, start=1):
+            max_len = len(str(header_name))
+            for row in range(2, len(submissions) + 2):
+                val = ws.cell(row=row, column=col_idx).value
+                if val:
+                    max_len = max(max_len, len(str(val)))
+            col_letter = get_column_letter(col_idx)
+            ws.column_dimensions[col_letter].width = min(max(max_len + 4, 12), 40)
+
+        # Freeze header row
+        ws.freeze_panes = "A2"
+
+        # Stream into BytesIO
+        output_buffer = io.BytesIO()
+        wb.save(output_buffer)
+        output_buffer.seek(0)
+
+        sec_prefix = f"_{section_name.replace(' ', '_')}" if section_name else (f"_{class_id}" if class_id else "")
+        filename = f"{batch_id}{sec_prefix}_Admissions_Export.xlsx"
+
+        return output_buffer, filename
+

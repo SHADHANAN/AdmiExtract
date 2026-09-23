@@ -204,10 +204,34 @@ class WantedFieldService:
         if not norm_code:
             raise ValueError("Document Code must contain alphanumeric characters.")
 
-        # Check unique code within batch
-        existing = await self.repository.get_by_batch_and_doc_type(batch_id, norm_code, class_id=class_id)
+        req_status_clean = requirement_status.strip().upper() if requirement_status else "REQUIRED"
+        if req_status_clean not in ["REQUIRED", "OPTIONAL", "DISABLED"]:
+            req_status_clean = "REQUIRED"
+
+        types = allowed_types if allowed_types else ["PDF", "JPG", "PNG"]
+        size_limit = max_size_mb if max_size_mb and max_size_mb > 0 else 5.0
+
+        # Check existing code within batch/class scope (including archived)
+        existing = await self.repository.get_by_batch_and_doc_type(
+            batch_id, norm_code, class_id=class_id, include_archived=True, exact_scope_only=True
+        )
         if existing:
-            raise ValueError(f"Document type with code '{norm_code}' already exists for this batch.")
+            # If same display name or archived or updating requirements, update idempotently
+            if existing.is_archived or existing.display_name.strip().lower() == name_clean.lower():
+                existing.display_name = name_clean
+                if description is not None:
+                    existing.description = description.strip() if description else None
+                existing.requirement_status = req_status_clean
+                existing.allowed_types = types
+                existing.max_size_mb = size_limit
+                existing.is_archived = False
+                existing.version += 1
+                if initial_fields:
+                    merged = list(dict.fromkeys((existing.available_fields or []) + [f.strip() for f in initial_fields if f.strip()]))
+                    existing.available_fields = merged
+                return await existing.save()
+            else:
+                raise ValueError(f"Document type with code '{norm_code}' already exists for this batch.")
 
         # Check unique display name within batch
         existing_list = await self.repository.list_by_batch(batch_id, class_id=class_id)
@@ -235,13 +259,6 @@ class WantedFieldService:
             WantedFieldItem(field=f, enabled=False, excel_header=None)
             for f in available
         ]
-
-        req_status_clean = requirement_status.strip().upper() if requirement_status else "REQUIRED"
-        if req_status_clean not in ["REQUIRED", "OPTIONAL", "DISABLED"]:
-            req_status_clean = "REQUIRED"
-
-        types = allowed_types if allowed_types else ["PDF", "JPG", "PNG"]
-        size_limit = max_size_mb if max_size_mb and max_size_mb > 0 else 5.0
 
         return await self.repository.create_document_type(
             batch_id=batch_id,
@@ -507,7 +524,13 @@ class WantedFieldService:
             return []
 
         overview: List[Dict[str, Any]] = []
+        seen_overview_codes: set[str] = set()
         for config in configs:
+            doc_code = config.document_type.upper().strip()
+            if doc_code in seen_overview_codes:
+                continue
+            seen_overview_codes.add(doc_code)
+
             wanted_count = sum(1 for f in config.fields if f.enabled)
             mapped_count = sum(1 for f in config.fields if f.enabled and f.excel_header)
             unmapped_count = wanted_count - mapped_count
@@ -556,6 +579,7 @@ class WantedFieldService:
         Respects batch and class scoping.
         Filters out archived documents and documents with requirement_status == 'DISABLED'.
         Returns list of document requirement dicts suitable for the student checklist.
+        Defensively guarantees that each document type appears at most once.
         """
         configs = await self.repository.list_by_batch(batch_id, class_id=class_id)
         if not configs and class_id:
@@ -563,12 +587,18 @@ class WantedFieldService:
             configs = await self.repository.list_by_batch(batch_id, class_id=None)
 
         results: List[Dict[str, Any]] = []
+        seen_req_codes: set[str] = set()
         for config in configs:
             if getattr(config, "is_archived", False):
                 continue
             req_status = (getattr(config, "requirement_status", None) or "REQUIRED").upper()
             if req_status == "DISABLED":
                 continue
+
+            doc_code = config.document_type.upper().strip()
+            if doc_code in seen_req_codes:
+                continue
+            seen_req_codes.add(doc_code)
 
             disp_name = (
                 config.display_name
@@ -598,3 +628,4 @@ class WantedFieldService:
             })
 
         return results
+

@@ -36,3 +36,14 @@ class DocumentFieldConfiguration(Document):
 
     class Settings:
         name = "document_field_configurations"
+        indexes = [
+            [
+                ("batch_id", 1),
+                ("class_id", 1),
+                ("document_type", 1),
+            ],
+            [
+                ("batch_id", 1),
+                ("document_type", 1),
+            ],
+        ]

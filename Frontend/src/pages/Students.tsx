@@ -4,6 +4,8 @@ import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table'
 import { EmptyState } from '../components/ui/EmptyState'
+import { DocumentPreviewModal, type DocumentPreviewTarget } from '../components/ui/DocumentPreviewModal'
+import { DeleteStudentModal, type DeleteStudentTarget } from '../components/ui/DeleteStudentModal'
 import { useStudentStore } from '../store/useStudentStore'
 import { useBatchStore } from '../store/useBatchStore'
 import { useToastStore } from '../store/useToastStore'
@@ -14,18 +16,19 @@ import {
   XCircle,
   Clock,
   Search,
-  Download,
   ShieldCheck,
-  Maximize2,
-  Filter,
-  Sparkles,
-  Loader2
+  Loader2,
+  RotateCcw,
+  AlertTriangle,
+  FileText,
+  ArrowRight,
+  Trash2,
 } from 'lucide-react'
 import type { StudentSubmission } from '../types'
 
 export const Students: React.FC = () => {
-  const { submissions, updateStudentStatus, startAiProcessing, fetchAllSubmissions } = useStudentStore()
-  const { batches, fetchBatches, classesByBatch, fetchClassesForBatch } = useBatchStore()
+  const { submissions, updateStudentStatus, fetchAllSubmissions, deleteSubmission } = useStudentStore()
+  const { batches, fetchBatches, fetchClassesForBatch } = useBatchStore()
   const { addToast } = useToastStore()
 
   // Fetch all student submissions and batches from FastAPI backend when component mounts
@@ -36,83 +39,225 @@ export const Students: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedBatchId, setSelectedBatchId] = useState<string>('ALL')
-  const [selectedClassId, setSelectedClassId] = useState<string>('ALL')
+  const [selectedSection, setSelectedSection] = useState<string>('ALL')
+  const [selectedStatus, setSelectedStatus] = useState<string>('ALL')
   const [selectedStudent, setSelectedStudent] = useState<StudentSubmission | null>(null)
-  const [previewDoc, setPreviewDoc] = useState<{ title: string; url?: string; type?: string; studentName?: string } | null>(null)
+
+  // DocumentPreviewModal state — lazy loaded per-click
+  const [previewTarget, setPreviewTarget] = useState<DocumentPreviewTarget | null>(null)
+
+  // DeleteStudentModal state for safe permanent deletion
+  const [deleteTarget, setDeleteTarget] = useState<DeleteStudentTarget | null>(null)
+
+  const handleDeleteConfirm = async (target: DeleteStudentTarget) => {
+    await deleteSubmission(target.id)
+    if (selectedStudent?.id === target.id) {
+      setSelectedStudent(null)
+    }
+    await Promise.all([
+      fetchAllSubmissions(),
+      fetchBatches(),
+    ])
+    addToast('Student deleted successfully.', 'success')
+  }
 
   // Fetch classes when batch selection changes
   React.useEffect(() => {
     if (selectedBatchId !== 'ALL') {
       fetchClassesForBatch(selectedBatchId)
     }
-    setSelectedClassId('ALL')
+    setSelectedSection('ALL')
   }, [selectedBatchId, fetchClassesForBatch])
 
-  // Available classes for current batch filter
-  const currentBatchClasses = selectedBatchId !== 'ALL' ? (classesByBatch[selectedBatchId] || []) : []
+  // Extract all available sections across batches
+  const availableSections = React.useMemo(() => {
+    const sections = new Set<string>()
+    submissions.forEach((s) => {
+      if (s.className) sections.add(s.className)
+    })
+    return Array.from(sections)
+  }, [submissions])
 
   // Filter submissions
   const filteredSubmissions = submissions.filter((sub) => {
     const matchesSearch =
       sub.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       sub.registerNum.toLowerCase().includes(searchQuery.toLowerCase())
+
     const matchesBatch = selectedBatchId === 'ALL' || sub.batchId === selectedBatchId
-    const matchesClass = selectedClassId === 'ALL' || sub.classId === selectedClassId
-    return matchesSearch && matchesBatch && matchesClass
+
+    const matchesSection =
+      selectedSection === 'ALL' ||
+      sub.className === selectedSection ||
+      (selectedSection === 'Unassigned' && !sub.className)
+
+    let matchesStatus = true
+    if (selectedStatus !== 'ALL') {
+      if (selectedStatus === 'Verified') matchesStatus = sub.status === 'Verified'
+      else if (selectedStatus === 'Rejected') matchesStatus = sub.status === 'Rejected'
+      else if (selectedStatus === 'Pending')
+        matchesStatus = sub.status === 'Pending' || sub.status === 'Submitted' || sub.status === 'Verification Pending'
+      else if (selectedStatus === 'Processing')
+        matchesStatus = sub.status === 'AI Processing'
+      else if (selectedStatus === 'Completed')
+        matchesStatus = sub.status === 'Verified'
+      else if (selectedStatus === 'Needs Review')
+        matchesStatus = sub.status === 'Verification Pending'
+    }
+
+    return matchesSearch && matchesBatch && matchesSection && matchesStatus
   })
+
+  const hasActiveFilters =
+    searchQuery.trim() !== '' ||
+    selectedBatchId !== 'ALL' ||
+    selectedSection !== 'ALL' ||
+    selectedStatus !== 'ALL'
+
+  const clearFilters = () => {
+    setSearchQuery('')
+    setSelectedBatchId('ALL')
+    setSelectedSection('ALL')
+    setSelectedStatus('ALL')
+  }
+
+  const renderStatusBadge = (status: string) => {
+    const s = status.toLowerCase()
+    if (s === 'verified' || s === 'completed') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+          <CheckCircle className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+          Verified
+        </span>
+      )
+    }
+    if (s === 'rejected') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20">
+          <XCircle className="h-3 w-3 text-rose-600 dark:text-rose-400" />
+          Rejected
+        </span>
+      )
+    }
+    if (s.includes('processing')) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-500/20">
+          <Loader2 className="h-3 w-3 text-sky-600 dark:text-sky-400 animate-spin" />
+          Processing
+        </span>
+      )
+    }
+    if (s.includes('review')) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-500/20">
+          <AlertTriangle className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+          Needs Review
+        </span>
+      )
+    }
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+        <Clock className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+        Pending
+      </span>
+    )
+  }
+
+  const renderDocStatusBadge = (status: string) => {
+    if (status === 'Uploaded') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-800 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border dark:border-emerald-800/40">
+          Uploaded
+        </span>
+      )
+    }
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-muted text-muted-foreground border border-border">
+        Document unavailable
+      </span>
+    )
+  }
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Students & Submissions"
-        description="Verify uploaded student transcripts, passports, and review AI OCR metadata classification status."
+        title="Student Management"
+        description="Review student submissions, track multi-document extraction status, and verify candidate admission credentials."
       />
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-card border border-border/80 p-4 rounded-2xl shadow-2xs">
-        <div className="relative w-full sm:w-80">
-          <Search className="h-4 w-4 text-muted-foreground absolute left-3.5 top-3" />
-          <input
-            type="text"
-            placeholder="Search candidate name or reg no..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-border rounded-xl bg-card text-sm text-foreground placeholder:text-muted-foreground/60 transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary hover:border-slate-300"
-          />
-        </div>
+      <div className="bg-card border border-border p-4 rounded-xl shadow-2xs space-y-3">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-3">
+          {/* Search Input */}
+          <div className="relative w-full md:w-80">
+            <Search className="h-4 w-4 text-muted-foreground absolute left-3.5 top-3" />
+            <input
+              type="text"
+              placeholder="Search by student name or register no..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-input rounded-lg bg-card text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            />
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto justify-end">
-          <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
-          <select
-            value={selectedBatchId}
-            onChange={(e) => {
-              setSelectedBatchId(e.target.value)
-              setSelectedClassId('ALL')
-            }}
-            className="h-10 rounded-xl border border-white/[0.08] bg-[#111827]/80 px-3.5 text-xs font-semibold text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 hover:border-white/[0.18] cursor-pointer"
-          >
-            <option value="ALL" className="bg-[#111827] text-white">All Admission Batches</option>
-            {batches.map((b) => (
-              <option key={b.id} value={b.id} className="bg-[#111827] text-white">
-                {b.name}
-              </option>
-            ))}
-          </select>
-
-          {selectedBatchId !== 'ALL' && currentBatchClasses.length > 0 && (
+          {/* Filters Row */}
+          <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto justify-end">
+            {/* Section Filter */}
             <select
-              value={selectedClassId}
-              onChange={(e) => setSelectedClassId(e.target.value)}
-              className="h-10 rounded-xl border border-white/[0.08] bg-[#111827]/80 px-3.5 text-xs font-semibold text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 hover:border-white/[0.18] cursor-pointer"
+              value={selectedSection}
+              onChange={(e) => setSelectedSection(e.target.value)}
+              className="h-9 rounded-lg border border-input bg-card px-3 text-xs font-semibold text-foreground hover:border-border focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer"
             >
-              <option value="ALL" className="bg-[#111827] text-white">All Classes</option>
-              {currentBatchClasses.map((cls) => (
-                <option key={cls.id} value={cls.id} className="bg-[#111827] text-white">
-                  {cls.class_name} (Sec {cls.section})
+              <option value="ALL">All Sections</option>
+              {availableSections.map((sec) => (
+                <option key={sec} value={sec}>
+                  Section {sec}
                 </option>
               ))}
             </select>
-          )}
+
+            {/* Status Filter */}
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="h-9 rounded-lg border border-input bg-card px-3 text-xs font-semibold text-foreground hover:border-border focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer"
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="Pending">Pending</option>
+              <option value="Processing">Processing</option>
+              <option value="Completed">Completed</option>
+              <option value="Verified">Verified</option>
+              <option value="Needs Review">Needs Review</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+
+            {/* Batch Filter */}
+            <select
+              value={selectedBatchId}
+              onChange={(e) => setSelectedBatchId(e.target.value)}
+              className="h-9 rounded-lg border border-input bg-card px-3 text-xs font-semibold text-foreground hover:border-border focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer"
+            >
+              <option value="ALL">All Batches</option>
+              {batches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+
+            {/* Clear Filters Button */}
+            {hasActiveFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                className="text-xs gap-1 h-9 px-2.5"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Clear Filters
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -121,114 +266,105 @@ export const Students: React.FC = () => {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Register ID</TableHead>
               <TableHead>Student Name</TableHead>
-              <TableHead>Admission Batch</TableHead>
+              <TableHead>Register Number</TableHead>
               <TableHead>Section</TableHead>
-              <TableHead>Mobile</TableHead>
-              <TableHead>Uploaded Docs</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Submitted On</TableHead>
+              <TableHead>Documents</TableHead>
+              <TableHead>Processing</TableHead>
+              <TableHead>Verification</TableHead>
+              <TableHead>Last Updated</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredSubmissions.map((student) => {
-              const batch = batches.find((b) => b.id === student.batchId)
               const uploadedDocs = student.documents.filter((d) => d.status === 'Uploaded').length
-
-              const statusStyles: Record<string, string> = {
-                Verified: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-                Rejected: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
-                'AI Processing': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-                Submitted: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-                'Verification Pending': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-              }
-              const badgeClass = statusStyles[student.status] || 'bg-slate-800 text-slate-300 border-slate-700'
+              const totalDocs = student.documents.length
 
               return (
                 <TableRow key={student.id}>
-                  <TableCell>
-                    <span className="font-mono text-xs font-semibold text-white px-2 py-0.5 rounded-md bg-[#0F172A] border border-white/[0.08]">
-                      {student.registerNum}
-                    </span>
-                  </TableCell>
+                  {/* Student Name */}
                   <TableCell>
                     <div className="flex items-center gap-2.5">
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-400 font-bold text-xs shrink-0 border border-indigo-500/20">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-xs shrink-0">
                         {student.name ? student.name.charAt(0).toUpperCase() : 'S'}
                       </div>
-                      <span className="font-semibold text-white">{student.name}</span>
+                      <span className="font-bold text-foreground">{student.name}</span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-xs font-medium text-slate-400">{batch ? batch.name : 'N/A'}</TableCell>
-                  <TableCell className="text-xs font-semibold text-indigo-400">{student.className || 'Default'}</TableCell>
-                  <TableCell className="text-xs text-slate-400 font-mono">{student.mobile}</TableCell>
+
+                  {/* Register Number */}
                   <TableCell>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#0F172A] border border-white/[0.08] text-slate-300 text-xs font-semibold">
-                      {uploadedDocs} Files
+                    <span className="font-mono text-xs font-bold text-foreground px-2 py-0.5 rounded bg-secondary border border-border">
+                      {student.registerNum || 'N/A'}
                     </span>
                   </TableCell>
+
+                  {/* Section */}
                   <TableCell>
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${badgeClass}`}>
-                      {student.status === 'Verified' ? (
-                        <CheckCircle className="h-3 w-3" />
-                      ) : student.status === 'Rejected' ? (
-                        <XCircle className="h-3 w-3" />
-                      ) : student.status === 'AI Processing' ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <Clock className="h-3 w-3" />
-                      )}
-                      <span>{student.status}</span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-secondary text-foreground border border-border">
+                      {student.className ? `Section ${student.className}` : 'General'}
                     </span>
                   </TableCell>
-                  <TableCell className="text-xs text-slate-400">{student.submittedAt}</TableCell>
+
+                  {/* Documents */}
+                  <TableCell>
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+                      <FileText className="h-3.5 w-3.5" />
+                      {uploadedDocs}/{totalDocs || uploadedDocs} Uploaded
+                    </span>
+                  </TableCell>
+
+                  {/* Processing Status */}
+                  <TableCell>
+                    {student.status === 'AI Processing' ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-sky-600 dark:text-sky-400">
+                        <Loader2 className="h-3 w-3 animate-spin" /> In Progress
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Completed</span>
+                    )}
+                  </TableCell>
+
+                  {/* Verification Status */}
+                  <TableCell>{renderStatusBadge(student.status)}</TableCell>
+
+                  {/* Last Updated */}
+                  <TableCell className="text-xs text-muted-foreground">
+                    {student.updatedAt
+                      ? new Date(student.updatedAt).toLocaleDateString()
+                      : student.submittedAt || 'Recent'}
+                  </TableCell>
+
+                  {/* Actions */}
                   <TableCell className="text-right">
-                    <div className="inline-flex items-center gap-1.5 justify-end">
+                    <div className="flex items-center justify-end gap-1.5">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => setSelectedStudent(student)}
-                        className="cursor-pointer gap-1 text-xs py-1 px-2.5"
+                        className="gap-1 text-xs py-1 px-2.5"
                         title="View Student Profile"
                       >
                         <Eye className="h-3.5 w-3.5" /> View
                       </Button>
                       <Button
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
-                        onClick={() => {
-                          const firstUploaded = student.documents.find((d) => d.status === 'Uploaded')
-                          setPreviewDoc({
-                            title: firstUploaded ? firstUploaded.reqName : 'Uploaded Documents',
-                            url: firstUploaded?.fileUrl,
-                            type: firstUploaded?.fileType,
-                            studentName: student.name,
+                        onClick={() =>
+                          setDeleteTarget({
+                            id: student.id,
+                            name: student.name,
+                            registerNum: student.registerNum,
+                            className: student.className,
+                            documentsCount: student.documents.length,
                           })
-                        }}
-                        className="cursor-pointer gap-1 text-xs py-1 px-2.5"
-                        title="Preview Documents"
+                        }
+                        className="gap-1 text-xs py-1 px-2 text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10 dark:hover:text-rose-400 border border-transparent hover:border-rose-500/20 transition-colors"
+                        title="Delete Student"
                       >
-                        <Maximize2 className="h-3.5 w-3.5" /> Preview
-                      </Button>
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        disabled={student.status === 'AI Processing' || student.status === 'Verified'}
-                        onClick={() => {
-                          startAiProcessing(student.id)
-                          addToast(`Started AI OCR extraction for ${student.name}...`, 'info')
-                        }}
-                        className="cursor-pointer gap-1 text-xs py-1 px-2.5 shadow-2xs"
-                        title="Start AI Verification"
-                      >
-                        {student.status === 'AI Processing' ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Sparkles className="h-3.5 w-3.5" />
-                        )}
-                        Start AI
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Delete</span>
                       </Button>
                     </div>
                   </TableCell>
@@ -239,162 +375,234 @@ export const Students: React.FC = () => {
         </Table>
       ) : (
         <EmptyState
-          title="No Student Records Found"
-          description="No candidate submissions match your current search and filter criteria."
-          icon={<Users className="h-10 w-10 text-primary" />}
+          title="No Students Found"
+          description="No student records match your current search and filter criteria."
+          icon={<Users className="h-8 w-8 text-primary" />}
+          action={
+            hasActiveFilters ? (
+              <Button variant="outline" size="sm" onClick={clearFilters}>
+                <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                Clear Filters
+              </Button>
+            ) : undefined
+          }
         />
       )}
 
-      {/* STUDENT DETAILS INSPECTION MODAL */}
+      {/* ── STUDENT PROFILE MODAL ── */}
       {selectedStudent && (
         <Modal
           isOpen={!!selectedStudent}
           onClose={() => setSelectedStudent(null)}
-          title={`Candidate Details: ${selectedStudent.name}`}
+          title={`Student Profile: ${selectedStudent.name}`}
         >
-          <div className="space-y-6">
-            <div className="p-4 bg-secondary/40 border border-border rounded-xl grid grid-cols-2 gap-3 text-xs">
+          <div className="space-y-5">
+            {/* Info Grid */}
+            <div className="p-4 bg-secondary/50 border border-border rounded-xl grid grid-cols-2 gap-3 text-xs">
               <div>
-                <span className="text-muted-foreground block">Registration No.</span>
+                <span className="text-muted-foreground block">Registration Number</span>
                 <span className="font-bold text-foreground font-mono">{selectedStudent.registerNum}</span>
               </div>
               <div>
                 <span className="text-muted-foreground block">Mobile Contact</span>
-                <span className="font-bold text-foreground">{selectedStudent.mobile}</span>
+                <span className="font-bold text-foreground">{selectedStudent.mobile || 'N/A'}</span>
               </div>
               <div>
-                <span className="text-muted-foreground block">Submitted On</span>
-                <span className="font-bold text-foreground">{selectedStudent.submittedAt}</span>
+                <span className="text-muted-foreground block">Section Allocation</span>
+                <span className="font-bold text-foreground">
+                  {selectedStudent.className ? `Section ${selectedStudent.className}` : 'General'}
+                </span>
               </div>
               <div>
                 <span className="text-muted-foreground block">Verification Status</span>
-                <span className="font-bold text-primary">{selectedStudent.status}</span>
+                <div className="mt-0.5">{renderStatusBadge(selectedStudent.status)}</div>
+              </div>
+              {selectedStudent.email && (
+                <div className="col-span-2">
+                  <span className="text-muted-foreground block">Email</span>
+                  <span className="font-bold text-foreground">{selectedStudent.email}</span>
+                </div>
+              )}
+              <div className="col-span-2">
+                <span className="text-muted-foreground block">Submitted At</span>
+                <span className="font-bold text-foreground">{selectedStudent.submittedAt || 'N/A'}</span>
               </div>
             </div>
 
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Uploaded Files</h4>
-              <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-1">
+            {/* Document List */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <FileText className="h-3.5 w-3.5" />
+                Uploaded Documents ({selectedStudent.documents.length})
+              </h4>
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {selectedStudent.documents.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic py-2">No documents submitted.</p>
+                )}
                 {selectedStudent.documents.map((doc, idx) => {
                   const isUploaded = doc.status === 'Uploaded'
+                  const docIndex = doc.documentIndex !== undefined ? doc.documentIndex : idx
+                  const canPreview = isUploaded && docIndex !== undefined
+
                   return (
                     <div
                       key={idx}
-                      className="p-3 rounded-xl border border-border bg-card flex items-center justify-between gap-3 text-xs"
+                      onClick={() => {
+                        if (canPreview) {
+                          setPreviewTarget({
+                            submissionId: selectedStudent.id,
+                            documentIndex: docIndex,
+                            documentName: doc.reqName,
+                            fileType: doc.fileType,
+                            fileName: doc.fileName,
+                            studentName: selectedStudent.name,
+                          })
+                        }
+                      }}
+                      className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 shadow-2xs ${
+                        canPreview
+                          ? 'border-border bg-card hover:bg-secondary/40 hover:border-emerald-500/40 cursor-pointer'
+                          : 'border-border/60 bg-card/60 opacity-80 cursor-default'
+                      }`}
                     >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-foreground">{doc.reqName}</span>
-                          <span
-                            className={`px-2 py-0.5 rounded text-3xs font-extrabold uppercase ${
-                              isUploaded ? 'bg-green-100 text-green-800' : 'bg-secondary text-muted-foreground'
-                            }`}
-                          >
-                            {doc.status}
-                          </span>
+                      {/* Document icon + info */}
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <div
+                          className={`flex h-8 w-8 items-center justify-center rounded-lg shrink-0 mt-0.5 ${
+                            isUploaded
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                              : 'bg-muted text-muted-foreground border border-border'
+                          }`}
+                        >
+                          <FileText className="h-4 w-4" />
                         </div>
-                        {doc.fileName && (
-                          <span className="text-3xs text-muted-foreground font-mono block mt-0.5 truncate">
-                            {doc.fileName} ({doc.fileSizeMb} MB)
-                          </span>
-                        )}
+                        <div className="min-w-0">
+                          <span className="font-bold text-foreground text-xs block truncate">{doc.reqName}</span>
+                          {doc.fileName ? (
+                            <span className="text-[11px] text-muted-foreground font-mono block mt-0.5 truncate">
+                              {doc.fileName}
+                              {doc.fileSizeMb ? ` · ${doc.fileSizeMb} MB` : ''}
+                            </span>
+                          ) : !isUploaded ? (
+                            <span className="text-[11px] text-muted-foreground/60 italic block mt-0.5">
+                              Document unavailable
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
 
-                      {isUploaded && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            setPreviewDoc({
-                              title: doc.reqName,
-                              url: doc.fileUrl,
-                              type: doc.fileType,
-                              studentName: selectedStudent.name,
-                            })
-                          }
-                          className="cursor-pointer gap-1 text-3xs py-1"
-                        >
-                          <Maximize2 className="h-3 w-3" /> Preview
-                        </Button>
-                      )}
+                      {/* Status & Preview Action */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {renderDocStatusBadge(doc.status)}
+
+                        {canPreview && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setPreviewTarget({
+                                submissionId: selectedStudent.id,
+                                documentIndex: docIndex,
+                                documentName: doc.reqName,
+                                fileType: doc.fileType,
+                                fileName: doc.fileName,
+                                studentName: selectedStudent.name,
+                              })
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white dark:bg-emerald-500 dark:hover:bg-emerald-400 dark:text-slate-950 transition-colors shadow-2xs cursor-pointer"
+                            title={`Preview ${doc.reqName}`}
+                          >
+                            <span>Preview</span>
+                            <ArrowRight className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )
                 })}
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-4 border-t border-border">
-              <div className="flex gap-2">
+            {/* Action Row */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-border">
+              {/* Separate Destructive Action */}
+              <div>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() =>
+                    setDeleteTarget({
+                      id: selectedStudent.id,
+                      name: selectedStudent.name,
+                      registerNum: selectedStudent.registerNum,
+                      className: selectedStudent.className,
+                      documentsCount: selectedStudent.documents.length,
+                    })
+                  }
+                  className="gap-1.5 w-full sm:w-auto bg-rose-600 hover:bg-rose-700 text-white dark:bg-rose-600 dark:hover:bg-rose-700 shadow-2xs"
+                  title="Permanently Delete Student"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Delete Student
+                </Button>
+              </div>
+
+              {/* Normal Workflow Actions */}
+              <div className="flex items-center justify-end gap-2">
                 <Button
                   variant="primary"
                   size="sm"
                   onClick={() => {
                     updateStudentStatus(selectedStudent.id, 'Verified')
-                    setSelectedStudent((prev) => prev ? { ...prev, status: 'Verified' } : null)
+                    setSelectedStudent((prev) => (prev ? { ...prev, status: 'Verified' } : null))
                     addToast(`Marked ${selectedStudent.name} as Verified!`, 'success')
                   }}
-                  className="cursor-pointer gap-1"
+                  className="gap-1"
                 >
                   <CheckCircle className="h-3.5 w-3.5" /> Verify Student
                 </Button>
                 <Button
-                  variant="danger"
+                  variant="secondary"
                   size="sm"
                   onClick={() => {
                     updateStudentStatus(selectedStudent.id, 'Rejected')
-                    setSelectedStudent((prev) => prev ? { ...prev, status: 'Rejected' } : null)
+                    setSelectedStudent((prev) => (prev ? { ...prev, status: 'Rejected' } : null))
                     addToast(`Marked ${selectedStudent.name} as Rejected.`, 'info')
                   }}
-                  className="cursor-pointer gap-1"
+                  className="gap-1 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 border border-border"
                 >
                   <XCircle className="h-3.5 w-3.5" /> Reject
                 </Button>
+                <Button variant="outline" size="sm" onClick={() => setSelectedStudent(null)}>
+                  Close
+                </Button>
               </div>
-              <Button variant="outline" size="sm" onClick={() => setSelectedStudent(null)}>
-                Close
-              </Button>
             </div>
           </div>
         </Modal>
       )}
 
-      {/* DOCUMENT PREVIEW MODAL */}
-      {previewDoc && (
-        <Modal
-          isOpen={!!previewDoc}
-          onClose={() => setPreviewDoc(null)}
-          title={`Document Preview: ${previewDoc.title}`}
-        >
-          <div className="space-y-4">
-            <div className="flex items-center justify-between text-xs text-muted-foreground border-b border-border pb-2">
-              <span>Candidate: <strong className="text-foreground">{previewDoc.studentName}</strong></span>
-              <span>Format: <strong className="font-mono text-foreground">{previewDoc.type || 'PDF'}</strong></span>
-            </div>
+      {/* ── DELETE STUDENT CONFIRMATION MODAL ── */}
+      <DeleteStudentModal
+        target={deleteTarget}
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteConfirm}
+      />
 
-            <div className="relative w-full h-[320px] bg-slate-950 rounded-xl overflow-hidden border border-slate-800 flex flex-col items-center justify-center p-4">
-              <img
-                src={previewDoc.url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800'}
-                alt={previewDoc.title}
-                className="max-h-full max-w-full object-contain rounded shadow-lg"
-              />
-              <div className="absolute bottom-3 right-3 bg-card/80 backdrop-blur-sm border border-border px-3 py-1 rounded-lg text-3xs font-mono text-foreground flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 text-green-500" /> AI OCR Verified Scan
-              </div>
-            </div>
+      {/* ── DOCUMENT PREVIEW MODAL ── */}
+      <DocumentPreviewModal
+        target={previewTarget}
+        onClose={() => setPreviewTarget(null)}
+      />
 
-            <div className="flex justify-between items-center pt-2">
-              <span className="text-xs text-muted-foreground">Watermarked preview version</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => addToast(`Downloading ${previewDoc.title}...`, 'info')}
-                className="cursor-pointer gap-1.5"
-              >
-                <Download className="h-3.5 w-3.5" /> Download File
-              </Button>
-            </div>
+      {/* AI Verification badge (kept from original) */}
+      {previewTarget && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[60] pointer-events-none">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card/90 backdrop-blur-sm border border-border shadow-lg text-xs font-semibold text-muted-foreground">
+            <ShieldCheck className="h-3.5 w-3.5 text-success" />
+            Staff-authenticated document access
           </div>
-        </Modal>
+        </div>
       )}
     </div>
   )

@@ -11,7 +11,7 @@ interface StudentState {
   addSubmission: (submission: Omit<StudentSubmission, 'id' | 'submittedAt'>) => Promise<StudentSubmission>
   updateStudentStatus: (id: string, status: StudentSubmission['status']) => Promise<void>
   startAiProcessing: (id: string) => Promise<void>
-  deleteSubmission: (id: string) => void
+  deleteSubmission: (id: string) => Promise<void>
 }
 
 const initialSubmissions: StudentSubmission[] = []
@@ -130,7 +130,8 @@ export const useStudentStore = create<StudentState>((set) => ({
     }, 2500)
   },
 
-  deleteSubmission: (id) => {
+  deleteSubmission: async (id) => {
+    await studentSubmissionService.deleteSubmission(id)
     set((state) => ({
       submissions: state.submissions.filter((sub) => sub.id !== id),
     }))
