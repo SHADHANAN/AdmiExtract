@@ -10,7 +10,12 @@ from app.db.database import init_db, close_db, is_mongodb_connected
 from app.api.user import router as user_router
 from app.api.auth import router as auth_router
 from app.api.department import router as department_router
-from app.api.student_submission import router as student_submission_router, student_router, students_me_router
+from app.api.student_submission import (
+    router as student_submission_router,
+    student_router,
+    students_me_router,
+    submissions_alias_router,
+)
 from app.api.excel_template import router as excel_template_router
 from app.api.doc_config_version import router as doc_config_version_router
 from app.api.batch import router as batch_router, public_router as public_batch_router
@@ -110,6 +115,7 @@ app.include_router(batch_class_router)
 app.include_router(public_batch_router)
 app.include_router(upload_link_router)
 app.include_router(student_submission_router)
+app.include_router(submissions_alias_router)
 app.include_router(student_router)
 app.include_router(students_me_router)
 app.include_router(excel_template_router)

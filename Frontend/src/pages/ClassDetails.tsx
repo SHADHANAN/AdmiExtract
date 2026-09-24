@@ -93,6 +93,7 @@ export const ClassDetails: React.FC = () => {
   const [qrModalLink, setQrModalLink] = useState<UploadLink | null>(null)
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null)
   const [previewTarget, setPreviewTarget] = useState<DocumentPreviewTarget | null>(null)
+  const [isDownloadingAllDocs, setIsDownloadingAllDocs] = useState(false)
 
   // Handle student deletion
   const handleDeleteStudent = async (target: DeleteStudentTarget) => {
@@ -150,6 +151,35 @@ export const ClassDetails: React.FC = () => {
       addToast(err?.response?.data?.detail || err?.message || 'Failed to download Excel workbook', 'error')
     } finally {
       setIsDownloadingExcel(false)
+    }
+  }
+
+  const handleDownloadAllDocuments = async () => {
+    if (!selectedStudent || isDownloadingAllDocs) return
+    const studentDocs = selectedStudent.documents || []
+    const uploadedDocs = studentDocs.filter((d: any) => d.status === 'Uploaded')
+    if (uploadedDocs.length === 0) {
+      addToast('No documents available for download.', 'info')
+      return
+    }
+
+    setIsDownloadingAllDocs(true)
+    try {
+      await studentSubmissionService.downloadAllDocuments(
+        selectedStudent.id,
+        selectedStudent.studentName || selectedStudent.name,
+        selectedStudent.registerNum
+      )
+      addToast(`Downloaded all documents for ${selectedStudent.studentName || selectedStudent.name}!`, 'success')
+    } catch (err: any) {
+      const msg = err?.message || ''
+      if (msg.includes('No documents available')) {
+        addToast('No documents available for download.', 'info')
+      } else {
+        addToast('Unable to download all documents. Please try again.', 'error')
+      }
+    } finally {
+      setIsDownloadingAllDocs(false)
     }
   }
 
@@ -814,10 +844,39 @@ export const ClassDetails: React.FC = () => {
             </div>
 
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-                <FileText className="h-3.5 w-3.5" />
-                Uploaded Documents ({(selectedStudent.documents || []).length})
-              </h4>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <FileText className="h-3.5 w-3.5" />
+                  Uploaded Documents ({(selectedStudent.documents || []).length})
+                </h4>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadAllDocuments}
+                  disabled={
+                    isDownloadingAllDocs ||
+                    (selectedStudent.documents || []).filter((d: any) => d.status === 'Uploaded').length === 0
+                  }
+                  className="cursor-pointer gap-1.5 text-xs h-8 px-2.5"
+                  title={
+                    (selectedStudent.documents || []).filter((d: any) => d.status === 'Uploaded').length === 0
+                      ? 'No documents available for download.'
+                      : 'Download all uploaded documents as a single combined PDF'
+                  }
+                >
+                  {isDownloadingAllDocs ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                      <span>Preparing documents...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-3.5 w-3.5" />
+                      <span>Download All</span>
+                    </>
+                  )}
+                </Button>
+              </div>
               <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                 {(selectedStudent.documents || []).length > 0 ? (
                   (selectedStudent.documents || []).map((doc: any, i: number) => {

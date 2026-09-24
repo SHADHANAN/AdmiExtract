@@ -59,6 +59,57 @@ export const studentSubmissionService = {
     const response = await api.delete(`/student-submissions/${id}${queryString}`)
     return response.data
   },
+
+  // Download all uploaded documents for a student submission combined into a single PDF
+  async downloadAllDocuments(submissionId: string, studentName?: string, registerNum?: string): Promise<void> {
+    try {
+      const response = await api.get(`/student-submissions/${submissionId}/documents/download-all`, {
+        responseType: 'blob',
+      })
+
+      // Extract filename from Content-Disposition header if available
+      let filename = ''
+      const disposition = response.headers?.['content-disposition']
+      if (disposition && disposition.includes('filename=')) {
+        const filenameMatch = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1].replace(/['"]/g, '').trim()
+        }
+      }
+
+      if (!filename) {
+        const cleanName = (studentName || 'Student').replace(/[^a-zA-Z0-9_-]/g, '_')
+        const cleanReg = (registerNum || 'Documents').replace(/[^a-zA-Z0-9_-]/g, '_')
+        filename = `${cleanName}_${cleanReg}_All_Documents.pdf`
+      }
+
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err: any) {
+      // If error payload is returned as a Blob (due to responseType: 'blob'), parse the error detail
+      if (err.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text()
+          const parsed = JSON.parse(text)
+          if (parsed.detail) {
+            throw new Error(parsed.detail)
+          }
+        } catch (e: any) {
+          if (e.message && e.message !== err.message && !e.message.includes('JSON')) {
+            throw e
+          }
+        }
+      }
+      throw err
+    }
+  },
 }
 
 // Convert backend response model to Frontend StudentSubmission format

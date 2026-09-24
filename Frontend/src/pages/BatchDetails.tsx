@@ -45,6 +45,7 @@ import { DocumentPreviewModal, type DocumentPreviewTarget } from '../components/
 
 import type { DocumentRequirement, StudentSubmission } from '../types'
 import { excelTemplateService, type ExcelTemplateResponse } from '../services/excelTemplate'
+import { studentSubmissionService } from '../services/studentSubmission'
 import { wantedFieldService, type DocumentTypeOverviewItem, type WantedFieldItem } from '../services/wantedField'
 import { copyToClipboard } from '../utils/clipboard'
 import { getStudentUploadUrl } from '../utils/studentPortalUrl'
@@ -241,6 +242,7 @@ export const BatchDetails: React.FC = () => {
   const [lookupColumn, setLookupColumn] = useState<string>('Reg No')
   const [isSavingMappings, setIsSavingMappings] = useState(false)
   const [isDownloadingExcel, setIsDownloadingExcel] = useState(false)
+  const [isDownloadingAllDocs, setIsDownloadingAllDocs] = useState(false)
 
   // Fetch Excel template metadata (per class if selected)
   const loadExcelTemplateInfo = React.useCallback(async () => {
@@ -631,6 +633,36 @@ export const BatchDetails: React.FC = () => {
       addToast(err.message || 'Failed to download Excel workbook', 'error')
     } finally {
       setIsDownloadingExcel(false)
+    }
+  }
+
+  const handleDownloadAllDocuments = async () => {
+    if (!selectedStudent || isDownloadingAllDocs) return
+    const uploadedDocs = (selectedStudent.documents || []).filter(
+      (d: any) => d.status === 'Uploaded'
+    )
+    if (uploadedDocs.length === 0) {
+      addToast('No documents available for download.', 'info')
+      return
+    }
+
+    setIsDownloadingAllDocs(true)
+    try {
+      await studentSubmissionService.downloadAllDocuments(
+        selectedStudent.id,
+        selectedStudent.name,
+        selectedStudent.registerNum
+      )
+      addToast(`Downloaded all documents for ${selectedStudent.name}!`, 'success')
+    } catch (err: any) {
+      const msg = err?.message || ''
+      if (msg.includes('No documents available')) {
+        addToast('No documents available for download.', 'info')
+      } else {
+        addToast('Unable to download all documents. Please try again.', 'error')
+      }
+    } finally {
+      setIsDownloadingAllDocs(false)
     }
   }
 
@@ -2081,10 +2113,39 @@ export const BatchDetails: React.FC = () => {
 
             {/* Document list with Preview Action */}
             <div className="space-y-3">
-              <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <FileText className="h-3.5 w-3.5" />
-                Uploaded Documents ({selectedStudent.documents.length})
-              </h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <FileText className="h-3.5 w-3.5" />
+                  Uploaded Documents ({selectedStudent.documents.length})
+                </h4>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadAllDocuments}
+                  disabled={
+                    isDownloadingAllDocs ||
+                    (selectedStudent.documents || []).filter((d: any) => d.status === 'Uploaded').length === 0
+                  }
+                  className="cursor-pointer gap-1.5 text-xs h-8 px-2.5"
+                  title={
+                    (selectedStudent.documents || []).filter((d: any) => d.status === 'Uploaded').length === 0
+                      ? 'No documents available for download.'
+                      : 'Download all uploaded documents as a single combined PDF'
+                  }
+                >
+                  {isDownloadingAllDocs ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                      <span>Preparing documents...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-3.5 w-3.5" />
+                      <span>Download All</span>
+                    </>
+                  )}
+                </Button>
+              </div>
               <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
                 {selectedStudent.documents.length === 0 && (
                   <p className="text-xs text-muted-foreground italic py-2">No documents submitted.</p>

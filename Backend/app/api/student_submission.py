@@ -447,6 +447,114 @@ async def serve_submission_document(
     )
 
 
+@router.get(
+    "/{submission_id}/documents/download-all",
+    dependencies=[Depends(RoleChecker([UserRole.SUPER_ADMIN, UserRole.DEPARTMENT_ADMIN]))],
+)
+async def download_all_submission_documents(
+    submission_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Download all available uploaded documents for a student submission combined into a single PDF.
+
+    Security & Scope Chain:
+      1. JWT required (401 if missing/invalid).
+      2. RBAC: Restricted to staff (SUPER_ADMIN and DEPARTMENT_ADMIN). Students cannot access (403).
+      3. Validates submission ownership from DB.
+      4. Department isolation: DEPARTMENT_ADMIN can ONLY access their department's submissions (403).
+      5. Skips unuploaded/unavailable/missing documents without creating empty pages.
+      6. Raises 404 if no valid documents exist.
+      7. Records an audit trail log entry for the action.
+    """
+    from fastapi.responses import Response
+    from app.services.document_merge_service import DocumentMergeService, NoDocumentsAvailableException
+
+    # 1. Load submission from DB
+    try:
+        s = await service.get_submission_by_id(submission_id)
+    except StudentSubmissionNotFoundException:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found.")
+
+    # 2. Scope check: DEPARTMENT_ADMIN can only access their department's submissions
+    if current_user.role == UserRole.DEPARTMENT_ADMIN:
+        dept_id = s.department_id
+        if not dept_id and s.batch_id:
+            try:
+                from app.models.batch import AdmissionBatch
+                b = await AdmissionBatch.get(s.batch_id)
+                if b:
+                    dept_id = b.department_id
+            except Exception:
+                pass
+        if dept_id and dept_id != current_user.department_code:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Forbidden: You do not have permission to access another department's resources.",
+            )
+
+    # 3. Generate combined PDF
+    try:
+        pdf_bytes, filename, included_count = DocumentMergeService.generate_all_documents_pdf(s)
+    except NoDocumentsAvailableException:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No documents available for download.",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Unable to process documents: {str(e)}",
+        )
+
+    # 4. Record audit log
+    try:
+        from app.models.audit_log import AuditLog
+        await AuditLog(
+            action="DOWNLOAD_ALL_DOCUMENTS",
+            actor_user_id=str(current_user.id),
+            actor_username=current_user.username,
+            actor_role=current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+            submission_id=str(s.id),
+            student_name=s.student_name,
+            register_number=s.register_number,
+            batch_id=s.batch_id,
+            class_id=s.class_id,
+            documents_count=included_count,
+            result="SUCCESS",
+        ).insert()
+    except Exception as log_err:
+        import logging
+        logging.getLogger(__name__).warning(f"[download_all_submission_documents] Audit log error: {log_err}")
+
+    # 5. Return PDF file response
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Type": "application/pdf",
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, no-store",
+        },
+    )
+
+
+# Alias router for /submissions prefix compatibility
+submissions_alias_router = APIRouter(prefix="/submissions", tags=["Student Submissions (Alias)"])
+
+
+@submissions_alias_router.get(
+    "/{submission_id}/documents/download-all",
+    dependencies=[Depends(RoleChecker([UserRole.SUPER_ADMIN, UserRole.DEPARTMENT_ADMIN]))],
+)
+async def download_all_submission_documents_alias(
+    submission_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    return await download_all_submission_documents(submission_id, current_user)
+
+
 @router.patch("/{id}/status", response_model=StudentSubmissionResponse, dependencies=[Depends(RoleChecker([UserRole.SUPER_ADMIN, UserRole.DEPARTMENT_ADMIN]))])
 async def update_student_submission_status(
     id: str,
