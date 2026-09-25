@@ -28,16 +28,19 @@ from app.services.document_worker_pool import DocumentWorkerPool
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 1. Database connection
-    await init_db()
+    # 1. Database connection & Beanie initialization
+    db_ready = await init_db()
 
-    # 2. Worker pool startup
+    # 2. Worker pool startup - workers start ONLY after Beanie is successfully initialized
     worker_pool = DocumentWorkerPool.get_instance()
-    await worker_pool.start()
+    if db_ready:
+        await worker_pool.start()
+    else:
+        print("[LIFESPAN] Database/Beanie not initialized; DocumentWorkerPool startup postponed until connection is established.")
 
     yield
 
-    # 3. Graceful shutdown
+    # 3. Graceful shutdown: workers must stop BEFORE database is closed
     print("Application shutting down...")
     await worker_pool.stop()
     await close_db()

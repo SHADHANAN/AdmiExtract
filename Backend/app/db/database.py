@@ -14,6 +14,7 @@ Features:
 
 import asyncio
 import logging
+import os
 import re
 from typing import Any, cast
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -37,8 +38,9 @@ def mask_mongodb_uri(uri: str) -> str:
 if not hasattr(AsyncIOMotorClient, "append_metadata"):
     AsyncIOMotorClient.append_metadata = lambda *args, **kwargs: None
 
-# Default client and database instances
-client = AsyncIOMotorClient(settings.MONGODB_URI, serverSelectionTimeoutMS=2000)
+# Default client and database instances (allow 5s for remote Atlas clusters, 2s for local)
+_timeout_ms = 5000 if ("mongodb+srv://" in settings.MONGODB_URI or os.getenv("RENDER") or os.getenv("IS_RENDER")) else 2000
+client = AsyncIOMotorClient(settings.MONGODB_URI, serverSelectionTimeoutMS=_timeout_ms)
 db = client[settings.DATABASE_NAME]
 
 _is_connected: bool = False
@@ -48,6 +50,19 @@ _reconnect_task: asyncio.Task | None = None
 def is_mongodb_connected() -> bool:
     """Return True if the database is currently connected and initialized."""
     return _is_connected
+
+
+def is_beanie_initialized() -> bool:
+    """Return True only if Beanie document models have been successfully initialized."""
+    global _is_connected
+    if not _is_connected:
+        return False
+    try:
+        from beanie.exceptions import CollectionWasNotInitialized
+        from app.models.document_job import DocumentProcessingJob
+        return DocumentProcessingJob.get_pymongo_collection() is not None
+    except Exception:
+        return False
 
 
 async def _run_db_setup():
@@ -182,26 +197,39 @@ async def _background_reconnect():
             print("\n" + "=" * 70)
             print("[INFO] MongoDB Connected! Database initialized and seed data verified.")
             print("=" * 70 + "\n")
+
+            # Start worker pool now that Beanie is fully initialized
+            try:
+                from app.services.document_worker_pool import DocumentWorkerPool
+                pool = DocumentWorkerPool.get_instance()
+                if not pool.is_running:
+                    await pool.start()
+            except Exception as w_err:
+                logger.error("[WorkerPool] Error starting workers post-reconnect: %s", w_err)
             break
         except Exception:
             pass
 
 
-async def init_db():
+async def init_db() -> bool:
     """
     Initialize database connection and verify MongoDB availability.
     If MongoDB is offline, prints diagnostic guidance and starts background retry.
+    Returns True if database and Beanie are fully initialized, False otherwise.
     """
     global _is_connected, _reconnect_task
+
+    if _is_connected and is_beanie_initialized():
+        return True
 
     print(f"Connecting to MongoDB at '{mask_mongodb_uri(settings.MONGODB_URI)}' (Database: '{settings.DATABASE_NAME}')...")
 
     try:
-        # Fast health check with 2s timeout
         await client.admin.command("ping")
         await _run_db_setup()
-        print("MongoDB Connected successfully!")
-    except (ServerSelectionTimeoutError, PyMongoError, OSError) as exc:
+        print("MongoDB Connected successfully and Beanie initialized!")
+        return True
+    except (ServerSelectionTimeoutError, PyMongoError, OSError, Exception) as exc:
         _is_connected = False
         print("\n" + "=" * 78)
         print(" [WARNING] MongoDB is UNAVAILABLE at startup!")
@@ -211,6 +239,7 @@ async def init_db():
         print("-" * 78)
         print(" The application is starting in DEGRADED mode.")
         print(" Endpoints that require database storage will return 503 until MongoDB is up.")
+        print(" DocumentWorkerPool will NOT start until database/Beanie is online.")
         print("")
         print(" Troubleshooting:")
         print("   1. Start local MongoDB service:")
@@ -222,16 +251,20 @@ async def init_db():
         print("=" * 78 + "\n")
 
         # Launch background reconnect polling
-        _reconnect_task = asyncio.create_task(_background_reconnect())
+        if not _reconnect_task or _reconnect_task.done():
+            _reconnect_task = asyncio.create_task(_background_reconnect())
+        return False
 
 
 async def close_db():
     """Gracefully close database client and cancel background retry tasks."""
-    global _reconnect_task, client
+    global _reconnect_task, client, _is_connected
+    _is_connected = False
     if _reconnect_task and not _reconnect_task.done():
         _reconnect_task.cancel()
         try:
             await _reconnect_task
         except asyncio.CancelledError:
             pass
+        _reconnect_task = None
     client.close()

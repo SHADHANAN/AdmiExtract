@@ -43,6 +43,30 @@ from app.core.config import settings
 # 1. FastAPI App Import & WorkerPool Idempotency Tests
 # ---------------------------------------------------------------------------
 
+@pytest_asyncio.fixture(scope="module", autouse=True)
+async def setup_test_module_db():
+    """Ensure database and Beanie models are initialized for startup safety test suite."""
+    if not hasattr(AsyncIOMotorClient, "append_metadata"):
+        AsyncIOMotorClient.append_metadata = lambda *args, **kwargs: None
+
+    test_client = AsyncIOMotorClient(settings.MONGODB_URI)
+    test_db = test_client["automate_test_db"]
+
+    import app.db.database
+    app.db.database.client = test_client
+    app.db.database.db = test_db
+    app.db.database._is_connected = True
+
+    from app.models.document_job import DocumentProcessingJob, SubmissionSession
+    await init_beanie(
+        database=cast(Any, test_db),
+        document_models=[DocumentProcessingJob, SubmissionSession, User],
+    )
+    yield
+    await test_client.drop_database("automate_test_db")
+    test_client.close()
+
+
 def test_app_import_safety():
     """Verify that importing app.main only exposes the FastAPI instance and doesn't run Uvicorn."""
     from app.main import app as main_app

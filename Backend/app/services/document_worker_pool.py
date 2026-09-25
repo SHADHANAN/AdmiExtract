@@ -101,13 +101,23 @@ class DocumentWorkerPool:
         """Check if worker pool is currently running active tasks."""
         return self._running and any(not t.done() for t in self.worker_tasks)
 
-    async def start(self) -> None:
-        """Start the background worker pool and supervisor loop safely and idempotently."""
+    async def start(self) -> bool:
+        """
+        Start the background worker pool and supervisor loop safely and idempotently.
+        Ensures Beanie is fully initialized and MongoDB is connected before launching workers.
+        Returns True if started or already running; False if database/Beanie is not initialized.
+        """
+        from app.db.database import is_beanie_initialized
+
+        if not is_beanie_initialized():
+            logger.warning("[WorkerPool] Refusing to start workers: Database/Beanie is not connected or initialized.")
+            return False
+
         # Clean up any dead tasks from an earlier run
         self.worker_tasks = [t for t in self.worker_tasks if not t.done()]
         if self._running and self.worker_tasks:
             logger.info("[WorkerPool] Worker pool is already actively running. Skipping duplicate startup.")
-            return
+            return True
 
         self._running = True
         logger.info(f"[WorkerPool] Starting {self.concurrency} extraction workers...")
@@ -121,6 +131,8 @@ class DocumentWorkerPool:
         # Launch stale job recovery supervisor
         if not self.supervisor_task or self.supervisor_task.done():
             self.supervisor_task = asyncio.create_task(self._supervisor_loop(), name="job_supervisor")
+
+        return True
 
     async def stop(self) -> None:
         """Gracefully and idempotently stop all workers and supervisor."""
@@ -272,9 +284,15 @@ class DocumentWorkerPool:
 
     async def _worker_loop(self, worker_id: int) -> None:
         """Continuous worker execution loop."""
+        from app.db.database import is_beanie_initialized
+
         logger.info(f"[Worker {worker_id}] Worker online.")
         while self._running:
             try:
+                if not is_beanie_initialized():
+                    logger.warning(f"[Worker {worker_id}] Database/Beanie is not initialized. Exiting worker loop.")
+                    break
+
                 job = await self._claim_next_job()
                 if not job:
                     await asyncio.sleep(0.5)
