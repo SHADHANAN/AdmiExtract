@@ -14,6 +14,7 @@ Features:
 
 import asyncio
 import logging
+import re
 from typing import Any, cast
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import ServerSelectionTimeoutError, PyMongoError
@@ -22,6 +23,15 @@ from beanie import init_beanie
 from app.core.config import settings
 
 logger = logging.getLogger("app.db.database")
+
+
+def mask_mongodb_uri(uri: str) -> str:
+    """Mask credentials in MongoDB URI to prevent secret exposure in logs."""
+    if not uri:
+        return "<EMPTY>"
+    pattern = r"(mongodb(?:\+srv)?:\/\/)([^:@]+):([^@]+)@(.+)"
+    return re.sub(pattern, r"\1*****:*****@\4", uri)
+
 
 # Monkeypatch AsyncIOMotorClient to bypass Beanie/Motor compatibility issue
 if not hasattr(AsyncIOMotorClient, "append_metadata"):
@@ -184,7 +194,7 @@ async def init_db():
     """
     global _is_connected, _reconnect_task
 
-    print(f"Connecting to MongoDB at '{settings.MONGODB_URI}' (Database: '{settings.DATABASE_NAME}')...")
+    print(f"Connecting to MongoDB at '{mask_mongodb_uri(settings.MONGODB_URI)}' (Database: '{settings.DATABASE_NAME}')...")
 
     try:
         # Fast health check with 2s timeout
@@ -195,7 +205,7 @@ async def init_db():
         _is_connected = False
         print("\n" + "=" * 78)
         print(" [WARNING] MongoDB is UNAVAILABLE at startup!")
-        print(f" URI:      {settings.MONGODB_URI}")
+        print(f" URI:      {mask_mongodb_uri(settings.MONGODB_URI)}")
         print(f" Database: {settings.DATABASE_NAME}")
         print(f" Details:  {exc}")
         print("-" * 78)

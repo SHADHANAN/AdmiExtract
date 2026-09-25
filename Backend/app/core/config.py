@@ -12,7 +12,8 @@ import logging
 import re
 import shutil
 from pathlib import Path
-from typing import Literal
+import os
+from typing import Any, Literal
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -24,17 +25,27 @@ ENV_FILE = BACKEND_DIR / ".env"
 ENV_EXAMPLE_FILE = BACKEND_DIR / ".env.example"
 
 # ------------------------------------------------------------------------------
-# Auto-bootstrap .env from .env.example if missing
+# Auto-bootstrap .env from .env.example if missing (Local development only)
 # ------------------------------------------------------------------------------
+# Under no circumstances should .env be auto-generated when running on Render,
+# in production/staging, or when configuration is already supplied via environment.
+is_render = bool(os.getenv("RENDER") or os.getenv("IS_RENDER"))
+is_production = os.getenv("APP_ENV", "").lower() in ("production", "staging")
+has_env_mongodb = bool(os.getenv("MONGODB_URI"))
+is_ci = bool(os.getenv("CI"))
+
+should_skip_bootstrap = is_render or is_production or has_env_mongodb or is_ci
+
 if not ENV_FILE.exists():
-    if ENV_EXAMPLE_FILE.exists():
-        try:
-            shutil.copy(ENV_EXAMPLE_FILE, ENV_FILE)
-            print(f"[CONFIG] Initialized '{ENV_FILE.name}' from '{ENV_EXAMPLE_FILE.name}'.")
-        except Exception as e:
-            print(f"[CONFIG WARNING] Could not auto-generate .env from .env.example: {e}")
-    else:
-        print("[CONFIG] Neither .env nor .env.example found; using built-in development defaults.")
+    if not should_skip_bootstrap:
+        if ENV_EXAMPLE_FILE.exists():
+            try:
+                shutil.copy(ENV_EXAMPLE_FILE, ENV_FILE)
+                print(f"[CONFIG] Initialized '{ENV_FILE.name}' from '{ENV_EXAMPLE_FILE.name}'.")
+            except Exception as e:
+                print(f"[CONFIG WARNING] Could not auto-generate .env from .env.example: {e}")
+        else:
+            print("[CONFIG] Neither .env nor .env.example found; using built-in development defaults.")
 
 
 class Settings(BaseSettings):
@@ -78,8 +89,15 @@ class Settings(BaseSettings):
     GEMINI_CONCURRENCY_LIMIT: int = 3
     JOB_TIMEOUT_SECONDS: int = 300
 
+    def __init__(self, **values: Any):
+        # On Render / cloud production, explicitly bypass loading any local .env file.
+        # OS environment variables are the sole source of truth in production.
+        if os.getenv("RENDER") or os.getenv("IS_RENDER") or os.getenv("APP_ENV") in ("production", "staging"):
+            values["_env_file"] = None
+        super().__init__(**values)
+
     model_config = SettingsConfigDict(
-        env_file=str(ENV_FILE),
+        env_file=str(ENV_FILE) if (ENV_FILE.exists() and not (os.getenv("RENDER") or os.getenv("IS_RENDER"))) else None,
         env_file_encoding="utf-8",
         extra="ignore"
     )
@@ -95,6 +113,14 @@ class Settings(BaseSettings):
     @classmethod
     def validate_mongodb_uri(cls, v: str) -> str:
         v_clean = v.strip()
+        # Fall back to default localhost if unpopulated template placeholder from .env.example is encountered
+        if v_clean.startswith("<") and v_clean.endswith(">"):
+            logger.warning(
+                "Placeholder '%s' detected for MONGODB_URI; falling back to default 'mongodb://localhost:27017'.",
+                v_clean
+            )
+            return "mongodb://localhost:27017"
+
         if not (v_clean.startswith("mongodb://") or v_clean.startswith("mongodb+srv://")):
             raise ValueError(
                 f"Invalid MONGODB_URI: '{v}'. Must start with 'mongodb://' or 'mongodb+srv://'."
