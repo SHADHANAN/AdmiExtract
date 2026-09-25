@@ -6,7 +6,14 @@ const resolveApiBaseUrl = (): string => {
   if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
     return envUrl.trim().replace(/\/+$/, '')
   }
-  if (typeof window !== 'undefined' && window.location.hostname) {
+
+  // Production fallback for Cloudflare Pages
+  if (import.meta.env.PROD) {
+    return 'https://admiextract.onrender.com'
+  }
+
+  // Local development fallback
+  if (typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost') {
     return `http://${window.location.hostname}:8000`
   }
   return 'http://localhost:8000'

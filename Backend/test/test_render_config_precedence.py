@@ -4,15 +4,20 @@ Tests for Production / Render Configuration Precedence and Safety
 Verifies:
 1. MONGODB_URI from environment is preserved with 100% fidelity.
 2. .env.example placeholder cannot override the environment variable.
-3. On Render, local .env is bypassed so OS environment variables are the sole source of truth.
-4. Localhost remains usable and functional for local development.
-5. Template placeholders (<...>) safely fall back to localhost without crashing.
+3. On Render, missing MONGODB_URI fails fast with a fatal configuration error.
+4. On Render, localhost / 127.0.0.1 MONGODB_URI fails fast with a fatal configuration error.
+5. On Render, template placeholder MONGODB_URI fails fast with a fatal configuration error.
+6. On Render, valid Atlas URI succeeds and local .env files are completely bypassed.
+7. Localhost remains standard and usable for local development.
+8. Template placeholders (<...>) safely fall back to localhost in local development.
+9. DATABASE_NAME defaults to 'admiextract'.
 """
 
 import os
 import tempfile
 from pathlib import Path
 import pytest
+from pydantic import ValidationError
 from app.core.config import Settings
 
 
@@ -35,23 +40,54 @@ def test_env_example_placeholder_cannot_override_environment(monkeypatch):
         temp_env_file = Path(tmpdir) / ".env"
         temp_env_file.write_text("MONGODB_URI=<MONGODB_ATLAS_CONNECTION_STRING>\n", encoding="utf-8")
 
-        # Even if pointing to a .env with the placeholder, environment variable must prevail
         settings = Settings(_env_file=str(temp_env_file))
         assert settings.MONGODB_URI == atlas_uri
 
 
-def test_render_environment_bypasses_env_file(monkeypatch):
-    """Verify that on Render (RENDER=true), local .env files are completely bypassed."""
+def test_render_without_mongodb_uri_fails_fast(monkeypatch):
+    """Verify that on Render, missing MONGODB_URI raises a fatal configuration error."""
     monkeypatch.setenv("RENDER", "true")
     monkeypatch.delenv("MONGODB_URI", raising=False)
 
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert "Production/Render environment, but MONGODB_URI is missing" in str(exc_info.value)
+
+
+def test_render_with_localhost_fails_fast(monkeypatch):
+    """Verify that on Render, localhost or 127.0.0.1 MONGODB_URI raises a fatal configuration error."""
+    monkeypatch.setenv("RENDER", "true")
+
+    for localhost_uri in ["mongodb://localhost:27017", "mongodb://127.0.0.1:27017/admiextract"]:
+        monkeypatch.setenv("MONGODB_URI", localhost_uri)
+        with pytest.raises(ValidationError) as exc_info:
+            Settings()
+        assert "pointing to localhost/127.0.0.1" in str(exc_info.value)
+
+
+def test_render_with_placeholder_fails_fast(monkeypatch):
+    """Verify that on Render, unconfigured placeholder raises a fatal configuration error."""
+    monkeypatch.setenv("RENDER", "true")
+    monkeypatch.setenv("MONGODB_URI", "<MONGODB_ATLAS_CONNECTION_STRING>")
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert "a placeholder" in str(exc_info.value)
+
+
+def test_render_with_valid_atlas_uri_succeeds_and_bypasses_env_file(monkeypatch):
+    """Verify that on Render with valid Atlas URI, settings succeed and bypass local .env files."""
+    valid_atlas = "mongodb+srv://valid_user:valid_pass@cluster.mongodb.net/admiextract"
+    monkeypatch.setenv("RENDER", "true")
+    monkeypatch.setenv("MONGODB_URI", valid_atlas)
+
     with tempfile.TemporaryDirectory() as tmpdir:
         temp_env_file = Path(tmpdir) / ".env"
-        temp_env_file.write_text("MONGODB_URI=mongodb://spoofed-host:27017\n", encoding="utf-8")
+        temp_env_file.write_text("MONGODB_URI=mongodb://spoofed-host:27017\nDATABASE_NAME=spoofed_db\n", encoding="utf-8")
 
-        # On Render, Settings must ignore .env and use built-in default
         settings = Settings(_env_file=str(temp_env_file))
-        assert settings.MONGODB_URI == "mongodb://localhost:27017"
+        assert settings.MONGODB_URI == valid_atlas
+        assert settings.DATABASE_NAME == "admiextract"
 
 
 def test_localhost_remains_usable_for_local_development(monkeypatch):
@@ -59,13 +95,24 @@ def test_localhost_remains_usable_for_local_development(monkeypatch):
     monkeypatch.delenv("MONGODB_URI", raising=False)
     monkeypatch.delenv("RENDER", raising=False)
     monkeypatch.delenv("IS_RENDER", raising=False)
+    monkeypatch.delenv("APP_ENV", raising=False)
 
     settings = Settings(_env_file=None)
     assert settings.MONGODB_URI == "mongodb://localhost:27017"
 
 
-def test_placeholder_safely_falls_back_to_localhost(monkeypatch):
-    """Verify that unconfigured template placeholders (<...>) fall back to localhost safely."""
+def test_placeholder_safely_falls_back_to_localhost_in_dev(monkeypatch):
+    """Verify that unconfigured template placeholders (<...>) fall back to localhost in dev."""
     monkeypatch.delenv("RENDER", raising=False)
+    monkeypatch.delenv("IS_RENDER", raising=False)
+    monkeypatch.delenv("APP_ENV", raising=False)
+
     settings = Settings(MONGODB_URI="<MONGODB_ATLAS_CONNECTION_STRING>", _env_file=None)
     assert settings.MONGODB_URI == "mongodb://localhost:27017"
+
+
+def test_database_name_defaults_to_admiextract():
+    """Verify that DATABASE_NAME defaults to 'admiextract'."""
+    settings = Settings(_env_file=None)
+    assert settings.DATABASE_NAME == "admiextract"
+

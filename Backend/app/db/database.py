@@ -222,7 +222,12 @@ async def init_db() -> bool:
     if _is_connected and is_beanie_initialized():
         return True
 
-    print(f"Connecting to MongoDB at '{mask_mongodb_uri(settings.MONGODB_URI)}' (Database: '{settings.DATABASE_NAME}')...")
+    uri_scheme = "mongodb+srv" if settings.MONGODB_URI.startswith("mongodb+srv://") else "mongodb"
+    is_render_or_prod = bool(
+        os.getenv("RENDER") or os.getenv("IS_RENDER") or settings.APP_ENV in ("production", "staging")
+    )
+    env_display = "production/render" if is_render_or_prod else f"development ({settings.APP_ENV})"
+    print(f"[STARTUP DIAGNOSTIC] environment: {env_display} | scheme: {uri_scheme} | database: {settings.DATABASE_NAME}")
 
     try:
         await client.admin.command("ping")
@@ -233,8 +238,9 @@ async def init_db() -> bool:
         _is_connected = False
         print("\n" + "=" * 78)
         print(" [WARNING] MongoDB is UNAVAILABLE at startup!")
-        print(f" URI:      {mask_mongodb_uri(settings.MONGODB_URI)}")
-        print(f" Database: {settings.DATABASE_NAME}")
+        print(f" Environment: {env_display}")
+        print(f" Scheme:      {uri_scheme}")
+        print(f" Database:    {settings.DATABASE_NAME}")
         print(f" Details:  {exc}")
         print("-" * 78)
         print(" The application is starting in DEGRADED mode.")

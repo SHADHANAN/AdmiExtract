@@ -92,8 +92,16 @@ class Settings(BaseSettings):
     def __init__(self, **values: Any):
         # On Render / cloud production, explicitly bypass loading any local .env file.
         # OS environment variables are the sole source of truth in production.
-        if os.getenv("RENDER") or os.getenv("IS_RENDER") or os.getenv("APP_ENV") in ("production", "staging"):
+        is_render_or_prod = bool(
+            os.getenv("RENDER") or os.getenv("IS_RENDER") or os.getenv("APP_ENV") in ("production", "staging")
+        )
+        if is_render_or_prod:
             values["_env_file"] = None
+            # If MONGODB_URI is not provided via environment or values in production/Render,
+            # clear it to ensure the validator rejects missing cloud database configuration
+            # instead of silently falling back to localhost.
+            if "MONGODB_URI" not in values and not os.getenv("MONGODB_URI"):
+                values["MONGODB_URI"] = ""
         super().__init__(**values)
 
     model_config = SettingsConfigDict(
@@ -113,7 +121,21 @@ class Settings(BaseSettings):
     @classmethod
     def validate_mongodb_uri(cls, v: str) -> str:
         v_clean = v.strip()
-        # Fall back to default localhost if unpopulated template placeholder from .env.example is encountered
+        is_render_or_prod = bool(
+            os.getenv("RENDER") or os.getenv("IS_RENDER") or os.getenv("APP_ENV") in ("production", "staging")
+        )
+
+        # On Render / Production: MONGODB_URI MUST be a valid cloud/remote URI, NEVER localhost
+        if is_render_or_prod:
+            if not v_clean or v_clean.startswith("<") or "localhost" in v_clean.lower() or "127.0.0.1" in v_clean:
+                raise ValueError(
+                    "[FATAL CONFIG ERROR] Running in Production/Render environment, but MONGODB_URI is missing, "
+                    "a placeholder, or pointing to localhost/127.0.0.1. "
+                    "A valid remote MongoDB connection string (e.g. MongoDB Atlas 'mongodb+srv://...') "
+                    "MUST be configured as the 'MONGODB_URI' environment variable in your Render dashboard."
+                )
+
+        # In Local development: allow unpopulated template placeholder fallback to localhost
         if v_clean.startswith("<") and v_clean.endswith(">"):
             logger.warning(
                 "Placeholder '%s' detected for MONGODB_URI; falling back to default 'mongodb://localhost:27017'.",
