@@ -157,9 +157,9 @@ export const Users: React.FC = () => {
           ) : filteredUsers.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">No users found.</div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto rounded-xl border border-border">
               <table className="w-full text-left text-sm">
-                <thead className="border-b border-white/[0.08] bg-[#0F172A]/90 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <thead className="border-b border-border bg-secondary/60 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   <tr>
                     <th className="px-4 py-3">User Details</th>
                     <th className="px-4 py-3">Role</th>
@@ -168,19 +168,19 @@ export const Users: React.FC = () => {
                     <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/[0.06]">
+                <tbody className="divide-y divide-border/60 bg-card">
                   {filteredUsers.map((user) => (
-                    <tr key={user.id} className="hover:bg-white/[0.03] transition-colors">
+                    <tr key={user.id} className="hover:bg-secondary/40 transition-colors">
                       <td className="px-4 py-3">
-                        <div className="font-semibold text-white">{user.name}</div>
-                        <div className="text-xs text-slate-400">@{user.username} {user.email && `• ${user.email}`}</div>
+                        <div className="font-semibold text-foreground">{user.name}</div>
+                        <div className="text-xs text-muted-foreground">@{user.username} {user.email && `• ${user.email}`}</div>
                       </td>
                       <td className="px-4 py-3">
                         <span
                           className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
                             user.role === 'super_admin'
-                              ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/25'
-                              : 'bg-purple-500/15 text-purple-300 border border-purple-500/25'
+                              ? 'bg-primary/10 text-primary border border-primary/20'
+                              : 'bg-secondary text-secondary-foreground border border-border'
                           }`}
                         >
                           {user.role === 'super_admin' ? 'Super Admin' : 'Department Admin'}
@@ -188,23 +188,23 @@ export const Users: React.FC = () => {
                       </td>
                       <td className="px-4 py-3">
                         {user.department_code ? (
-                          <div className="flex items-center gap-1.5 text-white font-medium">
-                            <Building2 className="h-3.5 w-3.5 text-slate-400" />
+                          <div className="flex items-center gap-1.5 text-foreground font-medium">
+                            <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
                             {user.department_code}
                           </div>
                         ) : (
-                          <span className="text-xs text-slate-400">All Departments</span>
+                          <span className="text-xs text-muted-foreground">All Departments</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
                         <span
                           className={`inline-flex items-center gap-1.5 text-xs font-medium ${
-                            user.is_active !== false ? 'text-emerald-400' : 'text-rose-400'
+                            user.is_active !== false ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
                           }`}
                         >
                           <span
                             className={`h-1.5 w-1.5 rounded-full ${
-                              user.is_active !== false ? 'bg-emerald-400' : 'bg-rose-400'
+                              user.is_active !== false ? 'bg-emerald-500' : 'bg-rose-500'
                             }`}
                           />
                           {user.is_active !== false ? 'Active' : 'Disabled'}

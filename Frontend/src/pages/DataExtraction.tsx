@@ -8,7 +8,6 @@ import {
   Users,
   ArrowRight,
   RefreshCw,
-  Sparkles,
   FolderOpen,
 } from 'lucide-react';
 import { dataExtractionService } from '../services/dataExtractionService';
@@ -51,10 +50,6 @@ export const DataExtraction: React.FC = () => {
     return matchesSearch && matchesDept;
   });
 
-  const totalDocumentsAcrossBatches = batches.reduce((acc, b) => acc + b.stored_documents_count, 0);
-  const totalStudentsAcrossBatches = batches.reduce((acc, b) => acc + b.students_count, 0);
-  const totalExtractionsAcrossBatches = batches.reduce((acc, b) => acc + b.extractions_count, 0);
-
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -84,46 +79,6 @@ export const DataExtraction: React.FC = () => {
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
-      </div>
-
-      {/* Hero Principle Banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-950/90 via-slate-900 to-slate-950 border border-emerald-500/30 p-6 text-white shadow-xl">
-        <div className="absolute -right-10 -bottom-10 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-2xl">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/20 text-emerald-300 text-xs font-bold uppercase tracking-wider border border-emerald-400/30">
-              <Sparkles className="h-3.5 w-3.5" />
-              Core Architecture Principle
-            </div>
-            <h2 className="text-xl font-bold tracking-tight text-white">
-              STORE ONCE • EXTRACT WHENEVER NEEDED
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Student admission documents are uploaded and stored permanently once. Staff can request custom field
-              extractions at any time using standard Excel field templates. The same documents can be extracted
-              unlimited times without asking students to re-upload.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 w-full md:w-auto shrink-0 bg-white/5 p-3 rounded-xl border border-white/10 backdrop-blur-xs">
-            <div className="text-center p-2">
-              <div className="text-xs font-medium text-slate-400">Batches</div>
-              <div className="text-base sm:text-lg font-black text-white">{batches.length}</div>
-            </div>
-            <div className="text-center p-2 border-l border-white/10">
-              <div className="text-xs font-medium text-slate-400">Students</div>
-              <div className="text-base sm:text-lg font-black text-blue-400">{totalStudentsAcrossBatches}</div>
-            </div>
-            <div className="text-center p-2 border-l border-white/10">
-              <div className="text-xs font-medium text-slate-400">Documents</div>
-              <div className="text-base sm:text-lg font-black text-emerald-400">{totalDocumentsAcrossBatches}</div>
-            </div>
-            <div className="text-center p-2 border-l border-white/10">
-              <div className="text-xs font-medium text-slate-400">Extractions</div>
-              <div className="text-base sm:text-lg font-black text-lime-400">{totalExtractionsAcrossBatches}</div>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Filter Bar */}
