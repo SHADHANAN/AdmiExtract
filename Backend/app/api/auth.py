@@ -8,17 +8,35 @@ from app.core.security import create_access_token
 from app.core.dependencies import get_current_user
 from app.models.user import User
 
+from app.core.rate_limiter import rate_limit
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=UserOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit(max_requests=10, window_seconds=60))],
+)
 async def register(user_in: UserCreate):
     """Register a new user securely."""
+    from app.models.user import UserRole
+    if user_in.role == UserRole.SUPER_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Super Admin accounts cannot be created via public registration.",
+        )
     new_user = await register_user(user_in)
     return new_user
 
 
-@router.post("/login", response_model=Token)
+
+@router.post(
+    "/login",
+    response_model=Token,
+    dependencies=[Depends(rate_limit(max_requests=15, window_seconds=60))],
+)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     """
     OAuth2-compatible login.

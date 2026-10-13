@@ -23,9 +23,9 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.main import app
 from app.core.config import settings
+from app.models.excel_template import ExcelBatchTemplate
 from app.models.user import User
 from app.models.wanted_field_config import DocumentFieldConfiguration, WantedFieldItem
-from app.models.excel_template import ExcelBatchTemplate
 from app.models.student_submission import StudentSubmission, StudentDocumentMeta
 from app.models.doc_config_version import DocumentConfigurationVersion
 from app.services.wanted_field_service import WantedFieldService
@@ -50,15 +50,15 @@ async def setup_regression_test_db():
         document_models=[
             User,
             DocumentFieldConfiguration,
-            ExcelBatchTemplate,
             StudentSubmission,
             DocumentConfigurationVersion,
+            ExcelBatchTemplate,
         ],
     )
     await DocumentFieldConfiguration.find_all().delete()
-    await ExcelBatchTemplate.find_all().delete()
     await StudentSubmission.find_all().delete()
     await DocumentConfigurationVersion.find_all().delete()
+    await ExcelBatchTemplate.find_all().delete()
 
     yield
 

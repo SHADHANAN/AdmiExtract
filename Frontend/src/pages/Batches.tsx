@@ -173,7 +173,7 @@ export const Batches: React.FC = () => {
   // Filter batches
   const filteredBatches = batches.filter((batch) => {
     const matchesSearch = batch.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          batch.department.toLowerCase().includes(searchTerm.toLowerCase())
+      batch.department.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesDept = selectedDept ? batch.department === selectedDept : true
     const matchesYear = selectedYear ? batch.academicYear === selectedYear : true
     const matchesStatus = selectedStatus ? batch.status === selectedStatus : true
@@ -264,7 +264,7 @@ export const Batches: React.FC = () => {
               className="group relative flex flex-col justify-between hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-300 hover:-translate-y-1 cursor-pointer rounded-2xl border border-white/[0.08] overflow-hidden bg-[#111827]"
             >
               <div className="h-1.5 w-full bg-gradient-to-r from-indigo-500 via-indigo-600 to-purple-600" />
-              
+
               <CardHeader className="pb-3">
                 <div className="flex justify-between items-start">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-400 border border-indigo-500/25 shadow-xs">
@@ -411,7 +411,7 @@ export const Batches: React.FC = () => {
           <Input
             label="Batch Name"
             type="text"
-            placeholder="CSE 2025-2029"
+            placeholder="AIML 2025-2029"
             value={newBatchName}
             onChange={(e) => setNewBatchName(e.target.value)}
             required

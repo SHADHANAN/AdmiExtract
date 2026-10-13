@@ -29,24 +29,27 @@ import {
   Clock,
   Maximize2,
   Loader2,
-  Upload,
-  FileSpreadsheet,
-  Settings2,
-  Save,
-  Check,
   Layers,
   FolderOpen,
   AlertTriangle,
-  AlertCircle,
   RefreshCw,
   ArrowRight,
+  Sparkles,
+  ShieldCheck,
+  FileCheck,
+  HelpCircle,
 } from 'lucide-react'
 import { DocumentPreviewModal, type DocumentPreviewTarget } from '../components/ui/DocumentPreviewModal'
-
+import { ReclassifyModal } from '../components/ReclassifyModal'
+import { ClassificationEvidenceModal } from '../components/ClassificationEvidenceModal'
 import type { DocumentRequirement, StudentSubmission } from '../types'
-import { excelTemplateService, type ExcelTemplateResponse } from '../services/excelTemplate'
 import { studentSubmissionService } from '../services/studentSubmission'
-import { wantedFieldService, type DocumentTypeOverviewItem, type WantedFieldItem } from '../services/wantedField'
+import { wantedFieldService, type DocumentTypeOverviewItem } from '../services/wantedField'
+import {
+  studentDocumentService,
+  type BatchDocumentValidationResponse,
+  type BatchDocumentValidationItem,
+} from '../services/studentDocument'
 import { copyToClipboard } from '../utils/clipboard'
 import { getStudentUploadUrl } from '../utils/studentPortalUrl'
 
@@ -104,9 +107,17 @@ export const BatchDetails: React.FC = () => {
   const initialTab = searchParams.get('tab')
 
   // Active Tab state — Default to 'sections' or URL parameter
-  const [activeTab, setActiveTab] = useState<'sections' | 'students' | 'links' | 'documents' | 'exports'>(
+  const [activeTab, setActiveTab] = useState<'sections' | 'students' | 'validation' | 'documents' | 'links'>(
     (initialTab as any) || 'sections'
   )
+
+  // Document Validation state
+  const [validationData, setValidationData] = useState<BatchDocumentValidationResponse | null>(null)
+  const [isLoadingValidation, setIsLoadingValidation] = useState(false)
+  const [validationStatusFilter, setValidationStatusFilter] = useState<string>('ALL')
+  const [validationSearchQuery, setValidationSearchQuery] = useState<string>('')
+  const [selectedDocForReclassify, setSelectedDocForReclassify] = useState<BatchDocumentValidationItem | null>(null)
+  const [selectedDocForEvidence, setSelectedDocForEvidence] = useState<BatchDocumentValidationItem | null>(null)
 
   // Create Section Modal states
   const [isSectionModalOpen, setIsSectionModalOpen] = useState(false)
@@ -126,94 +137,9 @@ export const BatchDetails: React.FC = () => {
   const [selectedLinkForExpiry, setSelectedLinkForExpiry] = useState<any | null>(null)
   const [editLinkExpiry, setEditLinkExpiry] = useState('')
 
-  const classifyFieldDomain = (name: string): string | null => {
-    if (!name) return null
-    const norm = name.toLowerCase().replace(/[^a-z0-9]/g, '')
-    const rawLower = name.toLowerCase().trim()
-
-    // Identification
-    if (norm.includes('aadhaar') || norm.includes('aadhar') || norm.includes('uidai')) return 'IDENTIFICATION_AADHAAR'
-    if (norm.includes('emis')) return 'IDENTIFICATION_EMIS'
-    if (
-      (rawLower.includes('transfer') || rawLower.includes('tc') || rawLower.startsWith('tc ')) &&
-      (rawLower.includes('no') || rawLower.includes('num') || rawLower.includes('number') || rawLower.includes('cert'))
-    ) return 'IDENTIFICATION_TC'
-    if (rawLower.includes('admission') && (rawLower.includes('no') || rawLower.includes('num') || rawLower.includes('number') || rawLower.includes('id'))) return 'IDENTIFICATION_ADMISSION'
-    if (norm.includes('registernumber') || norm.includes('registerno') || norm.includes('regno') || norm.includes('rollnumber') || norm.includes('rollno')) return 'IDENTIFICATION_REGISTER'
-
-    // Academic
-    if (rawLower.includes('sslc') || rawLower.includes('10th')) {
-      if (rawLower.includes('year') || rawLower.includes('passing')) return 'ACADEMIC_PASSING_YEAR'
-      return 'ACADEMIC_10TH'
-    }
-    if (rawLower.includes('hsc') || rawLower.includes('12th') || rawLower.includes('+2')) {
-      if (rawLower.includes('year') || rawLower.includes('passing')) return 'ACADEMIC_PASSING_YEAR'
-      return 'ACADEMIC_12TH'
-    }
-    if ((rawLower.includes('school') || rawLower.includes('institution') || rawLower.includes('college')) && (rawLower.includes('name') || rawLower.includes('studied'))) return 'ACADEMIC_INSTITUTION'
-
-    // Dates
-    if (rawLower.includes('issue date') || rawLower.includes('date of issue') || rawLower.includes('tc issue date') || rawLower.includes('tc date')) return 'DATE_ISSUE'
-    if (rawLower.includes('leaving date') || rawLower.includes('date of leaving') || rawLower.includes('tc leaving date')) return 'DATE_LEAVING'
-    if (rawLower.includes('admission date') || rawLower.includes('date of admission')) return 'DATE_ADMISSION'
-    if (rawLower.includes('dob') || rawLower.includes('birth') || rawLower.includes('date of birth')) return 'DATE_DOB'
-
-    // Identity
-    if (rawLower.includes('father')) return 'IDENTITY_FATHER_NAME'
-    if (rawLower.includes('mother')) return 'IDENTITY_MOTHER_NAME'
-    if (rawLower.includes('guardian')) return 'IDENTITY_GUARDIAN_NAME'
-    if ((rawLower.includes('student') || rawLower.includes('candidate') || rawLower.includes('applicant')) && rawLower.includes('name')) return 'IDENTITY_STUDENT_NAME'
-    if (norm === 'name' || rawLower === "student's name") return 'IDENTITY_STUDENT_NAME'
-
-    // Contact
-    if (rawLower.includes('mobile') || rawLower.includes('phone') || rawLower.includes('cell') || rawLower.includes('contact no')) return 'CONTACT_MOBILE'
-    if (rawLower.includes('email') || rawLower.includes('e-mail')) return 'CONTACT_EMAIL'
-
-    // Financial
-    if (rawLower.includes('income')) return 'FINANCIAL_INCOME'
-
-    // Community
-    if (rawLower.includes('caste') || rawLower.includes('community name') || norm.includes('subcaste')) return 'COMMUNITY_CASTE'
-    if (rawLower.includes('community') || rawLower.includes('category')) return 'COMMUNITY_CATEGORY'
-
-    // Address
-    if (rawLower.includes('taluk') || rawLower.includes('tehsil') || rawLower.includes('mandal') || norm === 'tk') return 'ADDRESS_TALUK'
-    if (rawLower.includes('district') || norm === 'dist' || norm === 'dt') return 'ADDRESS_DISTRICT'
-    if (rawLower.includes('state') || rawLower.includes('province')) return 'ADDRESS_STATE'
-    if (rawLower.includes('village') || rawLower.includes('town') || norm === 'vtc') return 'ADDRESS_VILLAGE'
-    if (rawLower.includes('pincode') || rawLower.includes('pin code') || rawLower.includes('postal code') || norm === 'pin') return 'ADDRESS_PINCODE'
-    if (rawLower.includes('address') || rawLower.includes('residential') || rawLower.includes('permanent') || rawLower.includes('communication')) return 'ADDRESS_FULL'
-
-    return null
-  }
-
-  const checkFieldCompatibility = (aiFieldLabel: string, excelHeader: string): { isCompatible: boolean; message: string } => {
-    if (!aiFieldLabel || !excelHeader) return { isCompatible: false, message: 'Header is required' }
-    const d1 = classifyFieldDomain(aiFieldLabel)
-    const d2 = classifyFieldDomain(excelHeader)
-
-    if (d1 && d2) {
-      if (d1 === d2) return { isCompatible: true, message: 'Mapped' }
-      return { isCompatible: false, message: `Invalid mapping: ${aiFieldLabel} cannot be mapped to ${excelHeader}.` }
-    }
-    if (d1 && !d2) {
-      return { isCompatible: false, message: `Invalid mapping: ${aiFieldLabel} cannot be mapped to ${excelHeader}.` }
-    }
-    if (!d1 && d2) {
-      return { isCompatible: false, message: `Invalid mapping: ${aiFieldLabel} cannot be mapped to ${excelHeader}.` }
-    }
-
-    const norm1 = aiFieldLabel.toLowerCase().replace(/[^a-z0-9]/g, '')
-    const norm2 = excelHeader.toLowerCase().replace(/[^a-z0-9]/g, '')
-    if (norm1 === norm2 || norm1.includes(norm2) || norm2.includes(norm1)) {
-      return { isCompatible: true, message: 'Mapped' }
-    }
-    return { isCompatible: false, message: `Invalid mapping: ${aiFieldLabel} cannot be mapped to ${excelHeader}.` }
-  }
-
   // Student Details Modal states
   const [selectedStudent, setSelectedStudent] = useState<StudentSubmission | null>(null)
-  
+
   // Preview Modal state
   const [previewTarget, setPreviewTarget] = useState<DocumentPreviewTarget | null>(null)
 
@@ -235,67 +161,29 @@ export const BatchDetails: React.FC = () => {
     }
   }, [batch?.docRequirements])
 
-  // Excel Template states
-  const [excelTemplate, setExcelTemplate] = useState<ExcelTemplateResponse | null>(null)
-  const [isUploadingExcel, setIsUploadingExcel] = useState(false)
-  const [excelMappings, setExcelMappings] = useState<Record<string, string>>({})
-  const [lookupColumn, setLookupColumn] = useState<string>('Reg No')
-  const [isSavingMappings, setIsSavingMappings] = useState(false)
-  const [isDownloadingExcel, setIsDownloadingExcel] = useState(false)
   const [isDownloadingAllDocs, setIsDownloadingAllDocs] = useState(false)
 
-  // Fetch Excel template metadata (per class if selected)
-  const loadExcelTemplateInfo = React.useCallback(async () => {
-    if (batchId) {
-      const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
-      const data = await excelTemplateService.getTemplate(batchId, classIdParam)
-      if (data) {
-        setExcelTemplate(data)
-        setExcelMappings(data.field_mappings || {})
-        setLookupColumn(data.lookup_column || (data.headers[0] || 'Reg No'))
-      } else {
-        setExcelTemplate(null)
-        setExcelMappings({})
-      }
-    }
-  }, [batchId, selectedClassId])
-
-  React.useEffect(() => {
-    loadExcelTemplateInfo()
-  }, [loadExcelTemplateInfo])
-
-  // Document-Specific Wanted Field Selection States
+  // Document Requirements State
   const [wantedOverview, setWantedOverview] = useState<DocumentTypeOverviewItem[]>([])
-  const [selectedDocType, setSelectedDocType] = useState<string>('')
-  const [activeDocFields, setActiveDocFields] = useState<WantedFieldItem[]>([])
   const [isLoadingWanted, setIsLoadingWanted] = useState(false)
-  const [isSavingWanted, setIsSavingWanted] = useState(false)
 
-  // Add Document Type Modal States
+  // Add Document Requirement Modal States
   const [isAddDocModalOpen, setIsAddDocModalOpen] = useState(false)
   const [newDocName, setNewDocName] = useState('')
   const [newDocCode, setNewDocCode] = useState('')
   const [newDocDescription, setNewDocDescription] = useState('')
   const [newDocRequirementStatus, setNewDocRequirementStatus] = useState<'REQUIRED' | 'OPTIONAL' | 'DISABLED'>('REQUIRED')
-  const [activeDocRequirementStatus, setActiveDocRequirementStatus] = useState<'REQUIRED' | 'OPTIONAL' | 'DISABLED'>('REQUIRED')
   const [isCreatingDoc, setIsCreatingDoc] = useState(false)
-
-  // Add Custom Field Modal States
-  const [isAddFieldModalOpen, setIsAddFieldModalOpen] = useState(false)
-  const [newFieldName, setNewFieldName] = useState('')
-  const [isAddingField, setIsAddingField] = useState(false)
-
-  // Delete Document State
   const [isDeletingDoc, setIsDeletingDoc] = useState(false)
 
-  // Load Wanted Fields Overview
-  const loadWantedOverview = React.useCallback(async (targetDocToSelect?: string) => {
+  // Load Document Requirements Overview
+  const loadWantedOverview = React.useCallback(async () => {
     if (!batchId) return
     setIsLoadingWanted(true)
     try {
       const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
       const overview = await wantedFieldService.getBatchOverview(batchId, classIdParam)
-      
+
       // Defensively deduplicate by document_type
       const deduped: DocumentTypeOverviewItem[] = []
       const seen = new Set<string>()
@@ -307,56 +195,68 @@ export const BatchDetails: React.FC = () => {
         }
       }
       setWantedOverview(deduped)
-      
-      const docToFind = targetDocToSelect || selectedDocType
-      const current = deduped.find((o) => o.document_type === docToFind)
-      if (current) {
-        setSelectedDocType(current.document_type)
-        setActiveDocFields(current.fields)
-        setActiveDocRequirementStatus(current.requirement_status || 'REQUIRED')
-      } else if (deduped.length > 0) {
-        setSelectedDocType(deduped[0].document_type)
-        setActiveDocFields(deduped[0].fields)
-        setActiveDocRequirementStatus(deduped[0].requirement_status || 'REQUIRED')
-      } else {
-        setSelectedDocType('')
-        setActiveDocFields([])
-        setActiveDocRequirementStatus('REQUIRED')
-      }
     } catch (err) {
-      console.error('Failed to load wanted fields overview:', err)
+      console.error('Failed to load document requirements overview:', err)
     } finally {
       setIsLoadingWanted(false)
     }
-  }, [batchId, selectedClassId, selectedDocType])
+  }, [batchId, selectedClassId])
 
   React.useEffect(() => {
     loadWantedOverview()
   }, [loadWantedOverview])
 
-  const availableHeaders = React.useMemo(() => {
-    if (excelTemplate && excelTemplate.headers && excelTemplate.headers.length > 0) {
-      return excelTemplate.headers
+  // Load Batch Document Validation Diagnostics & Statuses
+  const loadValidationData = React.useCallback(async () => {
+    if (!batchId) return
+    setIsLoadingValidation(true)
+    try {
+      const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
+      const data = await studentDocumentService.getBatchDocumentValidation(batchId, classIdParam)
+      setValidationData(data)
+    } catch (err) {
+      console.error('Failed to load document validation data:', err)
+    } finally {
+      setIsLoadingValidation(false)
     }
-    const fromOverview = wantedOverview.find((o) => o.template_headers && o.template_headers.length > 0)
-    if (fromOverview && fromOverview.template_headers.length > 0) {
-      return fromOverview.template_headers
-    }
-    return []
-  }, [excelTemplate, wantedOverview])
+  }, [batchId, selectedClassId])
 
-  const handleSelectDocType = (docType: string) => {
-    setSelectedDocType(docType)
-    const docItem = wantedOverview.find((o) => o.document_type === docType)
-    if (docItem) {
-      setActiveDocFields(docItem.fields)
-      setActiveDocRequirementStatus(docItem.requirement_status || 'REQUIRED')
+  React.useEffect(() => {
+    if (activeTab === 'validation' || activeTab === 'documents') {
+      loadValidationData()
     }
-  }
+  }, [activeTab, loadValidationData])
+
+  // Filtered validation documents
+  const filteredValidationDocs = React.useMemo(() => {
+    if (!validationData?.documents) return []
+    return validationData.documents.filter((doc) => {
+      // Status filter
+      if (validationStatusFilter !== 'ALL') {
+        if (validationStatusFilter === 'WRONG_DOCUMENT' && doc.validation_status !== 'WRONG_DOCUMENT') return false
+        if (validationStatusFilter === 'VALID' && doc.validation_status !== 'VALID') return false
+        if (validationStatusFilter === 'NEEDS_REVIEW' && !['NEEDS_REVIEW', 'PENDING', 'UNKNOWN'].includes(doc.validation_status)) return false
+        if (validationStatusFilter === 'CLASSIFICATION_FAILED' && doc.validation_status !== 'CLASSIFICATION_FAILED') return false
+      }
+
+      // Search query filter
+      if (validationSearchQuery.trim()) {
+        const q = validationSearchQuery.toLowerCase().trim()
+        const stuName = (doc.student_name || '').toLowerCase()
+        const regNum = (doc.register_number || doc.student_id || '').toLowerCase()
+        const fn = (doc.original_filename || '').toLowerCase()
+        const expType = (doc.expected_document_type || doc.document_name || '').toLowerCase()
+        const detType = (doc.detected_document_type || '').toLowerCase()
+
+        return stuName.includes(q) || regNum.includes(q) || fn.includes(q) || expType.includes(q) || detType.includes(q)
+      }
+
+      return true
+    })
+  }, [validationData?.documents, validationStatusFilter, validationSearchQuery])
 
   const handleDocNameChange = (name: string) => {
     setNewDocName(name)
-    // Auto-suggest normalized code if code wasn't manually customized
     const autoCode = name
       .toUpperCase()
       .replace(/[^A-Z0-9\s_-]/g, '')
@@ -390,7 +290,6 @@ export const BatchDetails: React.FC = () => {
 
     const normCode = trimmedCode.toUpperCase().replace(/[\s-]+/g, '_').replace(/[^A-Z0-9_]/g, '')
 
-    // Check if document already exists in current overview
     const existingDoc = wantedOverview.find(
       (d) =>
         d.document_type.toUpperCase().trim() === normCode ||
@@ -401,7 +300,6 @@ export const BatchDetails: React.FC = () => {
     try {
       const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
       if (existingDoc) {
-        // Document already exists in current configuration -> update it instead of appending another record
         const res = await wantedFieldService.saveDocumentConfig(
           batchId,
           existingDoc.document_type,
@@ -419,7 +317,7 @@ export const BatchDetails: React.FC = () => {
         setNewDocCode('')
         setNewDocDescription('')
         setNewDocRequirementStatus('REQUIRED')
-        await loadWantedOverview(res.document_type)
+        await loadWantedOverview()
         return
       }
 
@@ -433,20 +331,60 @@ export const BatchDetails: React.FC = () => {
         },
         classIdParam
       )
-      addToast(`Document "${res.display_name}" configured (${newDocRequirementStatus}) with 0 wanted fields.`, 'success')
+      addToast(`Document requirement "${res.display_name}" added (${newDocRequirementStatus}).`, 'success')
       setIsAddDocModalOpen(false)
       setNewDocName('')
       setNewDocCode('')
       setNewDocDescription('')
       setNewDocRequirementStatus('REQUIRED')
-      await loadWantedOverview(res.document_type)
+      await loadWantedOverview()
     } catch (err: any) {
-      addToast(err?.response?.data?.detail || err?.message || 'Failed to configure document type.', 'error')
+      addToast(err?.response?.data?.detail || err?.message || 'Failed to configure document requirement.', 'error')
     } finally {
       setIsCreatingDoc(false)
     }
   }
 
+  const handleUpdateRequirementStatus = async (
+    docType: string,
+    newStatus: 'REQUIRED' | 'OPTIONAL' | 'DISABLED'
+  ) => {
+    if (!batchId) return
+    try {
+      const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
+      await wantedFieldService.updateDocumentRequirement(
+        batchId,
+        docType,
+        { requirement_status: newStatus },
+        classIdParam
+      )
+      addToast(`Updated ${docType} requirement to ${newStatus}`, 'success')
+      await loadWantedOverview()
+    } catch (err: any) {
+      addToast(err?.response?.data?.detail || err?.message || 'Failed to update requirement status.', 'error')
+    }
+  }
+
+  const handleAddPresetDoc = async (preset: { name: string; code: string; desc: string; status: 'REQUIRED' | 'OPTIONAL' }) => {
+    if (!batchId) return
+    try {
+      const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
+      await wantedFieldService.createDocumentType(
+        batchId,
+        {
+          name: preset.name,
+          code: preset.code,
+          description: preset.desc,
+          requirement_status: preset.status,
+        },
+        classIdParam
+      )
+      addToast(`Added document requirement "${preset.name}"`, 'success')
+      await loadWantedOverview()
+    } catch (err: any) {
+      addToast(err?.response?.data?.detail || `Document requirement "${preset.name}" is already configured.`, 'info')
+    }
+  }
 
   const handleDeleteDocumentType = async (docType: string, docName: string) => {
     if (!batchId) return
@@ -459,125 +397,10 @@ export const BatchDetails: React.FC = () => {
       const res = await wantedFieldService.deleteDocumentType(batchId, docType, classIdParam)
       addToast(res.message, res.archived ? 'info' : 'success')
       await loadWantedOverview()
-      await loadExcelTemplateInfo()
     } catch (err: any) {
       addToast(err?.response?.data?.detail || err?.message || 'Failed to delete document type.', 'error')
     } finally {
       setIsDeletingDoc(false)
-    }
-  }
-
-  const handleAddCustomField = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault()
-    if (!batchId || !selectedDocType) return
-    const trimmed = newFieldName.trim()
-    if (!trimmed) {
-      addToast('Field name cannot be empty.', 'error')
-      return
-    }
-
-    setIsAddingField(true)
-    try {
-      const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
-      const res = await wantedFieldService.addCustomField(batchId, selectedDocType, trimmed, classIdParam)
-      setActiveDocFields(res.fields)
-      addToast(`Added field "${trimmed}". It is currently disabled (unselected).`, 'success')
-      setNewFieldName('')
-      setIsAddFieldModalOpen(false)
-      await loadWantedOverview(selectedDocType)
-    } catch (err: any) {
-      addToast(err?.response?.data?.detail || err?.message || 'Failed to add custom field.', 'error')
-    } finally {
-      setIsAddingField(false)
-    }
-  }
-
-  const handleToggleWantedField = (fieldName: string) => {
-    setActiveDocFields((prev) =>
-      prev.map((f) => {
-        if (f.field === fieldName) {
-          const nextEnabled = !f.enabled
-          let nextHeader = f.excel_header
-          if (nextEnabled && (!nextHeader || !nextHeader.trim())) {
-            const compatible = availableHeaders.find((h) => checkFieldCompatibility(f.field, h).isCompatible)
-            if (compatible) nextHeader = compatible
-          }
-          return { ...f, enabled: nextEnabled, excel_header: nextHeader }
-        }
-        return f
-      })
-    )
-  }
-
-  const handleSetWantedFieldHeader = (fieldName: string, targetHeader: string) => {
-    setActiveDocFields((prev) =>
-      prev.map((f) => (f.field === fieldName ? { ...f, excel_header: targetHeader || null } : f))
-    )
-  }
-
-  const handleSelectAllWantedFields = () => {
-    setActiveDocFields((prev) =>
-      prev.map((f) => {
-        let nextHeader = f.excel_header
-        if (!nextHeader || !nextHeader.trim()) {
-          const compatible = availableHeaders.find((h) => checkFieldCompatibility(f.field, h).isCompatible)
-          if (compatible) nextHeader = compatible
-        }
-        return { ...f, enabled: true, excel_header: nextHeader }
-      })
-    )
-  }
-
-  const handleDeselectAllWantedFields = () => {
-    setActiveDocFields((prev) => prev.map((f) => ({ ...f, enabled: false })))
-  }
-
-  const handleSaveDocWantedFields = async () => {
-    if (!batchId) return
-    setIsSavingWanted(true)
-    try {
-      const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
-      const activeDocOverview = wantedOverview.find((o) => o.document_type === selectedDocType)
-      await wantedFieldService.saveDocumentConfig(
-        batchId,
-        selectedDocType,
-        activeDocFields,
-        classIdParam,
-        {
-          requirement_status: activeDocRequirementStatus,
-          display_name: activeDocOverview?.display_name,
-          description: activeDocOverview?.description || undefined,
-        }
-      )
-      addToast(`Saved wanted fields for ${selectedDocType} successfully!`, 'success')
-      await loadWantedOverview()
-      await loadExcelTemplateInfo()
-    } catch (err: any) {
-      addToast(err?.response?.data?.detail || err?.message || 'Failed to save document configuration.', 'error')
-    } finally {
-      setIsSavingWanted(false)
-    }
-  }
-
-  const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!batchId || !e.target.files || e.target.files.length === 0) return
-    const file = e.target.files[0]
-    if (!file.name.toLowerCase().endsWith('.xlsx')) {
-      addToast('Only .xlsx format Excel files are allowed.', 'error')
-      return
-    }
-    setIsUploadingExcel(true)
-    try {
-      const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
-      const res = await excelTemplateService.uploadTemplate(batchId, file, classIdParam)
-      setExcelTemplate(res)
-      setExcelMappings(res.field_mappings || {})
-      setLookupColumn(res.lookup_column || (res.headers[0] || 'Reg No'))
-      addToast(`Excel template "${file.name}" uploaded! Extracted ${res.headers.length} columns.`, 'success')
-    } catch (err: any) {
-      addToast(err.message || 'Failed to upload Excel template', 'error')
-    } finally {
-      setIsUploadingExcel(false)
     }
   }
 
@@ -603,37 +426,6 @@ export const BatchDetails: React.FC = () => {
     classes: batchClasses,
     currentDocVersion: 1,
     docRequirements: tempRequirements,
-  }
-
-
-
-  const handleSaveExcelMappings = async () => {
-    if (!batchId) return
-    setIsSavingMappings(true)
-    try {
-      const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
-      const res = await excelTemplateService.saveMappings(batchId, excelMappings, lookupColumn, classIdParam)
-      setExcelTemplate(res)
-      addToast('Field mappings saved successfully!', 'success')
-    } catch (err: any) {
-      addToast(err.message || 'Failed to save mappings', 'error')
-    } finally {
-      setIsSavingMappings(false)
-    }
-  }
-
-  const handleDownloadExcel = async () => {
-    if (!batchId) return
-    setIsDownloadingExcel(true)
-    try {
-      const classIdParam = selectedClassId === 'all' ? undefined : selectedClassId
-      await excelTemplateService.downloadExcel(batchId, excelTemplate?.template_filename, classIdParam)
-      addToast('Downloaded updated Excel workbook!', 'success')
-    } catch (err: any) {
-      addToast(err.message || 'Failed to download Excel workbook', 'error')
-    } finally {
-      setIsDownloadingExcel(false)
-    }
   }
 
   const handleDownloadAllDocuments = async () => {
@@ -712,7 +504,7 @@ export const BatchDetails: React.FC = () => {
   const handleSaveExpiry = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedLinkForExpiry) return
-    
+
     try {
       await updateUploadLinkExpiry(selectedLinkForExpiry.id, editLinkExpiry || null)
       addToast('Expiry date updated successfully!', 'success')
@@ -726,7 +518,7 @@ export const BatchDetails: React.FC = () => {
 
   const handleRemoveExpiry = async () => {
     if (!selectedLinkForExpiry) return
-    
+
     try {
       await updateUploadLinkExpiry(selectedLinkForExpiry.id, null)
       addToast('Expiry date removed successfully!', 'success')
@@ -805,16 +597,35 @@ export const BatchDetails: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <Button variant="outline" onClick={() => setIsSectionModalOpen(true)} className="cursor-pointer gap-1.5">
             <Plus className="h-4 w-4" /> Create Section
           </Button>
-          <Button variant="outline" onClick={() => setActiveTab('documents')} className="cursor-pointer">
-            <FileText className="mr-2 h-4 w-4" /> Configure Documents
+          <Button
+            variant="outline"
+            onClick={() => setActiveTab('documents')}
+            className={`cursor-pointer gap-1.5 ${
+              activeTab === 'documents'
+                ? 'bg-secondary text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <FileText className="h-4 w-4 text-emerald-500" /> Document Requirements
           </Button>
-          <Button variant="primary" onClick={() => setIsLinkModalOpen(true)} className="cursor-pointer shadow-xs">
-            <Plus className="mr-2 h-4 w-4" /> Generate Portal Link
+          <Button
+            variant="outline"
+            onClick={() => navigate(`/data-extraction/${batchId}`)}
+            className="cursor-pointer gap-1.5 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"
+          >
+            <Sparkles className="h-4 w-4" /> Data Extraction
           </Button>
+          <button
+            type="button"
+            onClick={() => setIsLinkModalOpen(true)}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-xs transition-colors cursor-pointer"
+          >
+            <Plus className="h-4 w-4 text-slate-950 font-bold" /> Generate Portal Link
+          </button>
         </div>
       </div>
 
@@ -824,9 +635,14 @@ export const BatchDetails: React.FC = () => {
           [
             { id: 'sections', label: `Sections (${batchClasses.length})`, icon: Layers },
             { id: 'students', label: `Students (${batchStudents.length})`, icon: Users },
+            {
+              id: 'validation',
+              label: `Document Validation ${validationData ? `(${validationData.summary.total_documents})` : ''}`,
+              icon: ShieldCheck,
+              hasWarning: (validationData?.summary.wrong_documents || 0) > 0,
+            },
+            { id: 'documents', label: 'Document Requirements', icon: FileText },
             { id: 'links', label: `Upload Links (${batchLinks.length})`, icon: LinkIcon },
-            { id: 'documents', label: 'Document Configuration', icon: FileText },
-            { id: 'exports', label: 'Exports', icon: Download },
           ] as const
         ).map((tab) => {
           const Icon = tab.icon
@@ -837,12 +653,17 @@ export const BatchDetails: React.FC = () => {
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-all cursor-pointer whitespace-nowrap ${
                 isActive
-                  ? 'border-primary text-primary'
+                  ? 'border-primary text-primary font-bold'
                   : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
               }`}
             >
-              <Icon className="h-4 w-4" />
-              {tab.label}
+              <Icon className={`h-4 w-4 ${isActive ? 'text-primary' : ''}`} />
+              <span>{tab.label}</span>
+              {(tab as any).hasWarning && (
+                <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-rose-500 text-white animate-pulse">
+                  {validationData?.summary.wrong_documents} MISMATCH
+                </span>
+              )}
             </button>
           )
         })}
@@ -859,7 +680,7 @@ export const BatchDetails: React.FC = () => {
                   <Layers className="h-5 w-5 text-primary" /> Classes / Sections in {activeBatch.name}
                 </h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Each section is an independent workspace with its own student list, upload link, document rules, and export data.
+                  Each section is an independent workspace with its own submissions, upload link, and document collection.
                 </p>
               </div>
               <Button variant="primary" onClick={() => setIsSectionModalOpen(true)} className="cursor-pointer gap-1.5">
@@ -947,14 +768,14 @@ export const BatchDetails: React.FC = () => {
           </div>
         )}
 
-        {/* STUDENTS TAB */}
+        {/* 1. STUDENTS TAB */}
         {activeTab === 'students' && (
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-lg font-bold text-foreground">Enrolled Candidate Submissions</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Review student upload status, verify OCR extraction fields, and inspect preview documents.
+                  Review student upload status, verify submitted documents, and inspect preview files.
                 </p>
               </div>
 
@@ -1005,7 +826,7 @@ export const BatchDetails: React.FC = () => {
                           <TableCell className="text-xs text-muted-foreground">{student.submittedAt}</TableCell>
                           <TableCell>
                             <span className="text-xs font-bold text-foreground">
-                              {uploadedDocs} / {totalDocs} Files (PDF)
+                              {uploadedDocs} / {totalDocs} Files
                             </span>
                           </TableCell>
                           <TableCell>
@@ -1111,7 +932,258 @@ export const BatchDetails: React.FC = () => {
           </div>
         )}
 
-        {/* UPLOAD LINKS TAB */}
+        {/* 1.5 DOCUMENT VALIDATION TAB */}
+        {activeTab === 'validation' && (
+          <div className="space-y-6">
+            {/* KPI Summary Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+              <div className="p-4 rounded-xl border border-border bg-card shadow-2xs">
+                <span className="text-xs font-semibold text-muted-foreground block mb-1">Total Documents</span>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-2xl font-extrabold text-foreground font-mono">
+                    {validationData?.summary.total_documents || 0}
+                  </span>
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-950/20 shadow-2xs">
+                <span className="text-xs font-semibold text-emerald-400 block mb-1">Valid & Verified</span>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-2xl font-extrabold text-emerald-300 font-mono">
+                    {validationData?.summary.valid || 0}
+                  </span>
+                  <CheckCircle className="h-4 w-4 text-emerald-400" />
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-950/20 shadow-2xs">
+                <span className="text-xs font-semibold text-rose-400 block mb-1">Wrong Documents</span>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-2xl font-extrabold text-rose-300 font-mono">
+                    {validationData?.summary.wrong_documents || 0}
+                  </span>
+                  <AlertTriangle className="h-4 w-4 text-rose-400" />
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-950/20 shadow-2xs">
+                <span className="text-xs font-semibold text-amber-400 block mb-1">Needs Review</span>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-2xl font-extrabold text-amber-300 font-mono">
+                    {validationData?.summary.needs_review || 0}
+                  </span>
+                  <Clock className="h-4 w-4 text-amber-400" />
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl border border-red-500/30 bg-red-950/20 shadow-2xs">
+                <span className="text-xs font-semibold text-red-400 block mb-1">Classification Failed</span>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-2xl font-extrabold text-red-300 font-mono">
+                    {validationData?.summary.classification_failed || 0}
+                  </span>
+                  <XCircle className="h-4 w-4 text-red-400" />
+                </div>
+              </div>
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-border bg-card">
+              <div className="flex items-center gap-3 flex-1 flex-wrap">
+                <Input
+                  placeholder="Search student name, register no, or filename..."
+                  value={validationSearchQuery}
+                  onChange={(e) => setValidationSearchQuery(e.target.value)}
+                  className="max-w-xs text-xs"
+                />
+
+                <select
+                  value={validationStatusFilter}
+                  onChange={(e) => setValidationStatusFilter(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg border border-border bg-background text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="VALID">Valid Only</option>
+                  <option value="WRONG_DOCUMENT">Wrong Document Mismatches</option>
+                  <option value="NEEDS_REVIEW">Needs Review / Low Confidence</option>
+                  <option value="CLASSIFICATION_FAILED">Classification Failed</option>
+                </select>
+
+                {batchClasses.length > 0 && (
+                  <select
+                    value={selectedClassId}
+                    onChange={(e) => setSelectedClassId(e.target.value)}
+                    className="px-3 py-1.5 rounded-lg border border-border bg-background text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                  >
+                    <option value="all">All Sections</option>
+                    {batchClasses.map((cls) => (
+                      <option key={cls.id} value={cls.id}>
+                        {cls.class_name} (Sec {cls.section})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadValidationData}
+                disabled={isLoadingValidation}
+                className="cursor-pointer gap-1.5 text-xs shrink-0"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isLoadingValidation ? 'animate-spin' : ''}`} />
+                <span>Refresh Validation</span>
+              </Button>
+            </div>
+
+            {/* Document Validation Table */}
+            {isLoadingValidation ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <span className="text-xs font-medium">Validating document classifications...</span>
+              </div>
+            ) : filteredValidationDocs.length > 0 ? (
+              <div className="rounded-xl border border-border bg-card overflow-hidden shadow-2xs">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Student</TableHead>
+                      <TableHead>Expected Document</TableHead>
+                      <TableHead>Uploaded File</TableHead>
+                      <TableHead>Detected Type</TableHead>
+                      <TableHead>Confidence</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Evidence</TableHead>
+                      <TableHead>Version</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredValidationDocs.map((docItem) => {
+                      const confPercent = Math.round(docItem.classification_confidence * 100)
+                      return (
+                        <TableRow key={docItem.document_id} className="hover:bg-secondary/30 transition-colors">
+                          <TableCell>
+                            <div>
+                              <span className="font-semibold text-foreground text-sm block">
+                                {docItem.student_name || docItem.register_number}
+                              </span>
+                              <span className="font-mono text-xs text-muted-foreground">
+                                {docItem.register_number}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-semibold text-xs text-foreground">
+                            {docItem.expected_document_type || docItem.document_name}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-muted-foreground max-w-[180px] truncate" title={docItem.original_filename || ''}>
+                            {docItem.original_filename || 'N/A'}
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-mono text-xs font-bold text-indigo-400">
+                              {docItem.detected_document_type || 'UNKNOWN'}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-xs font-bold">{confPercent}%</span>
+                              <div className="w-12 h-1.5 rounded-full bg-slate-800 overflow-hidden hidden sm:block">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    confPercent >= 90 ? 'bg-emerald-500' : confPercent >= 70 ? 'bg-indigo-500' : 'bg-amber-500'
+                                  }`}
+                                  style={{ width: `${Math.min(100, confPercent)}%` }}
+                                />
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {docItem.validation_status === 'VALID' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                <CheckCircle className="w-3 h-3" /> VALID
+                              </span>
+                            )}
+                            {docItem.validation_status === 'WRONG_DOCUMENT' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                <AlertTriangle className="w-3 h-3" /> WRONG_DOCUMENT
+                              </span>
+                            )}
+                            {docItem.validation_status === 'NEEDS_REVIEW' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                <Clock className="w-3 h-3" /> NEEDS_REVIEW
+                              </span>
+                            )}
+                            {docItem.validation_status === 'CLASSIFICATION_FAILED' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20">
+                                <AlertTriangle className="w-3 h-3" /> FAILED
+                              </span>
+                            )}
+                            {docItem.validation_status === 'UNKNOWN' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-500/10 text-slate-400 border border-slate-500/20">
+                                <HelpCircle className="w-3 h-3" /> UNKNOWN
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedDocForEvidence(docItem)}
+                              className="text-xs text-indigo-400 hover:text-indigo-300 font-medium underline underline-offset-2 cursor-pointer flex items-center gap-1"
+                            >
+                              <Sparkles className="w-3 h-3" />
+                              <span>{docItem.classification_evidence?.length || 0} signals</span>
+                            </button>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-muted-foreground">
+                            v{docItem.version_number}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="inline-flex items-center gap-1.5">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setPreviewTarget({
+                                    studentDocumentId: docItem.document_id,
+                                    versionId: docItem.active_version_id,
+                                    documentName: `${docItem.student_name || docItem.register_number} - ${docItem.document_name}`,
+                                  })
+                                }}
+                                className="cursor-pointer text-xs h-7 px-2"
+                                title="Preview Document"
+                              >
+                                <Eye className="h-3.5 w-3.5 mr-1" /> Preview
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setSelectedDocForReclassify(docItem)}
+                                className="cursor-pointer text-xs h-7 px-2 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10"
+                                title="Reclassify Document"
+                              >
+                                <FileText className="h-3.5 w-3.5 mr-1" /> Reclassify
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <EmptyState
+                title="No documents matching filter"
+                description="No uploaded student documents match the current search or status filter."
+                icon={<ShieldCheck className="h-12 w-12 text-muted-foreground/60" />}
+              />
+            )}
+          </div>
+        )}
+
+        {/* 2. UPLOAD LINKS TAB */}
         {activeTab === 'links' && (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
@@ -1248,59 +1320,80 @@ export const BatchDetails: React.FC = () => {
           </div>
         )}
 
-        {/* DOCUMENT CONFIGURATION TAB - EXCLUSIVELY: DOCUMENT TYPE -> WANTED FIELDS -> FIELD -> EXCEL TARGET COLUMN */}
+        {/* 3. DOCUMENT REQUIREMENTS TAB (DOCUMENT COLLECTION ONLY) */}
         {activeTab === 'documents' && (
           <div className="space-y-6">
-            {/* Page Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
+            {/* Notice Banner: Clear separation between Document Collection & Data Extraction */}
+            <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="h-9 w-9 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+                  <ShieldCheck className="h-5 w-5" />
+                </div>
+                <div className="space-y-0.5">
+                  <h4 className="text-sm font-bold text-foreground">Document Collection Requirements</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Configure which documents students must upload during admission. To select extraction fields, Excel headers, and OCR mappings, use the{' '}
+                    <strong className="text-emerald-400 font-semibold">Data Extraction Workspace</strong>.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate(`/data-extraction/${batchId}`)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shrink-0 cursor-pointer transition-colors"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>Go to Data Extraction</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            {/* Document Collection Requirements Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-border">
               <div>
                 <div className="flex items-center gap-2">
                   <FileText className="h-5 w-5 text-primary" />
-                  <h2 className="text-lg font-bold text-foreground">Document Configuration</h2>
+                  <h2 className="text-xl font-extrabold text-foreground tracking-tight">Required Documents for Applicants</h2>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Configure document types, select wanted fields for extraction, and map them to Excel headers.
+                  Which documents should students upload through the admission portal?
                 </p>
               </div>
 
               <div className="flex items-center gap-3 flex-wrap">
-                {batchClasses.length > 0 && (
-                  <div className="flex items-center gap-2 bg-card px-3 py-1.5 rounded-xl border border-border">
-                    <span className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1.5">
-                      <Layers className="h-4 w-4 text-primary" /> Class Scope:
-                    </span>
-                    <select
-                      value={selectedClassId}
-                      onChange={(e) => setSelectedClassId(e.target.value)}
-                      className="px-3 py-1 rounded-lg border border-border bg-background text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-                    >
-                      <option value="all">Batch Level (Default)</option>
-                      {batchClasses.map((cls) => (
-                        <option key={cls.id} value={cls.id}>
-                          {cls.class_name} (Sec {cls.section})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                <div className="flex items-center gap-2 bg-card px-3 py-1.5 rounded-xl border border-border">
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase flex items-center gap-1.5">
+                    <Layers className="h-3.5 w-3.5 text-primary" /> SCOPE:
+                  </span>
+                  <select
+                    value={selectedClassId}
+                    onChange={(e) => setSelectedClassId(e.target.value)}
+                    className="px-2.5 py-1 rounded-lg border border-border bg-background text-xs font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                  >
+                    <option value="all">Batch Level (All Sections)</option>
+                    {batchClasses.map((cls) => (
+                      <option key={cls.id} value={cls.id}>
+                        {cls.class_name} (Sec {cls.section})
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                <Button
-                  variant="primary"
-                  size="sm"
+                <button
+                  type="button"
                   onClick={handleOpenAddDocModal}
-                  className="cursor-pointer gap-1.5 text-xs shadow-xs"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs shadow-xs transition-colors cursor-pointer"
                 >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add Document Type
-                </Button>
+                  <Plus className="h-3.5 w-3.5 stroke-[3]" /> Add Document Requirement
+                </button>
 
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => loadWantedOverview()}
                   disabled={isLoadingWanted}
-                  className="cursor-pointer gap-1.5 text-xs"
-                  title="Refresh Configurations"
+                  className="cursor-pointer gap-1.5 text-xs h-9 px-3"
+                  title="Refresh Requirements"
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${isLoadingWanted ? 'animate-spin' : ''}`} />
                   Refresh
@@ -1308,707 +1401,150 @@ export const BatchDetails: React.FC = () => {
               </div>
             </div>
 
-            {/* Empty State: ZERO configured document types */}
+            {/* Quick Presets Bar */}
+            <div className="p-4 rounded-xl bg-card border border-border space-y-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
+                Quick Add Standard Admission Documents:
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { name: 'Aadhaar Card', code: 'AADHAAR', desc: 'Front and back side of Aadhaar Card', status: 'REQUIRED' as const },
+                  { name: '10th SSLC Marksheet', code: 'SSLC', desc: '10th Standard Marksheet / Passing Certificate', status: 'REQUIRED' as const },
+                  { name: '12th HSC Marksheet', code: 'HSC', desc: '12th Standard Marksheet / Higher Secondary', status: 'REQUIRED' as const },
+                  { name: 'Community Certificate', code: 'COMMUNITY', desc: 'Permanent Community Certificate from Revenue Authority', status: 'REQUIRED' as const },
+                  { name: 'Transfer Certificate', code: 'TRANSFER_CERTIFICATE', desc: 'School / College Leaving Transfer Certificate', status: 'REQUIRED' as const },
+                  { name: 'Bank Passbook', code: 'BANK_PASSBOOK', desc: 'Bank Account Passbook / Statement copy', status: 'REQUIRED' as const },
+                  { name: 'Income Certificate', code: 'INCOME', desc: 'Annual Family Income Certificate', status: 'OPTIONAL' as const },
+                  { name: 'Passport', code: 'PASSPORT', desc: 'Valid Passport Document', status: 'OPTIONAL' as const },
+                ].map((preset) => {
+                  const alreadyAdded = wantedOverview.some(
+                    (d) => d.document_type.toUpperCase().trim() === preset.code
+                  )
+                  return (
+                    <button
+                      key={preset.code}
+                      type="button"
+                      disabled={alreadyAdded}
+                      onClick={() => handleAddPresetDoc(preset)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        alreadyAdded
+                          ? 'bg-secondary/40 text-muted-foreground/60 border border-border/40 cursor-not-allowed'
+                          : 'bg-secondary hover:bg-secondary/80 text-foreground border border-border hover:border-primary/40'
+                      }`}
+                    >
+                      {alreadyAdded ? <FileCheck className="h-3.5 w-3.5 text-emerald-500" /> : <Plus className="h-3.5 w-3.5 text-primary" />}
+                      <span>{preset.name}</span>
+                      {alreadyAdded && <span className="text-[10px] text-muted-foreground">(Added)</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Document Collection Requirements List */}
             {wantedOverview.length === 0 ? (
               <div className="p-12 text-center border-2 border-dashed border-border rounded-2xl bg-card/50 flex flex-col items-center justify-center space-y-4">
                 <div className="h-14 w-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
                   <FileText className="h-7 w-7" />
                 </div>
                 <div className="max-w-md space-y-1">
-                  <h3 className="text-base font-bold text-foreground">No document types configured yet.</h3>
+                  <h3 className="text-base font-bold text-foreground">No Document Requirements Configured</h3>
                   <p className="text-xs text-muted-foreground">
-                    This batch has no configured documents. Staff/Admin must create document types manually to configure wanted extraction fields.
+                    Define which documents students must upload during admission (e.g. Aadhaar, 10th Marksheet, Community Certificate).
                   </p>
                 </div>
-                <Button
-                  variant="primary"
+                <button
+                  type="button"
                   onClick={handleOpenAddDocModal}
-                  className="cursor-pointer gap-2 text-xs py-2 px-4 shadow-sm"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-sm cursor-pointer"
                 >
-                  <Plus className="h-4 w-4" />
-                  Add Document Type
-                </Button>
+                  <Plus className="h-4 w-4 stroke-[3]" /> Add First Document Requirement
+                </button>
               </div>
             ) : (
-              <>
-                {/* Section 1: Document Type Cards */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                      <Layers className="h-3.5 w-3.5 text-primary" /> DOCUMENT TYPES ({wantedOverview.length})
-                    </span>
-                    <span className="text-3xs text-muted-foreground">
-                      Click Configure on any card below to select its wanted fields
-                    </span>
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {wantedOverview.map((item) => {
+                  const reqStatus = item.requirement_status || 'REQUIRED'
+                  return (
+                    <div
+                      key={item.document_type}
+                      className="p-5 rounded-2xl border border-border bg-card shadow-sm hover:border-border/80 transition-all flex flex-col justify-between space-y-4"
+                    >
+                      <div className="space-y-3">
+                        {/* Top Row: Name, Code, and Delete */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="space-y-0.5 min-w-0">
+                            <span className="font-bold text-sm text-foreground block truncate uppercase tracking-tight">
+                              {item.display_name}
+                            </span>
+                            <span className="text-3xs font-mono font-bold text-muted-foreground block">
+                              CODE: {item.document_type}
+                            </span>
+                          </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {wantedOverview.map((item) => {
-                      const isSelected = selectedDocType === item.document_type
-                      let statusBadge = (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-3xs font-extrabold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-                          <CheckCircle className="h-3 w-3" /> Configured
+                          <button
+                            type="button"
+                            disabled={isDeletingDoc}
+                            onClick={() => handleDeleteDocumentType(item.document_type, item.display_name)}
+                            className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                            title="Remove Document Requirement"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+
+                        {/* Description */}
+                        {item.description && (
+                          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                            {item.description}
+                          </p>
+                        )}
+
+                        {/* File Constraints Info */}
+                        <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-secondary/40 border border-border/60 text-xs">
+                          <div>
+                            <span className="text-[10px] font-bold text-muted-foreground block uppercase">Formats</span>
+                            <span className="font-semibold text-foreground text-xs">PDF, JPG, PNG</span>
+                          </div>
+                          <div className="border-l border-border/60 pl-2">
+                            <span className="text-[10px] font-bold text-muted-foreground block uppercase">Max Size</span>
+                            <span className="font-semibold text-foreground text-xs">5 MB</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Bottom Row: Portal Requirement Status Dropdown */}
+                      <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-muted-foreground uppercase">
+                          Portal Requirement:
                         </span>
-                      )
-                      if (item.status === 'NO_WANTED_FIELDS' || item.wanted_count === 0) {
-                        statusBadge = (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-3xs font-extrabold bg-zinc-500/10 text-zinc-500 border border-zinc-500/20">
-                            <XCircle className="h-3 w-3" /> Not Configured
-                          </span>
-                        )
-                      } else if (item.status === 'INCOMPLETE' || item.unmapped_count > 0) {
-                        statusBadge = (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-3xs font-extrabold bg-amber-500/10 text-amber-600 border border-amber-500/20">
-                            <Clock className="h-3 w-3" /> Incomplete
-                          </span>
-                        )
-                      }
-
-                      return (
-                        <div
-                          key={item.document_type}
-                          onClick={() => handleSelectDocType(item.document_type)}
-                          className={`p-4 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between ${
-                            isSelected
-                              ? 'border-primary bg-primary/5 ring-2 ring-primary/20 shadow-xs'
-                              : 'border-border bg-card hover:bg-secondary/30 hover:border-border/80'
+                        <select
+                          value={reqStatus}
+                          onChange={(e) => {
+                            const val = e.target.value as 'REQUIRED' | 'OPTIONAL' | 'DISABLED'
+                            handleUpdateRequirementStatus(item.document_type, val)
+                          }}
+                          className={`text-xs font-bold px-2.5 py-1 rounded-lg border focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer uppercase ${
+                            reqStatus === 'REQUIRED'
+                              ? 'bg-blue-950/80 text-blue-400 border-blue-800/40'
+                              : reqStatus === 'OPTIONAL'
+                              ? 'bg-purple-950/80 text-purple-400 border-purple-800/40'
+                              : 'bg-zinc-900 text-zinc-400 border-zinc-700'
                           }`}
                         >
-                          <div>
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <span className="font-bold text-sm text-foreground block">{item.display_name}</span>
-                                <span className="text-3xs font-mono text-muted-foreground mt-0.5 block">
-                                  {item.document_type}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                                <span
-                                  className={`inline-flex items-center px-2 py-0.5 rounded text-3xs font-extrabold uppercase ${
-                                    item.requirement_status === 'OPTIONAL'
-                                      ? 'bg-purple-500/10 text-purple-600 border border-purple-500/20'
-                                      : item.requirement_status === 'DISABLED'
-                                      ? 'bg-zinc-500/10 text-zinc-500 border border-zinc-500/20'
-                                      : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
-                                  }`}
-                                >
-                                  {item.requirement_status || 'REQUIRED'}
-                                </span>
-                                {statusBadge}
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleDeleteDocumentType(item.document_type, item.display_name)
-                                  }}
-                                  className="p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded transition-colors cursor-pointer"
-                                  title="Delete or Archive Document Type"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            </div>
-
-                            {item.description && (
-                              <p className="text-3xs text-muted-foreground mt-1 line-clamp-1">{item.description}</p>
-                            )}
-
-                            <div className="mt-4 pt-3 border-t border-border/50 grid grid-cols-3 gap-2 text-center">
-                              <div className="bg-secondary/40 rounded-lg p-1.5">
-                                <span className="text-3xs text-muted-foreground block">Wanted</span>
-                                <span className="text-xs font-bold text-foreground">
-                                  {item.wanted_count}
-                                </span>
-                              </div>
-                              <div className="bg-emerald-500/5 rounded-lg p-1.5 border border-emerald-500/10">
-                                <span className="text-3xs text-emerald-600 font-semibold block">Mapped</span>
-                                <span className="text-xs font-bold text-emerald-600">{item.mapped_count}</span>
-                              </div>
-                              <div className="bg-secondary/40 rounded-lg p-1.5">
-                                <span className="text-3xs text-muted-foreground block">Unmapped</span>
-                                <span
-                                  className={`text-xs font-bold ${
-                                    item.unmapped_count > 0 ? 'text-amber-600' : 'text-muted-foreground'
-                                  }`}
-                                >
-                                  {item.unmapped_count}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="mt-3 pt-2 border-t border-border/40 flex items-center justify-between text-3xs font-semibold">
-                            <span className={isSelected ? 'text-primary font-bold' : 'text-muted-foreground'}>
-                              {isSelected ? '● Currently Configuring' : 'Status: ' + (item.wanted_count === 0 ? 'Not Configured' : 'Configured')}
-                            </span>
-                            <Button
-                              variant={isSelected ? 'primary' : 'outline'}
-                              size="sm"
-                              className="h-6 px-2.5 text-3xs"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleSelectDocType(item.document_type)
-                              }}
-                            >
-                              Configure
-                            </Button>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {/* Section 2: Active Document Wanted Fields & Excel Target Column */}
-                {(() => {
-                  const activeDocOverview = wantedOverview.find((o) => o.document_type === selectedDocType)
-                  if (!activeDocOverview) return null
-
-                  const enabledFields = activeDocFields.filter((f) => f.enabled)
-                  const hasUnmappedEnabled = enabledFields.some((f) => !f.excel_header || !f.excel_header.trim())
-
-                  // Calculate duplicate target conflicts within enabled fields of this document
-                  const headerOwners: Record<string, string> = {}
-                  let hasDuplicateConflict = false
-                  for (const f of enabledFields) {
-                    if (f.excel_header && f.excel_header.trim()) {
-                      const h = f.excel_header.trim()
-                      if (headerOwners[h] && headerOwners[h] !== f.field) {
-                        hasDuplicateConflict = true
-                      } else {
-                        headerOwners[h] = f.field
-                      }
-                    }
-                  }
-
-                  const hasCompatibilityErrors = enabledFields.some(
-                    (f) => f.excel_header && !checkFieldCompatibility(f.field, f.excel_header).isCompatible
-                  )
-
-                  const canSave = !hasUnmappedEnabled && !hasDuplicateConflict && !hasCompatibilityErrors
-
-                  return (
-                    <div className="p-6 border border-border rounded-xl bg-card space-y-5 shadow-2xs">
-                      {/* Active Document Header */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border">
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-extrabold text-base text-foreground uppercase tracking-wide">
-                              {activeDocOverview.display_name || selectedDocType}
-                            </span>
-                            <span className="text-3xs px-2 py-0.5 rounded bg-secondary border border-border font-mono font-bold text-muted-foreground">
-                              {selectedDocType}
-                            </span>
-                            <span className="text-3xs px-2 py-0.5 rounded bg-primary/10 text-primary font-bold">
-                              v{activeDocOverview.version || 1}
-                            </span>
-                            <div className="flex items-center gap-1.5 ml-2">
-                              <span className="text-3xs uppercase font-bold text-muted-foreground">Portal Status:</span>
-                              <select
-                                value={activeDocRequirementStatus}
-                                onChange={(e) => setActiveDocRequirementStatus(e.target.value as any)}
-                                className={`text-3xs font-extrabold px-2 py-0.5 rounded border focus:outline-none focus:ring-1 cursor-pointer uppercase ${
-                                  activeDocRequirementStatus === 'REQUIRED'
-                                    ? 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30 focus:ring-blue-500'
-                                    : activeDocRequirementStatus === 'OPTIONAL'
-                                    ? 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/30 focus:ring-purple-500'
-                                    : 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/30 focus:ring-zinc-500'
-                                }`}
-                              >
-                                <option value="REQUIRED">REQUIRED</option>
-                                <option value="OPTIONAL">OPTIONAL</option>
-                                <option value="DISABLED">DISABLED (Hidden)</option>
-                              </select>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
-                            <span className="font-bold text-foreground">Wanted Fields:</span>
-                            <span>
-                              {enabledFields.length} of {activeDocFields.length} selected for extraction
-                            </span>
-                            <span>•</span>
-                            <span>Saving updates this document&apos;s wanted fields and requirement status</span>
-                          </div>
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setNewFieldName('')
-                              setIsAddFieldModalOpen(true)
-                            }}
-                            className="cursor-pointer text-xs py-1 gap-1"
-                            title="Add Custom Field to this document"
-                          >
-                            <Plus className="h-3 w-3" /> Add Field
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleSelectAllWantedFields}
-                            className="cursor-pointer text-xs py-1"
-                          >
-                            Select All
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleDeselectAllWantedFields}
-                            className="cursor-pointer text-xs py-1"
-                          >
-                            Deselect All
-                          </Button>
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={handleSaveDocWantedFields}
-                            disabled={isSavingWanted || !canSave}
-                            className="cursor-pointer text-xs py-1 gap-1.5"
-                          >
-                            {isSavingWanted ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Save className="h-3.5 w-3.5" />
-                            )}
-                            Save {activeDocOverview.display_name ? activeDocOverview.display_name.split(' ')[0] : 'Doc'} Configuration
-                          </Button>
-                          <Button
-                            variant="danger"
-                            size="sm"
-                            onClick={() => handleDeleteDocumentType(selectedDocType, activeDocOverview.display_name)}
-                            disabled={isDeletingDoc}
-                            className="cursor-pointer text-xs py-1 gap-1"
-                            title="Delete or Archive Document Type"
-                          >
-                            <Trash2 className="h-3 w-3" /> Delete Doc
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* Guidance Alerts */}
-                      {enabledFields.length === 0 && (
-                        <div className="p-3.5 rounded-lg border border-zinc-300 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
-                          <AlertCircle className="h-4 w-4 shrink-0 text-zinc-500" />
-                          <span>
-                            <strong>Zero fields selected:</strong> AI multimodal extraction for this document will be
-                            skipped during batch processing with status <code>NO_WANTED_FIELDS_CONFIGURED</code> without faking data.
-                          </span>
-                        </div>
-                      )}
-
-                      {hasUnmappedEnabled && (
-                        <div className="p-3.5 rounded-lg border border-amber-300 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30 flex items-center gap-2 text-xs text-amber-800 dark:text-amber-300">
-                          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
-                          <span>
-                            Every enabled wanted field must have a target Excel column assigned before saving.
-                          </span>
-                        </div>
-                      )}
-
-                      {hasDuplicateConflict && (
-                        <div className="p-3.5 rounded-lg border border-destructive/30 bg-destructive/5 flex items-center gap-2 text-xs text-destructive">
-                          <AlertCircle className="h-4 w-4 shrink-0" />
-                          <span>
-                            Multiple wanted fields are assigned to the same Excel column. Each Excel column must be unique per document.
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Empty fields prompt if custom document has no fields */}
-                      {activeDocFields.length === 0 ? (
-                        <div className="p-8 text-center border border-dashed border-border rounded-lg bg-secondary/10 space-y-2">
-                          <p className="text-xs font-semibold text-foreground">No available fields defined for this document yet.</p>
-                          <p className="text-3xs text-muted-foreground">Click &quot;+ Add Field&quot; above to add fields you want to extract.</p>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setNewFieldName('')
-                              setIsAddFieldModalOpen(true)
-                            }}
-                            className="cursor-pointer text-xs gap-1 mt-2"
-                          >
-                            <Plus className="h-3 w-3" /> Add Field
-                          </Button>
-                        </div>
-                      ) : (
-                        /* Wanted Fields Table: FIELD -> EXCEL TARGET COLUMN */
-                        <div className="rounded-xl border border-border overflow-hidden bg-card">
-                          <Table>
-                            <TableHeader>
-                              <TableRow className="bg-secondary/40">
-                                <TableHead className="w-16 text-center">Wanted</TableHead>
-                                <TableHead>Field Name</TableHead>
-                                <TableHead>Target Excel Header Column</TableHead>
-                                <TableHead className="w-28 text-center">Status</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {activeDocFields.map((field) => {
-                                const isEnabled = field.enabled
-                                const selectedHeader = field.excel_header || ''
-                                const isMapped = isEnabled && Boolean(selectedHeader)
-                                const compatResult = isMapped ? checkFieldCompatibility(field.field, selectedHeader) : null
-                                const isInvalid = isMapped && compatResult ? !compatResult.isCompatible : false
-                                const conflictingOwner =
-                                  isMapped && headerOwners[selectedHeader] && headerOwners[selectedHeader] !== field.field
-                                    ? headerOwners[selectedHeader]
-                                    : null
-
-                                return (
-                                  <TableRow
-                                    key={field.field}
-                                    className={`transition-colors ${
-                                      isEnabled ? 'bg-card hover:bg-secondary/20' : 'bg-secondary/10 opacity-60'
-                                    }`}
-                                  >
-                                    {/* Checkbox Column */}
-                                    <TableCell className="text-center">
-                                      <input
-                                        type="checkbox"
-                                        checked={isEnabled}
-                                        onChange={() => handleToggleWantedField(field.field)}
-                                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
-                                        title={isEnabled ? 'Disable field extraction' : 'Enable field extraction'}
-                                      />
-                                    </TableCell>
-
-                                    {/* Field Name */}
-                                    <TableCell className="font-semibold text-xs text-foreground">
-                                      <div>
-                                        <span
-                                          className={`block font-bold ${
-                                            isEnabled ? 'text-foreground' : 'text-muted-foreground line-through'
-                                          }`}
-                                        >
-                                          {field.field}
-                                        </span>
-                                        <span className="text-3xs text-muted-foreground font-normal block mt-0.5">
-                                          Source: {activeDocOverview.display_name || selectedDocType}
-                                        </span>
-                                      </div>
-                                    </TableCell>
-
-                                    {/* Target Excel Column Dropdown */}
-                                    <TableCell>
-                                      <div className="space-y-1">
-                                        <select
-                                          disabled={!isEnabled}
-                                          value={selectedHeader}
-                                          onChange={(e) => handleSetWantedFieldHeader(field.field, e.target.value)}
-                                          className={`w-full max-w-sm px-3 py-1.5 text-xs rounded border bg-background font-medium focus:outline-none focus:ring-2 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-secondary/40 ${
-                                            !isEnabled
-                                              ? 'border-border text-muted-foreground'
-                                              : isInvalid
-                                              ? 'border-destructive focus:ring-destructive text-destructive'
-                                              : conflictingOwner
-                                              ? 'border-amber-500 focus:ring-amber-500 text-amber-600'
-                                              : !selectedHeader
-                                              ? 'border-amber-400 focus:ring-amber-400 text-amber-700'
-                                              : 'border-border focus:ring-primary text-foreground'
-                                          }`}
-                                        >
-                                          <option value="">
-                                            {isEnabled
-                                              ? availableHeaders.length > 0
-                                                ? '-- Select Target Excel Column --'
-                                                : '-- No Excel Template Uploaded --'
-                                              : '-- Extraction Disabled --'}
-                                          </option>
-                                          {selectedHeader && !availableHeaders.includes(selectedHeader) && (
-                                            <option value={selectedHeader}>{selectedHeader}</option>
-                                          )}
-                                          {availableHeaders.map((h) => {
-                                            const isCompat = checkFieldCompatibility(field.field, h).isCompatible
-                                            const owner = headerOwners[h]
-                                            const isOwnedByOther = Boolean(owner && owner !== field.field)
-                                            const isDisabled = !isCompat || isOwnedByOther
-
-                                            let optionLabel = h
-                                            if (!isCompat) {
-                                              optionLabel = `${h} (Incompatible)`
-                                            } else if (isOwnedByOther) {
-                                              optionLabel = `${h} (Already mapped to ${owner})`
-                                            }
-
-                                            return (
-                                              <option key={h} value={h} disabled={isDisabled}>
-                                                {optionLabel}
-                                              </option>
-                                            )
-                                          })}
-                                        </select>
-
-                                        {isEnabled && isInvalid && (
-                                          <p className="text-destructive text-3xs font-semibold flex items-center gap-1">
-                                            <AlertCircle className="h-3 w-3 inline shrink-0" />
-                                            Invalid mapping: {field.field} cannot be mapped to {selectedHeader}.
-                                          </p>
-                                        )}
-
-                                        {isEnabled && conflictingOwner && !isInvalid && (
-                                          <p className="text-amber-600 text-3xs font-semibold flex items-center gap-1">
-                                            <AlertTriangle className="h-3 w-3 inline shrink-0" />
-                                            Conflict: Column &quot;{selectedHeader}&quot; is already mapped to{' '}
-                                            {conflictingOwner}.
-                                          </p>
-                                        )}
-                                      </div>
-                                    </TableCell>
-
-                                    {/* Status Column */}
-                                    <TableCell className="text-center">
-                                      {!isEnabled ? (
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-3xs font-medium bg-secondary text-muted-foreground border border-border">
-                                          Disabled
-                                        </span>
-                                      ) : isInvalid ? (
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-3xs font-extrabold bg-red-100 text-red-800">
-                                          <AlertCircle className="h-3 w-3" /> Invalid
-                                        </span>
-                                      ) : conflictingOwner ? (
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-3xs font-extrabold bg-amber-100 text-amber-800">
-                                          <AlertTriangle className="h-3 w-3" /> Conflict
-                                        </span>
-                                      ) : isMapped ? (
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-3xs font-extrabold bg-emerald-100 text-emerald-800">
-                                          <Check className="h-3 w-3" /> Mapped
-                                        </span>
-                                      ) : (
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-3xs font-bold bg-amber-100 text-amber-800">
-                                          Unmapped
-                                        </span>
-                                      )}
-                                    </TableCell>
-                                  </TableRow>
-                                )
-                              })}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      )}
-
-                      {/* Footer Save Button */}
-                      <div className="flex justify-end pt-2">
-                        <Button
-                          variant="primary"
-                          onClick={handleSaveDocWantedFields}
-                          disabled={isSavingWanted || !canSave}
-                          className="cursor-pointer gap-2"
-                        >
-                          {isSavingWanted ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Save className="h-4 w-4" />
-                          )}
-                          Save {activeDocOverview.display_name || selectedDocType} Configuration
-                        </Button>
+                          <option value="REQUIRED">REQUIRED</option>
+                          <option value="OPTIONAL">OPTIONAL</option>
+                          <option value="DISABLED">DISABLED (Hidden)</option>
+                        </select>
                       </div>
                     </div>
                   )
-                })()}
-              </>
-            )}
-          </div>
-        )}
-
-        {/* EXPORTS & EXCEL TEMPLATE TAB */}
-        {activeTab === 'exports' && (
-          <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-bold text-foreground">Excel Template & Auto Row Update</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Upload an Excel template (.xlsx), configure AI field mappings, and auto-update candidate rows on verification per Class.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                {batchClasses.length > 0 && (
-                  <div className="flex items-center gap-2 bg-card px-3 py-1.5 rounded-xl border border-border">
-                    <span className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-1.5">
-                      <Layers className="h-4 w-4 text-primary" /> Class Scope:
-                    </span>
-                    <select
-                      value={selectedClassId}
-                      onChange={(e) => setSelectedClassId(e.target.value)}
-                      className="px-3 py-1 rounded-lg border border-border bg-background text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-                    >
-                      <option value="all">Batch Level (Default)</option>
-                      {batchClasses.map((cls) => (
-                        <option key={cls.id} value={cls.id}>
-                          {cls.class_name} (Sec {cls.section})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {excelTemplate && (
-                  <Button
-                    variant="primary"
-                    onClick={handleDownloadExcel}
-                    disabled={isDownloadingExcel}
-                    className="cursor-pointer gap-2"
-                  >
-                    {isDownloadingExcel ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                    Download Updated Excel
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            {/* Metric Cards Bar */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="p-4 rounded-xl border border-border bg-card shadow-2xs">
-                <span className="text-xs text-muted-foreground font-medium block">Template Status</span>
-                <span className="text-sm font-bold text-foreground mt-1 flex items-center gap-1.5 truncate">
-                  <FileSpreadsheet className="h-4 w-4 text-emerald-600 shrink-0" />
-                  {excelTemplate ? excelTemplate.template_filename : 'No Template Uploaded'}
-                </span>
-              </div>
-              <div className="p-4 rounded-xl border border-border bg-card shadow-2xs">
-                <span className="text-xs text-muted-foreground font-medium block">Total Excel Rows</span>
-                <span className="text-2xl font-black text-foreground mt-1">
-                  {excelTemplate ? excelTemplate.total_rows : 0}
-                </span>
-              </div>
-              <div className="p-4 rounded-xl border border-border bg-card shadow-2xs">
-                <span className="text-xs text-muted-foreground font-medium block">Students Updated</span>
-                <span className="text-2xl font-black text-emerald-600 mt-1">
-                  {excelTemplate ? excelTemplate.updated_count : 0}
-                </span>
-              </div>
-              <div className="p-4 rounded-xl border border-border bg-card shadow-2xs">
-                <span className="text-xs text-muted-foreground font-medium block">Remaining Students</span>
-                <span className="text-2xl font-black text-amber-600 mt-1">
-                  {excelTemplate ? excelTemplate.remaining_students : 0}
-                </span>
-              </div>
-            </div>
-
-            {/* 1. Upload Excel Template Area */}
-            <div className="p-6 border border-border rounded-xl bg-card space-y-4 shadow-2xs">
-              <div className="flex items-center gap-2 text-foreground font-bold text-sm">
-                <Upload className="h-4 w-4 text-primary" /> 1. Upload Excel Template (.xlsx only)
-              </div>
-              <div className="border-2 border-dashed border-border hover:border-primary/50 rounded-xl p-6 text-center transition-colors bg-secondary/20">
-                <input
-                  type="file"
-                  id="excel-template-upload"
-                  accept=".xlsx"
-                  onChange={handleExcelUpload}
-                  className="hidden"
-                />
-                <label htmlFor="excel-template-upload" className="cursor-pointer flex flex-col items-center gap-2">
-                  {isUploadingExcel ? (
-                    <Loader2 className="h-8 w-8 text-primary animate-spin" />
-                  ) : (
-                    <FileSpreadsheet className="h-8 w-8 text-primary" />
-                  )}
-                  <div>
-                    <span className="font-bold text-sm text-foreground block">
-                      {excelTemplate ? `Replace "${excelTemplate.template_filename}"` : 'Click to Upload Excel Template (.xlsx)'}
-                    </span>
-                    <span className="text-xs text-muted-foreground mt-0.5 block">
-                      Only .xlsx files are accepted. Formula formatting and existing rows will be preserved.
-                    </span>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            {/* 2. Document-Specific Wanted Field & Excel Column Mapping Matrix */}
-            {excelTemplate && excelTemplate.headers.length > 0 && (
-              <div className="p-6 border border-border rounded-xl bg-card space-y-6 shadow-2xs">
-                {/* Section Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border">
-                  <div>
-                    <div className="flex items-center gap-2 text-foreground font-bold text-base">
-                      <Settings2 className="h-5 w-5 text-primary" /> 2. Document-Specific Wanted Field Selection & Mapping
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Configure exactly which fields are extracted from each document type and which Excel column each field populates.
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => loadWantedOverview()}
-                      disabled={isLoadingWanted}
-                      className="cursor-pointer gap-1.5 text-xs"
-                      title="Refresh Configurations"
-                    >
-                      <RefreshCw className={`h-3.5 w-3.5 ${isLoadingWanted ? 'animate-spin' : ''}`} />
-                      Refresh
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Primary Lookup Key Selector */}
-                <div className="p-4 rounded-lg bg-secondary/40 border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <span className="text-xs font-bold text-foreground block">Primary Row Lookup Key Column</span>
-                    <span className="text-3xs text-muted-foreground block">
-                      The system uses candidate Register Number to find the matching row in this column.
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={lookupColumn}
-                      onChange={(e) => setLookupColumn(e.target.value)}
-                      className="px-3 py-1.5 rounded-lg border border-border bg-background text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-                    >
-                      {excelTemplate.headers.map((h) => (
-                        <option key={h} value={h}>
-                          {h}
-                        </option>
-                      ))}
-                    </select>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleSaveExcelMappings}
-                      disabled={isSavingMappings}
-                      className="cursor-pointer gap-1.5 text-xs"
-                    >
-                      {isSavingMappings ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                      Save Lookup Key
-                    </Button>
-                  </div>
-                </div>
-
-            {/* 3. Document Configuration Link Banner */}
-            <div className="p-6 border border-border rounded-xl bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs">
-              <div>
-                <span className="font-bold text-base text-foreground block flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-primary" /> Document-Specific Wanted Fields Configuration
-                </span>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Configure which fields should be extracted from each document and where those selected fields should go in Excel.
-                </p>
-              </div>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => setActiveTab('documents')}
-                className="cursor-pointer gap-2 shrink-0"
-              >
-                <FileText className="h-4 w-4" /> Go to Document Configuration
-              </Button>
-            </div>
+                })}
               </div>
             )}
           </div>
         )}
       </div>
-
-
 
       {/* MODAL: GENERATE UPLOAD LINK */}
       <Modal isOpen={isLinkModalOpen} onClose={() => setIsLinkModalOpen(false)} title="Generate Tokenized Upload Link">
@@ -2334,33 +1870,33 @@ export const BatchDetails: React.FC = () => {
         </form>
       </Modal>
 
-      {/* ADD DOCUMENT TYPE MODAL */}
+      {/* ADD DOCUMENT REQUIREMENT MODAL */}
       <Modal
         isOpen={isAddDocModalOpen}
         onClose={() => setIsAddDocModalOpen(false)}
-        title="Add Document Type"
+        title="Add Document Collection Requirement"
       >
         <form onSubmit={handleCreateDocumentType} className="space-y-4">
           <p className="text-xs text-muted-foreground">
-            Configure a new document type for this batch. All document types start with zero wanted fields until explicitly selected.
+            Configure which document type students are required to upload for this admission batch.
           </p>
 
           <div>
-            <label className="text-xs font-bold text-foreground block mb-1">Quick Presets (Optional)</label>
+            <label className="text-xs font-bold text-foreground block mb-1">Common Document Presets</label>
             <div className="flex flex-wrap gap-1.5">
               {[
-                { name: 'Aadhaar Card', code: 'AADHAAR' },
-                { name: 'Transfer Certificate', code: 'TC' },
-                { name: 'Community Certificate', code: 'COMMUNITY' },
-                { name: 'Income Certificate', code: 'INCOME' },
-                { name: 'SSLC Marksheet', code: 'SSLC' },
-                { name: 'HSC Marksheet', code: 'HSC' },
-                { name: 'Birth Certificate', code: 'BIRTH_CERTIFICATE' },
-                { name: 'Passport', code: 'PASSPORT' },
-                { name: 'Bank Passbook', code: 'BANK_PASSBOOK' },
-                { name: 'Nativity Certificate', code: 'NATIVITY' },
-                { name: 'Bonafide Certificate', code: 'BONAFIDE' },
-                { name: 'Migration Certificate', code: 'MIGRATION' },
+                { name: 'Aadhaar Card', code: 'AADHAAR', desc: 'Front and back copy of Aadhaar Card' },
+                { name: '10th SSLC Marksheet', code: 'SSLC', desc: '10th Marksheet / Passing Certificate' },
+                { name: '12th HSC Marksheet', code: 'HSC', desc: '12th Marksheet / Higher Secondary' },
+                { name: 'Community Certificate', code: 'COMMUNITY', desc: 'Permanent Community Certificate from Revenue Authority' },
+                { name: 'Transfer Certificate', code: 'TRANSFER_CERTIFICATE', desc: 'Transfer Certificate from previous institution' },
+                { name: 'Income Certificate', code: 'INCOME', desc: 'Annual Family Income Certificate' },
+                { name: 'Birth Certificate', code: 'BIRTH_CERTIFICATE', desc: 'Official Birth Certificate' },
+                { name: 'Passport', code: 'PASSPORT', desc: 'Valid Passport document' },
+                { name: 'Bank Passbook', code: 'BANK_PASSBOOK', desc: 'Bank Account Passbook / Statement' },
+                { name: 'Nativity Certificate', code: 'NATIVITY', desc: 'Proof of Nativity / Residence' },
+                { name: 'Bonafide Certificate', code: 'BONAFIDE', desc: 'Bonafide / Study Certificate' },
+                { name: 'Migration Certificate', code: 'MIGRATION', desc: 'Migration Certificate' },
               ].map((preset) => (
                 <button
                   type="button"
@@ -2368,6 +1904,7 @@ export const BatchDetails: React.FC = () => {
                   onClick={() => {
                     setNewDocName(preset.name)
                     setNewDocCode(preset.code)
+                    setNewDocDescription(preset.desc)
                   }}
                   className={`text-3xs px-2.5 py-1 rounded-lg border font-medium transition-colors cursor-pointer ${
                     newDocCode === preset.code
@@ -2384,7 +1921,7 @@ export const BatchDetails: React.FC = () => {
           <Input
             label="Document Name"
             type="text"
-            placeholder="e.g. Aadhaar Card, Residence Certificate"
+            placeholder="e.g. Aadhaar Card, Community Certificate"
             value={newDocName}
             onChange={(e) => handleDocNameChange(e.target.value)}
             required
@@ -2393,7 +1930,7 @@ export const BatchDetails: React.FC = () => {
           <Input
             label="Document Code"
             type="text"
-            placeholder="e.g. AADHAAR, RESIDENCE_CERTIFICATE"
+            placeholder="e.g. AADHAAR, COMMUNITY"
             value={newDocCode}
             onChange={(e) => setNewDocCode(e.target.value.toUpperCase())}
             required
@@ -2403,19 +1940,19 @@ export const BatchDetails: React.FC = () => {
           </span>
 
           <Input
-            label="Description (Optional)"
+            label="Instructions for Student (Optional)"
             type="text"
-            placeholder="e.g. Government issued proof of residence"
+            placeholder="e.g. Clear color scan or PDF of front and back side"
             value={newDocDescription}
             onChange={(e) => setNewDocDescription(e.target.value)}
           />
 
           <div>
-            <label className="text-xs font-bold text-foreground block mb-1.5">Student Upload Requirement</label>
+            <label className="text-xs font-bold text-foreground block mb-1.5">Upload Requirement Status</label>
             <div className="grid grid-cols-3 gap-2">
               {[
-                { value: 'REQUIRED', label: 'REQUIRED', desc: 'Must upload before submission' },
-                { value: 'OPTIONAL', label: 'OPTIONAL', desc: 'Optional / Waivable by student' },
+                { value: 'REQUIRED', label: 'REQUIRED', desc: 'Mandatory before submission' },
+                { value: 'OPTIONAL', label: 'OPTIONAL', desc: 'Optional / Can be submitted later' },
                 { value: 'DISABLED', label: 'DISABLED', desc: 'Hidden from Student Portal' },
               ].map((opt) => (
                 <button
@@ -2451,53 +1988,33 @@ export const BatchDetails: React.FC = () => {
               className="gap-1.5"
             >
               {isCreatingDoc && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              Add Document
+              Save Requirement
             </Button>
           </div>
         </form>
       </Modal>
 
-      {/* ADD CUSTOM FIELD MODAL */}
-      <Modal
-        isOpen={isAddFieldModalOpen}
-        onClose={() => setIsAddFieldModalOpen(false)}
-        title={`Add Field to ${selectedDocType}`}
-      >
-        <form onSubmit={handleAddCustomField} className="space-y-4">
-          <p className="text-xs text-muted-foreground">
-            Add a new field to this document configuration. The field will initially be disabled (unselected) until you check it.
-          </p>
+      {/* RECLASSIFY DOCUMENT MODAL */}
+      <ReclassifyModal
+        isOpen={Boolean(selectedDocForReclassify)}
+        onClose={() => setSelectedDocForReclassify(null)}
+        doc={selectedDocForReclassify}
+        onSuccess={() => {
+          loadValidationData()
+        }}
+      />
 
-          <Input
-            label="Field Name"
-            type="text"
-            placeholder="e.g. Passport Expiry Date, Place of Birth"
-            value={newFieldName}
-            onChange={(e) => setNewFieldName(e.target.value)}
-            required
-          />
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-border">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsAddFieldModalOpen(false)}
-              disabled={isAddingField}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={isAddingField || !newFieldName.trim()}
-              className="gap-1.5"
-            >
-              {isAddingField && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              Add Field
-            </Button>
-          </div>
-        </form>
-      </Modal>
+      {/* CLASSIFICATION EVIDENCE MODAL */}
+      <ClassificationEvidenceModal
+        isOpen={Boolean(selectedDocForEvidence)}
+        onClose={() => setSelectedDocForEvidence(null)}
+        doc={selectedDocForEvidence}
+        onOpenReclassify={() => {
+          if (selectedDocForEvidence) {
+            setSelectedDocForReclassify(selectedDocForEvidence)
+          }
+        }}
+      />
     </div>
   )
 }

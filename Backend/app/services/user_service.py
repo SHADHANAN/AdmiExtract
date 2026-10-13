@@ -41,6 +41,14 @@ class UserService:
             if existing_email:
                 raise UserAlreadyExistsException("A user with this email address already exists.")
 
+        if user_in.register_number:
+            from app.utils.normalization import normalize_register_number
+            norm_reg = normalize_register_number(user_in.register_number)
+            all_users = await self.repository.get_all_users()
+            for u in all_users:
+                if u.register_number and normalize_register_number(u.register_number) == norm_reg:
+                    raise UserAlreadyExistsException(f"Register number '{user_in.register_number}' is already assigned to a student.")
+
         hashed_password = get_password_hash(user_in.password)
         new_user = User(
             username=user_in.username,
@@ -110,6 +118,15 @@ class UserService:
             existing = await self.repository.get_user_by_email(new_email)
             if existing:
                 raise UserAlreadyExistsException("A user with this email address already exists.")
+
+        new_reg = update_data.get("register_number")
+        if new_reg is not None and str(new_reg).strip():
+            from app.utils.normalization import normalize_register_number
+            norm_reg = normalize_register_number(new_reg)
+            all_users = await self.repository.get_all_users()
+            for u in all_users:
+                if u.id != user_id and u.register_number and normalize_register_number(u.register_number) == norm_reg:
+                    raise UserAlreadyExistsException(f"Register number '{new_reg}' is already assigned to a student.")
 
         new_password = update_data.get("password")
         if new_password is not None:

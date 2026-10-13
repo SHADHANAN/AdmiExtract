@@ -64,7 +64,7 @@ export const ExportPage: React.FC = () => {
 
     setIsExporting(true)
     try {
-      const filename = `${currentBatch.name.replace(/\s+/g, '_')}_Student_Roster.xlsx`
+      const filename = `${currentBatch.name.replace(/\s+/g, '_')}_Student_Submissions.xlsx`
       await excelTemplateService.downloadExcel(currentBatch.id, filename)
 
       setLastExport({
@@ -160,7 +160,7 @@ export const ExportPage: React.FC = () => {
             <div className="text-3xl font-extrabold text-[#065f46] font-mono mt-1">
               {verifiedCount}
             </div>
-            <p className="text-[11px] text-slate-500 mt-0.5">Approved for final roster</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">Approved student records</p>
           </CardContent>
         </Card>
 
@@ -207,10 +207,10 @@ export const ExportPage: React.FC = () => {
           <div className="space-y-1.5 max-w-xl">
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-[#065f46] border border-emerald-200 text-xs font-bold">
               <FileSpreadsheet className="h-3.5 w-3.5" />
-              <span>Production Roster Sync</span>
+              <span>Student Submissions Export</span>
             </div>
             <h3 className="text-lg font-bold text-slate-900">
-              Export Roster to Master Excel Template
+              Export Student Submissions to Excel
             </h3>
             <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
               Downloads the official cohort workbook populated with verified admission numbers, candidate names, dates of birth, community reservation categories, and extracted certificate records.

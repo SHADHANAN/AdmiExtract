@@ -20,7 +20,6 @@ from app.models.batch import AdmissionBatch
 from app.models.batch_class import BatchClass
 from app.models.upload_link import UploadLink
 from app.models.student_submission import StudentSubmission
-from app.models.excel_template import ExcelBatchTemplate
 from app.models.doc_config_version import DocumentConfigurationVersion
 from app.models.wanted_field_config import DocumentFieldConfiguration
 from app.models.document_job import (
@@ -56,7 +55,6 @@ async def setup_test_db():
             BatchClass,
             UploadLink,
             StudentSubmission,
-            ExcelBatchTemplate,
             DocumentConfigurationVersion,
             DocumentFieldConfiguration,
             DocumentProcessingJob,

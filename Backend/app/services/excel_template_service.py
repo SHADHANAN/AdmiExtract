@@ -1,994 +1,231 @@
-from typing import Any
+import io
+import logging
 import os
 import re
-import shutil
-import asyncio
+import uuid
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
 import openpyxl
-from fastapi import UploadFile, HTTPException, status
+from fastapi import HTTPException, status
+
 from app.models.excel_template import ExcelBatchTemplate
-from app.repositories.excel_template_repository import ExcelTemplateRepository
-from app.utils.normalization import normalize_register_number, compare_register_numbers
+from app.services.document_extraction_service import resolve_canonical_field_key
 
-UPLOAD_DIR = os.path.join(os.getcwd(), "uploads", "excel_templates")
-BACKUP_DIR = os.path.join(os.getcwd(), "uploads", "excel_backups")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(BACKUP_DIR, exist_ok=True)
+logger = logging.getLogger("app.services.excel_template_service")
 
-# Per-batch lock registry for concurrent openpyxl write isolation
-_BATCH_LOCKS: dict[str, asyncio.Lock] = {}
-
-
-def _get_batch_lock(batch_id: str) -> asyncio.Lock:
-    if batch_id not in _BATCH_LOCKS:
-        _BATCH_LOCKS[batch_id] = asyncio.Lock()
-    return _BATCH_LOCKS[batch_id]
-
-
-def _find_best_worksheet_and_headers(wb: openpyxl.Workbook) -> tuple[Any, int, list[str], dict[str, int]]:
-    """
-    Intelligently identify the student admission data worksheet and true header row.
-    Inspects all sheets and rows 1 to 5 to avoid title banners or instructions tabs.
-    Returns: (sheet, header_row_idx, headers_list, header_col_map)
-    """
-    best_sheet = wb.active or wb.worksheets[0]
-    best_row_idx = 1
-    best_headers: list[str] = []
-    best_map: dict[str, int] = {}
-    best_score = -1
-
-    admission_keywords = [
-        "reg", "register", "roll", "student", "name", "candidate", "applicant",
-        "sno", "s.no", "aadhaar", "aadhar", "community", "caste", "dob", "birth",
-        "gender", "sex", "father", "mother", "address", "mark", "mobile", "phone",
-        "email", "quota", "emis", "branch", "course", "degree",
-    ]
-
-    for sheet in wb.worksheets:
-        max_r = min(sheet.max_row, 5)
-        for r_idx in range(1, max_r + 1):
-            row_headers: list[str] = []
-            row_map: dict[str, int] = {}
-            score = 0
-
-            for col_idx, cell in enumerate(sheet[r_idx], start=1):
-                if cell.value is not None:
-                    val_str = str(cell.value).strip()
-                    if val_str:
-                        row_headers.append(val_str)
-                        row_map[val_str] = col_idx
-                        v_lower = val_str.lower()
-                        if any(kw in v_lower for kw in admission_keywords):
-                            score += 2
-                        else:
-                            score += 1
-
-            if score > best_score and len(row_map) >= 2:
-                best_score = score
-                best_sheet = sheet
-                best_row_idx = r_idx
-                best_headers = row_headers
-                best_map = row_map
-
-    # Fallback to active sheet row 1 if scoring failed
-    if not best_map and best_sheet:
-        for col_idx, cell in enumerate(best_sheet[1], start=1):
-            if cell.value is not None and str(cell.value).strip():
-                val = str(cell.value).strip()
-                best_headers.append(val)
-                best_map[val] = col_idx
-
-    return best_sheet, best_row_idx, best_headers, best_map
-
-
-def _find_lookup_col_index(header_col_map: dict[str, int], template_lookup_column: str | None = None) -> tuple[str, int]:
-    """
-    Locate register number lookup column with prioritized keyword matching:
-    1. Exact template_lookup_column match
-    2. Normalized REGISTER NUMBER / REG NO / REGISTRATION NUMBER
-    3. ROLL NUMBER / ROLL NO
-    4. ADMISSION NUMBER / ADM NO (excluding quota/year/fees)
-    5. APPLICATION NUMBER / APP NO
-    """
-    if template_lookup_column and template_lookup_column in header_col_map:
-        return template_lookup_column, header_col_map[template_lookup_column]
-
-    if template_lookup_column:
-        target_norm = normalize_register_number(template_lookup_column)
-        for name, idx in header_col_map.items():
-            if normalize_register_number(name) == target_norm:
-                return name, idx
-
-    # Priority 1: Register Number keywords
-    for name, idx in header_col_map.items():
-        n_norm = normalize_register_number(name)
-        if any(k in n_norm for k in ["REGISTERNUMBER", "REGISTERNO", "REGNO", "REGISTRATIONNO", "REGISTRATIONNUMBER"]):
-            return name, idx
-
-    # Priority 2: Roll Number keywords
-    for name, idx in header_col_map.items():
-        n_norm = normalize_register_number(name)
-        if any(k in n_norm for k in ["ROLLNUMBER", "ROLLNO"]):
-            return name, idx
-
-    # Priority 3: Admission Number keywords (strictly excluding quota, category, date, year)
-    for name, idx in header_col_map.items():
-        n_norm = normalize_register_number(name)
-        if ("ADMISSION" in n_norm or "ADM" in n_norm) and any(no in n_norm for no in ["NO", "NUM", "ID"]):
-            if not any(neg in n_norm for neg in ["QUOTA", "YEAR", "DATE", "FEE", "CATEGORY", "STATUS"]):
-                return name, idx
-
-    # Priority 4: Partial register/roll matches
-    for name, idx in header_col_map.items():
-        n_norm = normalize_register_number(name)
-        if any(k in n_norm for k in ["REG", "ROLL"]):
-            if not any(neg in n_norm for neg in ["QUOTA", "YEAR", "DATE", "FEE", "CATEGORY", "STATUS"]):
-                return name, idx
-
-    # Fallback to first column or column 1
-    if header_col_map:
-        first_k = next(iter(header_col_map))
-        return first_k, header_col_map[first_k]
-    return "Register Number", 1
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+UPLOADS_DIR = BACKEND_DIR / "uploads"
+TEMPLATES_DIR = UPLOADS_DIR / "excel_templates"
 
 
 class ExcelTemplateService:
     """
-    Production service layer handling Excel template upload, header parsing, cell mapping,
-    and non-destructive openpyxl workbook row updating with structured logging.
+    Authoritative service for uploading, parsing, storing, retrieving, and managing
+    Excel templates used during Data Extraction and Export.
     """
 
-    def __init__(self, repository: ExcelTemplateRepository | None = None):
-        self.repository = repository or ExcelTemplateRepository()
+    def __init__(self):
+        TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
 
-    async def upload_template(self, batch_id: str, file: UploadFile, class_id: str | None = None) -> ExcelBatchTemplate:
+    def parse_workbook_structure(
+        self, file_content: bytes, filename: str
+    ) -> Dict[str, Any]:
         """
-        Validate .xlsx file, store on disk, parse column headers via openpyxl,
-        and save template metadata in MongoDB. Supports optional class_id.
+        Parse an uploaded Excel workbook to extract exact sheets, header row index,
+        exact column headers, 1-based column indices, and sample rows.
         """
-        if not file.filename or not file.filename.lower().endswith(".xlsx"):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Only .xlsx Excel files are allowed. Please upload a valid Excel workbook.",
-            )
-
-        file_key = f"{batch_id}_{class_id}" if class_id else batch_id
-        file_path = os.path.join(UPLOAD_DIR, f"{file_key}.xlsx")
-
-        contents = await file.read()
-        with open(file_path, "wb") as f:
-            f.write(contents)
-
         try:
-            wb = openpyxl.load_workbook(file_path, data_only=True)
-            sheet, header_row_idx, headers, header_col_map = _find_best_worksheet_and_headers(wb)
-
-            # Count total non-empty student data rows (starting after header row)
-            total_rows = 0
-            for row in sheet.iter_rows(min_row=header_row_idx + 1, values_only=True):
-                if any(cell is not None and str(cell).strip() != "" for cell in row):
-                    total_rows += 1
-
-            wb.close()
-
-            lookup_col, _ = _find_lookup_col_index(header_col_map)
-
-            from app.models.batch import AdmissionBatch
-            batch_doc = await AdmissionBatch.get(batch_id)
-            department_id = batch_doc.department_id if batch_doc else None
-
-            template = ExcelBatchTemplate(
-                batch_id=batch_id,
-                class_id=class_id,
-                department_id=department_id,
-                template_filename=file.filename,
-                file_path=file_path,
-                headers=headers,
-                lookup_column=lookup_col,
-                total_rows=total_rows,
-                updated_count=0,
-            )
-
-            print("\n========== EXCEL ==========", flush=True)
-            print(f"Workbook Loaded: {file.filename}", flush=True)
-            print(f"Worksheet Selected: '{sheet.title}' (Header Row: {header_row_idx})", flush=True)
-            print(f"Headers Found: {headers}", flush=True)
-            print(f"Default Lookup Column: '{lookup_col}'", flush=True)
-            print(f"Total Student Rows: {total_rows}", flush=True)
-            print("===========================\n", flush=True)
-
-            return await self.repository.save_template(template)
-
+            wb = openpyxl.load_workbook(io.BytesIO(file_content), data_only=True)
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to process Excel workbook: {str(e)}",
+                detail=f"Invalid Excel file format: {str(e)}",
             )
 
-    async def get_template_by_batch(self, batch_id: str, class_id: str | None = None) -> ExcelBatchTemplate | None:
-        """Retrieve Excel template metadata for a batch or class."""
-        return await self.repository.get_by_batch_id(batch_id, class_id=class_id)
-
-    async def update_mappings(
-        self, batch_id: str, field_mappings: dict[str, str], lookup_column: str, class_id: str | None = None
-    ) -> ExcelBatchTemplate:
-        """Update field mappings and lookup column."""
-        updated = await self.repository.update_mappings(batch_id, field_mappings, lookup_column, class_id=class_id)
-        if not updated:
+        sheet_names = wb.sheetnames
+        if not sheet_names:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No Excel template found for Admission Batch '{batch_id}' (Class: '{class_id}'). Please upload a template first.",
-            )
-        return updated
-
-    def _create_backup(self, file_path: str, batch_id: str, max_retained: int = 5) -> str:
-        """Create a timestamped backup before modifying the workbook, pruning older ones."""
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
-        backup_path = os.path.join(BACKUP_DIR, f"{batch_id}_backup_{timestamp}.xlsx")
-        shutil.copy2(file_path, backup_path)
-        
-        # Automatic backup rotation: keep latest N backups for this batch
-        try:
-            prefix = f"{batch_id}_backup_"
-            existing = sorted(
-                [f for f in os.listdir(BACKUP_DIR) if f.startswith(prefix) and f.endswith(".xlsx")],
-                reverse=True
-            )
-            for old_file in existing[max_retained:]:
-                old_p = os.path.join(BACKUP_DIR, old_file)
-                try:
-                    os.remove(old_p)
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
-        return backup_path
-
-    async def register_number_exists(self, batch_id: str, register_number: str) -> bool:
-        """
-        Return True if the given register_number can be found in the Excel template for
-        the specified batch, False otherwise.
-        """
-        template = await self.repository.get_by_batch_id(batch_id)
-        if not template or not os.path.exists(template.file_path):
-            return False
-
-        try:
-            wb = openpyxl.load_workbook(template.file_path, data_only=True, read_only=True)
-            sheet, header_row_idx, _, header_col_map = _find_best_worksheet_and_headers(wb)
-
-            _, lookup_col_idx = _find_lookup_col_index(header_col_map, template.lookup_column)
-            target_norm = normalize_register_number(register_number)
-
-            for row in sheet.iter_rows(min_row=header_row_idx + 1, values_only=True):
-                if lookup_col_idx <= len(row):
-                    cell_val = row[lookup_col_idx - 1]
-                    if compare_register_numbers(cell_val, target_norm):
-                        wb.close()
-                        return True
-
-            wb.close()
-            return False
-        except Exception:
-            return False
-
-    async def find_student_excel_row(
-        self, batch_id: str, register_number: str
-    ) -> tuple[int | None, dict | None, str]:
-        """
-        Locate the single candidate row in the uploaded Excel workbook.
-        Returns: (row_index, row_record_dict, status_code)
-        """
-        template = await self.repository.get_by_batch_id(batch_id)
-        if not template or not os.path.exists(template.file_path):
-            return None, None, "not_found"
-
-        try:
-            wb = openpyxl.load_workbook(template.file_path, data_only=True, read_only=True)
-            sheet, header_row_idx, headers, header_col_map = _find_best_worksheet_and_headers(wb)
-
-            lookup_col_name, lookup_col_idx = _find_lookup_col_index(header_col_map, template.lookup_column)
-            target_norm = normalize_register_number(register_number)
-
-            matches: list[tuple[int, dict]] = []
-            loaded_registers: list[str] = []
-            total_data_rows = 0
-
-            for row_idx, row in enumerate(sheet.iter_rows(min_row=header_row_idx + 1, values_only=True), start=header_row_idx + 1):
-                if not any(cell is not None and str(cell).strip() != "" for cell in row):
-                    continue
-                total_data_rows += 1
-
-                cell_val = row[lookup_col_idx - 1] if lookup_col_idx <= len(row) else None
-                norm_cell = normalize_register_number(cell_val)
-                if norm_cell:
-                    loaded_registers.append(norm_cell)
-
-                if compare_register_numbers(cell_val, target_norm):
-                    row_dict = {}
-                    for idx, h in enumerate(headers):
-                        if idx < len(row) and h:
-                            row_dict[h] = row[idx]
-                    matches.append((row_idx, row_dict))
-
-            wb.close()
-
-            print("\n========== EXCEL ==========", flush=True)
-            print(f"Workbook Loaded: {template.template_filename}", flush=True)
-            print(f"Worksheet: '{sheet.title}' | Header Row: {header_row_idx}", flush=True)
-            print(f"Lookup Column: '{lookup_col_name}' (Col {lookup_col_idx})", flush=True)
-            print(f"Searching Register: '{register_number}' (Normalized: '{target_norm}')", flush=True)
-            print(f"Total Rows Scanned: {total_data_rows} | Matches Found: {len(matches)}", flush=True)
-
-            if len(matches) == 0:
-                print("Result: NO MATCH FOUND [NOT FOUND]", flush=True)
-                print("===========================\n", flush=True)
-                return None, None, "not_found"
-            elif len(matches) > 1:
-                print(f"Result: DUPLICATE MATCHES FOUND ({len(matches)}) [DUPLICATE]", flush=True)
-                print("===========================\n", flush=True)
-                return None, None, "duplicate_records"
-            else:
-                matched_row_idx, matched_row_dict = matches[0]
-                print(f"Result: MATCH SUCCESSFUL (Row {matched_row_idx}) [OK]", flush=True)
-                print("===========================\n", flush=True)
-                return matched_row_idx, matched_row_dict, "success"
-
-        except Exception as e:
-            print(f"[Excel Row Lookup Error] {str(e)}", flush=True)
-            return None, None, "not_found"
-
-    async def get_student_row_by_register_number(self, batch_id: str, register_number: str) -> dict | None:
-        row_idx, row_dict, status_code = await self.find_student_excel_row(batch_id, register_number)
-        return row_dict
-
-    def _resolve_header_value(
-        self, header: str, data_dict: dict[str, Any], custom_mappings: dict[str, str] | None = None
-    ) -> Any:
-        """
-        Adaptive semantic field resolver matching any reasonable Excel column header against student data.
-        If custom_mappings is configured, enforces strict mapping to configured target columns.
-        Never returns literal 'NO', 'NULL', 'NONE', 'N/A'. Returns None for blank cells.
-        """
-        if not header or not data_dict:
-            return None
-
-        def _clean_val(v: Any) -> Any:
-            if v is None:
-                return None
-            if isinstance(v, dict):
-                v = v.get("value")
-            if v is None:
-                return None
-            v_str = str(v).strip()
-            if not v_str or v_str.upper() in ["NULL", "NONE", "N/A", "NOT DETECTED", "NOT FOUND"]:
-                return None
-            
-            from app.utils.field_canonicalizer import is_yes_no_question_field
-            h_low = header.lower().strip()
-            is_bool_header = (
-                is_yes_no_question_field(header)
-                or any(q in h_low for q in ["yes/no", "(yes/no)", "yes / no", "same as", "did ", "whether", "income", "orphan", "quota", "abled"])
-                or h_low.startswith("is ")
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Excel file contains no worksheets.",
             )
 
-            # Address, Names, DOB, EMIS, Aadhaar, Gender must NEVER accept boolean Yes/No unless it is an explicit boolean question
-            if any(k in h_low for k in ["address", "name", "dob", "birth", "emis", "aadhaar", "aadhar", "gender", "sex"]):
-                if not any(q in h_low for q in ["is ", "same as", "yes/no", "?"]):
-                    if v_str.lower() in ["yes", "no", "true", "false", "y", "n"]:
-                        return None
+        sheet = wb.active or wb.worksheets[0]
+        sheet_name = sheet.title
 
-            if v_str.upper() in ["NO", "N", "FALSE", "0"]:
-                return "No" if is_bool_header else None
-            if v_str.upper() in ["YES", "Y", "TRUE", "1"]:
-                return "Yes" if is_bool_header else None
+        if sheet.max_row < 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Excel file worksheet appears to be empty.",
+            )
 
-            # If not a boolean question header, reject boolean text
-            if not is_bool_header and v_str.lower() in ["yes", "no", "true", "false", "y", "n"]:
-                return None
+        header_row_idx = 1
+        headers: List[str] = []
+        column_indices: Dict[str, int] = {}
 
-            return v
-
-        h_clean = header.strip()
-        h_lower = h_clean.lower()
-        h_norm = re.sub(r'[\s_\-\./\(\)]+', '', h_lower)
-
-        # ---------------------------------------------------------
-        # Priority 0: Configured Custom Mappings (Highest Priority)
-        # ---------------------------------------------------------
-        if isinstance(custom_mappings, dict) and bool(custom_mappings):
-            mapped_sources = [
-                src for src, tgt in custom_mappings.items()
-                if tgt and tgt.strip().lower() == h_clean.lower()
-            ]
-            if mapped_sources:
-                for src in mapped_sources:
-                    raw_val = None
-                    if src in data_dict:
-                        raw_val = data_dict[src]
-                    else:
-                        norm_src = re.sub(r'[\s_\-\./\(\)]+', '', src.lower())
-                        for dk, dv in data_dict.items():
-                            if re.sub(r'[\s_\-\./\(\)]+', '', dk.lower()) == norm_src:
-                                raw_val = dv
-                                break
-                    val = _clean_val(raw_val)
-                    if val is not None:
-                        return val
-                # Explicitly mapped target column with no value in data_dict:
-                # Do NOT let fallback heuristic populate this column with incorrect data!
-                return None
-            else:
-                # Column is not mapped in custom_mappings.
-                # Preserve unmapped columns from arbitrary pollution,
-                # except for primary register/roll number identity lookup
-                reg_indicators = ["register number", "register no", "reg no", "reg. no", "roll number", "roll no"]
-                if not any(h_norm == re.sub(r'[\s_\-\./\(\)]+', '', ind) for ind in reg_indicators):
-                    return None
-
-        # ---------------------------------------------------------
-        # Priority 1: Profile Identity Fields (Guaranteed Match)
-        # ---------------------------------------------------------
-        # Student Name
-        name_indicators = [
-            "student name", "name of the student", "name of candidate",
-            "candidate name", "applicant name", "name of the applicant",
-            "student's name", "candidate's name", "name", "full name",
-            "student full name", "student_name", "candidate_name",
-        ]
-        if any(h_norm == re.sub(r'[\s_\-\./\(\)]+', '', ind) for ind in name_indicators) or (
-            ("name" in h_lower and any(s in h_lower for s in ["student", "candidate", "applicant"]))
-            and not any(neg in h_lower for neg in ["father", "mother", "parent", "guardian", "school", "college", "bank", "caste", "community", "branch"])
-        ):
-            for k in ["Student Name", "Name", "Student Full Name", "Candidate Name", "student_name", "name", "candidate_name"]:
-                if k in data_dict:
-                    val = _clean_val(data_dict[k])
-                    if val is not None:
-                        return val
-
-        # Register Number
-        reg_indicators = [
-            "register number", "register no", "reg no", "reg. no", "reg_no",
-            "registration number", "registration no", "roll number", "roll no",
-            "roll_no", "roll. no", "regno", "rollno",
-        ]
-        if any(h_norm == re.sub(r'[\s_\-\./\(\)]+', '', ind) for ind in reg_indicators) or (
-            any(r in h_lower for r in ["register", "roll", "reg no", "reg. no"])
-            and not any(neg in h_lower for neg in ["quota", "year", "date", "fee", "status", "admission", "adm"])
-        ):
-            for k in ["Register Number", "register_number", "Reg No", "Registration Number", "Roll No", "Roll Number", "reg_no"]:
-                if k in data_dict:
-                    val = _clean_val(data_dict[k])
-                    if val is not None:
-                        return val
-
-        # Admission Number (Distinct from Register Number)
-        adm_indicators = ["admission number", "admission no", "adm no", "adm. no"]
-        if any(h_norm == re.sub(r'[\s_\-\./\(\)]+', '', ind) for ind in adm_indicators) or (
-            any(r in h_lower for r in ["admission no", "admission number", "adm no"])
-            and not any(neg in h_lower for neg in ["quota", "year", "date", "fee", "status"])
-        ):
-            for k in ["Admission Number", "admission_number", "Admission No", "admission_no", "adm no"]:
-                if k in data_dict:
-                    val = _clean_val(data_dict[k])
-                    if val is not None:
-                        return val
-
-        # Mobile Number
-        mobile_indicators = [
-            "mobile number", "mobile no", "mobile", "phone number", "phone no",
-            "phone", "contact number", "contact no", "cell", "cell no", "student mobile",
-            "mobile_number", "phone_number",
-        ]
-        if any(h_norm == re.sub(r'[\s_\-\./\(\)]+', '', ind) for ind in mobile_indicators) or (
-            any(m in h_lower for m in ["mobile", "phone", "cell", "contact no"])
-            and not any(neg in h_lower for neg in ["father", "mother", "parent", "guardian", "emergency"])
-        ):
-            for k in ["Mobile Number", "mobile_number", "Mobile", "Phone Number", "phone_number", "Phone"]:
-                if k in data_dict:
-                    val = _clean_val(data_dict[k])
-                    if val is not None:
-                        return val
-
-        # Email
-        email_indicators = ["email", "email id", "email address", "e-mail", "e-mail id", "student email", "email_address"]
-        if any(h_norm == re.sub(r'[\s_\-\./\(\)]+', '', ind) for ind in email_indicators) or "email" in h_lower or "e-mail" in h_lower:
-            for k in ["Email", "email", "Email Address", "email_address", "Email ID"]:
-                if k in data_dict:
-                    val = _clean_val(data_dict[k])
-                    if val is not None:
-                        return val
-
-        # ---------------------------------------------------------
-        # Priority 2: Direct Match & Normalized Exact Match
-        # ---------------------------------------------------------
-        for k, raw_v in data_dict.items():
-            if not k:
-                continue
-            k_norm = re.sub(r'[\s_\-\./\(\)]+', '', k.strip().lower())
-            if k_norm == h_norm:
-                val = _clean_val(raw_v)
+        # Detect the header row by scanning first 10 rows
+        for r_idx in range(1, min(sheet.max_row + 1, 10)):
+            row_cells = sheet[r_idx]
+            detected_headers: List[str] = []
+            col_map: Dict[str, int] = {}
+            for col_idx, cell in enumerate(row_cells, start=1):
+                val = cell.value
                 if val is not None:
-                    return val
+                    hdr_str = str(val).strip()
+                    if hdr_str:
+                        detected_headers.append(hdr_str)
+                        col_map[hdr_str] = col_idx
+            if len(detected_headers) >= 1:
+                headers = detected_headers
+                column_indices = col_map
+                header_row_idx = r_idx
+                break
 
-        # ---------------------------------------------------------
-        # Priority 3: Canonical Aliases Dictionary Mapping
-        # ---------------------------------------------------------
-        from app.utils.field_canonicalizer import (
-            get_aliases_for_header,
-            is_name_conflict,
-            is_number_conflict,
-            is_category_conflict,
-            is_phone_conflict,
-            is_address_conflict,
-        )
-
-        def _has_conflict(h: str, candidate: str) -> bool:
-            return (
-                is_name_conflict(h, candidate)
-                or is_number_conflict(h, candidate)
-                or is_category_conflict(h, candidate)
-                or is_phone_conflict(h, candidate)
-                or is_address_conflict(h, candidate)
-            )
-
-        aliases = get_aliases_for_header(h_clean)
-        for alias in aliases:
-            a_norm = re.sub(r'[\s_\-\./\(\)]+', '', alias.strip().lower())
-            for k, raw_v in data_dict.items():
-                if not k or _has_conflict(h_clean, k):
-                    continue
-                k_norm = re.sub(r'[\s_\-\./\(\)]+', '', k.strip().lower())
-                if k_norm == a_norm:
-                    val = _clean_val(raw_v)
-                    if val is not None:
-                        return val
-
-        # ---------------------------------------------------------
-        # Priority 4: FieldMappingService Multi-tier Semantic Resolver
-        # ---------------------------------------------------------
-        try:
-            from app.services.field_mapping_service import FieldMappingService
-            mapper = FieldMappingService()
-            resolved_val, conf, _ = mapper.resolve_field_value(
-                excel_header=h_clean,
-                extracted_data_pool=data_dict,
-                student_profile=data_dict,
-            )
-            if resolved_val is not None and conf >= 50:
-                clean = _clean_val(resolved_val)
-                if clean is not None:
-                    return clean
-        except Exception:
-            pass
-
-        # ---------------------------------------------------------
-        # Priority 5: RapidFuzz Fuzzy Match against all data_dict keys
-        # ---------------------------------------------------------
-        try:
-            from rapidfuzz import fuzz
-            best_score = 0.0
-            best_val = None
-            for k, raw_v in data_dict.items():
-                if not k or _has_conflict(h_clean, k):
-                    continue
-                score = fuzz.token_sort_ratio(h_lower, k.strip().lower())
-                if score > best_score and score >= 85:
-                    v = _clean_val(raw_v)
-                    if v is not None:
-                        best_score = score
-                        best_val = v
-            if best_val is not None:
-                return best_val
-        except Exception:
-            pass
-
-        # Not found -> Return None, NEVER write literal 'NO' for non-boolean columns
-        return None
-
-    async def append_or_update_student_row_in_excel(
-        self,
-        batch_id: str,
-        register_number: str,
-        student_data: dict[str, Any],
-        class_id: str | None = None,
-    ) -> bool:
-        """
-        Template-driven Excel output generator:
-        1. Load master Excel template (locating student data sheet and header row).
-        2. Look for existing row matching Register Number.
-        3. If existing row is found -> update that row safely without erasing existing data.
-        4. If not found -> append a NEW row at the end of the sheet.
-        5. For every column header, write non-empty matching values from student_data.
-        """
-        template = await self.repository.get_by_batch_id(batch_id, class_id=class_id)
-        if not template or not os.path.exists(template.file_path):
+        if not headers:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Master Excel template file not found for admission batch '{batch_id}' (class: '{class_id}').",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Could not detect column headers in the uploaded Excel template.",
             )
 
-        lock = _get_batch_lock(f"{batch_id}_{class_id}" if class_id else batch_id)
+        column_mapping: Dict[str, str] = {}
+        canonical_fields: List[str] = []
+        seen_canonical = set()
 
-        async with lock:
-            self._create_backup(template.file_path, batch_id)
+        for col_name in headers:
+            canon = resolve_canonical_field_key(col_name)
+            if not canon:
+                canon = re.sub(r'[^a-zA-Z0-9_]+', '_', col_name.strip().lower()).strip('_')
+            column_mapping[col_name] = canon
+            if canon not in seen_canonical:
+                canonical_fields.append(canon)
+                seen_canonical.add(canon)
 
-            try:
-                wb = openpyxl.load_workbook(template.file_path, data_only=False)
-                sheet, header_row_idx, headers, header_col_map = _find_best_worksheet_and_headers(wb)
+        student_rows_count = max(0, sheet.max_row - header_row_idx)
+        sample_rows: List[Dict[str, Any]] = []
+        if student_rows_count > 0:
+            for r_idx in range(header_row_idx + 1, min(header_row_idx + 6, sheet.max_row + 1)):
+                row_dict: Dict[str, Any] = {}
+                for col_name, c_idx in column_indices.items():
+                    val = sheet.cell(row=r_idx, column=c_idx).value
+                    row_dict[col_name] = str(val).strip() if val is not None else ""
+                if any(row_dict.values()):
+                    sample_rows.append(row_dict)
 
-                if not header_col_map:
-                    raise ValueError(f"Excel template '{template.template_filename}' contains no header columns.")
+        return {
+            "sheet_name": sheet_name,
+            "sheet_names": sheet_names,
+            "header_row_index": header_row_idx,
+            "headers": headers,
+            "column_indices": column_indices,
+            "column_mapping": column_mapping,
+            "canonical_fields": canonical_fields,
+            "total_columns": len(headers),
+            "detected_students_count": student_rows_count,
+            "sample_rows": sample_rows,
+        }
 
-                lookup_col_name, lookup_col_idx = _find_lookup_col_index(header_col_map, template.lookup_column)
-                target_norm = normalize_register_number(register_number)
-
-                target_row = None
-                is_existing_row = False
-
-                for r_idx in range(header_row_idx + 1, sheet.max_row + 1):
-                    cell_val = sheet.cell(row=r_idx, column=lookup_col_idx).value
-                    if compare_register_numbers(cell_val, target_norm):
-                        target_row = r_idx
-                        is_existing_row = True
-                        break
-
-                # If not found -> Append new row at end of sheet
-                if not target_row:
-                    first_empty_row = header_row_idx + 1
-                    while True:
-                        row_cells = [sheet.cell(row=first_empty_row, column=c).value for c in range(1, len(header_col_map) + 1)]
-                        if not any(v is not None and str(v).strip() != "" for v in row_cells):
-                            break
-                        first_empty_row += 1
-                    target_row = first_empty_row
-                    is_existing_row = False
-
-                written_cells: dict[str, Any] = {}
-
-                # Write values into target_row for every defined header column non-destructively
-                from app.utils.normalization import (
-                    clean_text_noise,
-                    is_explicit_negative,
-                    validate_and_normalize_aadhaar,
-                    validate_and_normalize_mobile,
-                    validate_and_normalize_dob,
-                    validate_and_normalize_gender,
-                    validate_and_normalize_email,
-                    validate_and_normalize_ifsc,
-                    validate_and_normalize_community,
-                    validate_and_normalize_pincode,
-                    validate_and_normalize_person_name,
-                    validate_and_normalize_state,
-                    validate_and_normalize_nationality,
-                    validate_and_normalize_religion,
-                    validate_and_normalize_emis,
-                    validate_and_normalize_code_field,
-                    validate_boolean_yes_no,
-                )
-
-                for header_name, col_idx in header_col_map.items():
-                    val = self._resolve_header_value(header_name, student_data, custom_mappings=template.field_mappings)
-                    hn_lower = header_name.lower().strip()
-                    is_bool_q = (
-                        any(q in hn_lower for q in ["yes/no", "(yes/no)", "yes / no", "same as", "did ", "whether"])
-                        or hn_lower.startswith("is ")
-                        or hn_lower.endswith("?")
-                    )
-
-                    if val is not None and not is_explicit_negative(val):
-                        val_str = str(val).strip()
-                        if val_str.upper() not in ["NO", "NULL", "NONE", "N/A", "NOT DETECTED", "NOT FOUND", ""]:
-                            # Strict field-level semantic validation before Excel write
-                            if not is_bool_q and val_str.lower() in ["yes", "no", "true", "false", "y", "n"]:
-                                continue
-
-                            if is_bool_q:
-                                v_norm = validate_boolean_yes_no(val)
-                                if not v_norm:
-                                    v_norm = "No"
-                                val = v_norm
-                            elif "aadhaar" in hn_lower or "aadhar" in hn_lower:
-                                without_space = "without space" in hn_lower or "nospace" in hn_lower
-                                v_norm = validate_and_normalize_aadhaar(val, without_space=without_space)
-                                if not v_norm:
-                                    continue
-                                val = v_norm
-                            elif any(m in hn_lower for m in ["mobile", "phone", "cell"]):
-                                v_norm = validate_and_normalize_mobile(val)
-                                if not v_norm:
-                                    continue
-                                val = v_norm
-                            elif any(d in hn_lower for d in ["dob", "date of birth", "birth"]):
-                                v_norm = validate_and_normalize_dob(val, target_format="DD.MM.YYYY" if "dd.mm.yyyy" in hn_lower else "DD/MM/YYYY")
-                                if not v_norm:
-                                    continue
-                                val = v_norm
-                            elif "gender" in hn_lower or "sex" in hn_lower:
-                                v_norm = validate_and_normalize_gender(val)
-                                if not v_norm:
-                                    continue
-                                val = v_norm
-                            elif any(k in hn_lower for k in ["father", "mother", "guardian", "student name", "candidate name", "applicant name"]) and not any(k in hn_lower for k in ["occupation", "mobile", "phone", "aadhaar", "address"]):
-                                v_norm = validate_and_normalize_person_name(val, role=header_name)
-                                if not v_norm:
-                                    continue
-                                if v_norm.upper() == str(val).strip().upper():
-                                    val = str(val).strip()
-                                else:
-                                    val = v_norm
-                            elif "state" in hn_lower:
-                                v_norm = validate_and_normalize_state(val)
-                                if not v_norm:
-                                    continue
-                                val = v_norm
-                            elif "nationality" in hn_lower:
-                                v_norm = validate_and_normalize_nationality(val)
-                                if not v_norm:
-                                    continue
-                                val = v_norm
-                            elif "religion" in hn_lower:
-                                v_norm = validate_and_normalize_religion(val)
-                                if not v_norm:
-                                    continue
-                                val = v_norm
-                            elif "emis" in hn_lower:
-                                v_norm = validate_and_normalize_emis(val)
-                                if not v_norm:
-                                    continue
-                                val = v_norm
-                            elif hn_lower.endswith("code") or "code" in hn_lower.split():
-                                v_norm = validate_and_normalize_code_field(header_name, val)
-                                if not v_norm:
-                                    continue
-                                val = v_norm
-                            elif "email" in hn_lower:
-                                v_norm = validate_and_normalize_email(val)
-                                if not v_norm:
-                                    continue
-                                val = v_norm
-                            elif "ifsc" in hn_lower:
-                                v_norm = validate_and_normalize_ifsc(val)
-                                if not v_norm:
-                                    continue
-                                val = v_norm
-                            elif "pincode" in hn_lower or "pin code" in hn_lower:
-                                v_norm = validate_and_normalize_pincode(val)
-                                if not v_norm:
-                                    continue
-                                val = v_norm
-                            elif "community" in hn_lower or "caste" in hn_lower:
-                                v_norm = validate_and_normalize_community(val)
-                                if not v_norm:
-                                    continue
-                                val = v_norm
-                            elif "address" in hn_lower and not any(comp in hn_lower for comp in ["email", "mail"]):
-                                from app.utils.normalization import validate_and_normalize_address
-                                v_norm = validate_and_normalize_address(val)
-                                if not v_norm:
-                                    continue
-                                val = v_norm
-
-                            sheet.cell(row=target_row, column=col_idx, value=val)
-                            written_cells[header_name] = val
-                        elif is_bool_q:
-                            sheet.cell(row=target_row, column=col_idx, value="No")
-                            written_cells[header_name] = "No"
-                    elif is_bool_q:
-                        sheet.cell(row=target_row, column=col_idx, value="No")
-                        written_cells[header_name] = "No"
-
-                wb.save(template.file_path)
-                wb.close()
-
-                await self.repository.increment_updated_count(batch_id, class_id=class_id)
-
-                print("\n========== EXCEL ==========", flush=True)
-                print(f"Workbook Loaded: {template.template_filename}", flush=True)
-                print(f"Worksheet: '{sheet.title}' | Header Row: {header_row_idx}", flush=True)
-                print(f"Headers Found ({len(headers)}): {headers}", flush=True)
-                print(f"Lookup Column: '{lookup_col_name}' (Col {lookup_col_idx})", flush=True)
-                print(f"Target Student Register: '{register_number}' (Normalized: '{target_norm}')", flush=True)
-                print(f"Writing Row: Row {target_row} ({'Updated Existing' if is_existing_row else 'Appended New'})", flush=True)
-                print(f"Cells Populated ({len(written_cells)}):", flush=True)
-                for hk, hv in written_cells.items():
-                    print(f"  - {hk} = {hv}", flush=True)
-                print(f"Workbook Saved: {template.file_path} [OK]", flush=True)
-                print("===========================\n", flush=True)
-
-                return True
-
-            except Exception as e:
-                print(f"\n[Excel Write Error] {str(e)}", flush=True)
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Failed to update Excel workbook: {str(e)}",
-                )
-
-    async def update_student_row_in_excel(
+    async def save_template_file(
         self,
+        file_content: bytes,
+        filename: str,
         batch_id: str,
-        register_number: str,
-        extracted_data: dict[str, str | int | float | None],
-        row_index: int | None = None,
-        class_id: str | None = None,
-    ) -> bool:
+        class_id: Optional[str] = None,
+        department_id: Optional[str] = None,
+        uploaded_by: str = "system",
+    ) -> ExcelBatchTemplate:
         """
-        Locate candidate row in Excel workbook matching register_number using openpyxl,
-        write mapped extracted fields into corresponding row cells, and save updated workbook safely.
+        Parse, persist template to disk, and save/update ExcelBatchTemplate document in database.
         """
-        return await self.append_or_update_student_row_in_excel(
+        parsed = self.parse_workbook_structure(file_content, filename)
+        clean_class = class_id.strip() if class_id and class_id.strip().lower() not in ("none", "null", "undefined", "") else None
+
+        # Create unique filename on disk
+        clean_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', filename)
+        disk_filename = f"batch_{batch_id}_{uuid.uuid4().hex[:8]}_{clean_name}"
+        saved_file_path = TEMPLATES_DIR / disk_filename
+
+        with open(saved_file_path, "wb") as f:
+            f.write(file_content)
+
+        # Check existing template record
+        existing = await ExcelBatchTemplate.find_one({
+            "batch_id": batch_id,
+            "class_id": clean_class,
+        })
+
+        if existing:
+            existing.template_filename = filename
+            existing.file_path = str(saved_file_path)
+            existing.sheet_name = parsed["sheet_name"]
+            existing.sheet_names = parsed["sheet_names"]
+            existing.header_row_index = parsed["header_row_index"]
+            existing.headers = parsed["headers"]
+            existing.column_indices = parsed["column_indices"]
+            existing.total_columns = parsed["total_columns"]
+            existing.total_rows = parsed["detected_students_count"]
+            existing.department_id = department_id or existing.department_id
+            existing.uploaded_by = uploaded_by
+            existing.updated_at = datetime.now(timezone.utc)
+            await existing.save()
+            return existing
+
+        template = ExcelBatchTemplate(
             batch_id=batch_id,
-            register_number=register_number,
-            student_data=extracted_data,
-            class_id=class_id,
+            class_id=clean_class,
+            department_id=department_id,
+            template_filename=filename,
+            file_path=str(saved_file_path),
+            sheet_name=parsed["sheet_name"],
+            sheet_names=parsed["sheet_names"],
+            header_row_index=parsed["header_row_index"],
+            headers=parsed["headers"],
+            column_indices=parsed["column_indices"],
+            total_columns=parsed["total_columns"],
+            total_rows=parsed["detected_students_count"],
+            uploaded_by=uploaded_by,
         )
+        await template.insert()
+        return template
 
-    async def generate_dynamic_excel_export(
-        self, batch_id: str, class_id: str | None = None
-    ) -> tuple[Any, str]:
+    async def get_template_by_batch(
+        self, batch_id: str, class_id: Optional[str] = None
+    ) -> Optional[ExcelBatchTemplate]:
         """
-        Dynamically generates an Excel workbook on demand for a section or batch:
-        - Retrieves configured columns from DocumentFieldConfiguration and ExcelBatchTemplate
-        - Filters submissions strictly by batch_id and optional class_id (preventing cross-section leaks)
-        - Resolves extracted values using existing multi-tier resolution logic
-        - Formats and styles the workbook cleanly
-        - Returns (BytesIO buffer, filename) without permanently storing a file on disk
+        Get active template for a batch (and optional section).
+        Falls back to batch-level template if class-specific template is not found.
         """
-        import io
-        from openpyxl import Workbook
-        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-        from openpyxl.utils import get_column_letter
-        from app.models.student_submission import StudentSubmission
-        from app.models.wanted_field_config import DocumentFieldConfiguration
-        from app.models.batch_class import BatchClass
+        clean_class = class_id.strip() if class_id and class_id.strip().lower() not in ("none", "null", "undefined", "") else None
+        if clean_class:
+            t = await ExcelBatchTemplate.find_one({
+                "batch_id": batch_id,
+                "class_id": clean_class,
+            })
+            if t:
+                return t
 
-        # 1. Fetch class details if class_id is provided
-        section_name = None
-        if class_id:
-            try:
-                cls_doc = await BatchClass.get(class_id)
-                if cls_doc:
-                    section_name = cls_doc.class_name
-            except Exception:
-                pass
+        return await ExcelBatchTemplate.find_one({
+            "batch_id": batch_id,
+            "class_id": None,
+        })
 
-        # 2. Collect field mappings and determine column headers
-        batch_template = await self.repository.get_by_batch_id(batch_id)
-        template_headers: list[str] = list(batch_template.headers) if (batch_template and batch_template.headers) else []
-        field_mappings: dict[str, str] = dict(batch_template.field_mappings or {}) if batch_template else {}
+    async def delete_template(self, batch_id: str, class_id: Optional[str] = None) -> bool:
+        """
+        Delete template record and disk file.
+        """
+        clean_class = class_id.strip() if class_id and class_id.strip().lower() not in ("none", "null", "undefined", "") else None
+        tmpl = await ExcelBatchTemplate.find_one({
+            "batch_id": batch_id,
+            "class_id": clean_class,
+        })
+        if not tmpl:
+            return False
 
-        # Fetch all active DocumentFieldConfigurations for this batch
-        doc_configs = await DocumentFieldConfiguration.find(
-            DocumentFieldConfiguration.batch_id == batch_id,
-            DocumentFieldConfiguration.is_archived == False,
-        ).to_list()
+        try:
+            if tmpl.file_path and os.path.exists(tmpl.file_path):
+                os.remove(tmpl.file_path)
+        except Exception as e:
+            logger.warning(f"Error removing template file: {e}")
 
-        # Collect configured columns from DocumentFieldConfiguration
-        configured_headers: list[str] = []
-        for cfg in doc_configs:
-            for item in cfg.fields:
-                if item.enabled:
-                    hdr = item.excel_header.strip() if item.excel_header else item.field.strip()
-                    if hdr and hdr not in configured_headers:
-                        configured_headers.append(hdr)
-                    if item.excel_header and item.field:
-                        field_mappings[item.field] = item.excel_header.strip()
-
-        # Combine headers preserving template ordering if template exists
-        final_headers: list[str] = []
-        standard_cols = ["Register Number", "Student Name", "Mobile Number", "Email", "Status"]
-
-        if template_headers:
-            for h in template_headers:
-                if h not in final_headers:
-                    final_headers.append(h)
-            for ch in configured_headers:
-                if ch not in final_headers:
-                    final_headers.append(ch)
-        else:
-            for sc in standard_cols:
-                if sc not in final_headers:
-                    final_headers.append(sc)
-            for ch in configured_headers:
-                if ch not in final_headers:
-                    final_headers.append(ch)
-
-        # 3. Query student submissions strictly for this batch & class
-        query_conditions = [StudentSubmission.batch_id == batch_id]
-        if class_id:
-            query_conditions.append(StudentSubmission.class_id == class_id)
-
-        submissions = await StudentSubmission.find(*query_conditions).to_list()
-
-        # 4. Create in-memory workbook
-        wb = Workbook()
-        ws = wb.active
-        ws.title = f"{section_name[:28]}" if section_name else "Student Admissions"
-
-        # Styles
-        header_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
-        header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-        header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-
-        data_font = Font(name="Calibri", size=10)
-        data_alignment_left = Alignment(horizontal="left", vertical="center")
-        data_alignment_center = Alignment(horizontal="center", vertical="center")
-
-        thin_side = Side(border_style="thin", color="CBD5E1")
-        cell_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
-
-        alt_row_fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
-        white_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
-
-        # Write Header Row
-        ws.row_dimensions[1].height = 28
-        for col_idx, header_name in enumerate(final_headers, start=1):
-            cell = ws.cell(row=1, column=col_idx, value=header_name)
-            cell.font = header_font
-            cell.fill = header_fill
-            cell.alignment = header_alignment
-            cell.border = cell_border
-
-        # 5. Populate Data Rows
-        for row_idx, student in enumerate(submissions, start=2):
-            ws.row_dimensions[row_idx].height = 20
-            row_fill = alt_row_fill if row_idx % 2 == 0 else white_fill
-
-            # Build student data pool
-            data_dict: dict[str, Any] = dict(student.extracted_data or {})
-            data_dict["Student Name"] = student.student_name
-            data_dict["Name"] = student.student_name
-            data_dict["Register Number"] = student.register_number
-            data_dict["Reg No"] = student.register_number
-            data_dict["Mobile Number"] = student.mobile_number
-            data_dict["Mobile"] = student.mobile_number
-            data_dict["Email"] = student.email or ""
-            data_dict["Email Address"] = student.email or ""
-            data_dict["Status"] = student.submission_status
-            data_dict["Submission Status"] = student.submission_status
-            data_dict["Class"] = student.class_name or section_name or ""
-            data_dict["Section"] = student.class_name or section_name or ""
-
-            for col_idx, header_name in enumerate(final_headers, start=1):
-                cell_value = self._resolve_header_value(header_name, data_dict, custom_mappings=field_mappings)
-                if cell_value is None:
-                    for dk, dv in data_dict.items():
-                        if dk.lower().strip() == header_name.lower().strip():
-                            cell_value = str(dv).strip() if dv is not None else ""
-                            break
-
-                cell = ws.cell(row=row_idx, column=col_idx, value=cell_value or "")
-                cell.font = data_font
-                cell.fill = row_fill
-                cell.border = cell_border
-
-                if any(k in header_name.lower() for k in ["register", "date", "status", "gender", "year"]):
-                    cell.alignment = data_alignment_center
-                else:
-                    cell.alignment = data_alignment_left
-
-        # Auto-adjust column widths
-        for col_idx, header_name in enumerate(final_headers, start=1):
-            max_len = len(str(header_name))
-            for row in range(2, len(submissions) + 2):
-                val = ws.cell(row=row, column=col_idx).value
-                if val:
-                    max_len = max(max_len, len(str(val)))
-            col_letter = get_column_letter(col_idx)
-            ws.column_dimensions[col_letter].width = min(max(max_len + 4, 12), 40)
-
-        # Freeze header row
-        ws.freeze_panes = "A2"
-
-        # Stream into BytesIO
-        output_buffer = io.BytesIO()
-        wb.save(output_buffer)
-        output_buffer.seek(0)
-
-        sec_prefix = f"_{section_name.replace(' ', '_')}" if section_name else (f"_{class_id}" if class_id else "")
-        filename = f"{batch_id}{sec_prefix}_Admissions_Export.xlsx"
-
-        return output_buffer, filename
-
+        await tmpl.delete()
+        return True

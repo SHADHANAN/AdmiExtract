@@ -21,25 +21,31 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
+
     payload = decode_access_token(token)
     if payload is None:
         raise credentials_exception
-        
+
     user_id_str: str | None = payload.get("sub")
     if user_id_str is None:
         raise credentials_exception
-        
+
     try:
         user_id = PydanticObjectId(user_id_str)
     except Exception:
         raise credentials_exception
-        
+
     user_repo = UserRepository()
     user = await user_repo.get_user_by_id(user_id)
     if user is None:
         raise credentials_exception
-        
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account is deactivated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     return user
 
 
@@ -91,5 +97,3 @@ def check_department_access(current_user: User, resource_department_code: str | 
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Forbidden: You do not have permission to access another department's resources",
             )
-
-

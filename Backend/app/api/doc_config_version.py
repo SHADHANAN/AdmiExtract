@@ -38,15 +38,21 @@ async def _verify_batch_access(batch_id: str, user: User):
 
 
 @router.get("/{batchId}/doc-versions/current", response_model=DocConfigVersionResponse)
+@router.get("/{batchId}/classes/{classId}/doc-versions/current", response_model=DocConfigVersionResponse)
+@router.get("/{batchId}/sections/{sectionId}/doc-versions/current", response_model=DocConfigVersionResponse)
 async def get_current_doc_version(
     batchId: str,
+    classId: str | None = None,
+    class_id: str | None = None,
+    sectionId: str | None = None,
+    section_id: str | None = None,
     current_user: User = Depends(get_current_user),
 ):
     """
     Retrieve current active document configuration version for an Admission Batch.
     """
     await _verify_batch_access(batchId, current_user)
-    
+
     v = await service.get_or_create_current_version(batchId)
     return DocConfigVersionResponse(
         id=str(v.id),
@@ -168,5 +174,3 @@ async def get_batch_extraction_fields_route(batchId: str):
         "batch_id": batchId,
         "extraction_fields": fields,
     }
-
-

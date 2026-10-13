@@ -4,7 +4,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useBatchStore } from '../store/useBatchStore'
 import { useToastStore } from '../store/useToastStore'
 import { batchClassService } from '../services/batchClass'
-import { excelTemplateService } from '../services/excelTemplate'
 import { copyToClipboard } from '../utils/clipboard'
 import { getStudentUploadUrl } from '../utils/studentPortalUrl'
 import type { BatchClass, UploadLink } from '../types'
@@ -15,6 +14,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import { EmptyState } from '../components/ui/EmptyState'
 import { DocumentPreviewModal, type DocumentPreviewTarget } from '../components/ui/DocumentPreviewModal'
 import { DeleteStudentModal, type DeleteStudentTarget } from '../components/ui/DeleteStudentModal'
+import { StudentDocumentManagerModal } from '../components/StudentDocumentManagerModal'
 import { useAuthStore } from '../store/useAuthStore'
 import { studentSubmissionService } from '../services/studentSubmission'
 import {
@@ -37,6 +37,7 @@ import {
   RefreshCw,
   FileText,
   ArrowRight,
+  Layers,
 } from 'lucide-react'
 
 export const ClassDetails: React.FC = () => {
@@ -78,9 +79,6 @@ export const ClassDetails: React.FC = () => {
   // Active Tab state — Class Dashboard Navigation
   const [activeTab, setActiveTab] = useState<'students' | 'links' | 'submissions' | 'exports' | 'settings'>('students')
 
-  // Excel export state
-  const [isDownloadingExcel, setIsDownloadingExcel] = useState(false)
-
   // Class settings edit states
   const [editClassName, setEditClassName] = useState('')
   const [editSection, setEditSection] = useState('')
@@ -92,6 +90,7 @@ export const ClassDetails: React.FC = () => {
   const [isGeneratingLink, setIsGeneratingLink] = useState(false)
   const [qrModalLink, setQrModalLink] = useState<UploadLink | null>(null)
   const [selectedStudent, setSelectedStudent] = useState<any | null>(null)
+  const [docManagerStudent, setDocManagerStudent] = useState<any | null>(null)
   const [previewTarget, setPreviewTarget] = useState<DocumentPreviewTarget | null>(null)
   const [isDownloadingAllDocs, setIsDownloadingAllDocs] = useState(false)
 
@@ -138,21 +137,6 @@ export const ClassDetails: React.FC = () => {
   }, [loadClass])
 
   const parentBatch = batches.find((b) => b.id === classDoc?.batch_id)
-
-  const handleDownloadExcel = async () => {
-    if (!classDoc || !classId) return
-    setIsDownloadingExcel(true)
-    try {
-      const sectionNameClean = (classDoc.class_name || 'Section').replace(/\s+/g, '_')
-      const filename = `${classDoc.batch_id}_${sectionNameClean}_Export.xlsx`
-      await excelTemplateService.downloadExcel(classDoc.batch_id, filename, classId)
-      addToast(`Downloaded Excel workbook for ${classDoc.class_name}!`, 'success')
-    } catch (err: any) {
-      addToast(err?.response?.data?.detail || err?.message || 'Failed to download Excel workbook', 'error')
-    } finally {
-      setIsDownloadingExcel(false)
-    }
-  }
 
   const handleDownloadAllDocuments = async () => {
     if (!selectedStudent || isDownloadingAllDocs) return
@@ -340,7 +324,7 @@ export const ClassDetails: React.FC = () => {
               <div>
                 <h2 className="text-lg font-bold text-foreground">Students in {classDoc.class_name}</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Student roster isolated strictly to {classDoc.class_name} ({classDoc.department}).
+                  Student submissions isolated strictly to {classDoc.class_name} ({classDoc.department}).
                 </p>
               </div>
             </div>
@@ -384,9 +368,25 @@ export const ClassDetails: React.FC = () => {
                             </span>
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <Button variant="outline" size="sm" onClick={() => setSelectedStudent(student)} className="cursor-pointer text-xs">
-                                <Eye className="h-3.5 w-3.5 mr-1" /> View Profile
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() =>
+                                  setDocManagerStudent({
+                                    ...student,
+                                    batchId: classDoc?.batch_id,
+                                    classId: classId,
+                                    className: classDoc?.class_name,
+                                    department: classDoc?.department,
+                                  })
+                                }
+                                className="cursor-pointer text-xs py-1"
+                              >
+                                <Layers className="h-3.5 w-3.5 mr-1" /> Manage Docs
+                              </Button>
+                              <Button variant="outline" size="sm" onClick={() => setSelectedStudent(student)} className="cursor-pointer text-xs py-1">
+                                <Eye className="h-3.5 w-3.5 mr-1" /> Profile
                               </Button>
                               {canDeleteStudent && (
                                 <Button
@@ -632,6 +632,22 @@ export const ClassDetails: React.FC = () => {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="inline-flex items-center gap-1.5 justify-end">
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() =>
+                                  setDocManagerStudent({
+                                    ...student,
+                                    batchId: classDoc?.batch_id,
+                                    classId: classId,
+                                    className: classDoc?.class_name,
+                                    department: classDoc?.department,
+                                  })
+                                }
+                                className="cursor-pointer text-xs py-1"
+                              >
+                                <Layers className="h-3.5 w-3.5 mr-1" /> Docs
+                              </Button>
                               <Button variant="outline" size="sm" onClick={() => setSelectedStudent(student)} className="cursor-pointer text-xs py-1">
                                 <Eye className="h-3.5 w-3.5 mr-1" /> View
                               </Button>
@@ -687,9 +703,9 @@ export const ClassDetails: React.FC = () => {
                     Generate and download a dynamic Excel (.xlsx) workbook containing verified student submissions for {classDoc.class_name}.
                   </p>
                 </div>
-                <Button variant="primary" onClick={handleDownloadExcel} disabled={isDownloadingExcel} className="cursor-pointer gap-2 shrink-0">
-                  {isDownloadingExcel ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                  Download Export (.xlsx)
+                <Button variant="primary" onClick={() => navigate(`/data-extractions/${classDoc.batch_id}`)} className="cursor-pointer gap-2 shrink-0">
+                  <Download className="h-4 w-4" />
+                  Data Extraction & Export
                 </Button>
               </div>
 
@@ -994,6 +1010,13 @@ export const ClassDetails: React.FC = () => {
         isOpen={!!deleteStudentTarget}
         onClose={() => setDeleteStudentTarget(null)}
         onConfirm={handleDeleteStudent}
+      />
+
+      {/* MODAL: STUDENT DOCUMENT MANAGEMENT */}
+      <StudentDocumentManagerModal
+        isOpen={Boolean(docManagerStudent)}
+        onClose={() => setDocManagerStudent(null)}
+        student={docManagerStudent}
       />
     </div>
   )

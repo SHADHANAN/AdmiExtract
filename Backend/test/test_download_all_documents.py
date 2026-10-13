@@ -18,7 +18,7 @@ async def setup_db():
     import app.db.database as db_mod
     from app.core.config import settings
     from motor.motor_asyncio import AsyncIOMotorClient
-    
+
     db_mod.client = AsyncIOMotorClient(settings.MONGODB_URI, serverSelectionTimeoutMS=2000)
     db_mod.db = db_mod.client[settings.DATABASE_NAME]
     await db_mod._run_db_setup()
@@ -28,6 +28,84 @@ async def setup_db():
 async def client_async():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
+
+
+async def ensure_shadhanan_student() -> StudentSubmission:
+    sub = await StudentSubmission.find_one({"register_number": "24AM093"})
+
+    from pathlib import Path
+    from PIL import Image
+    from pypdf import PdfWriter
+
+    base_dir = Path(__file__).resolve().parent.parent / "uploads" / "students" / "24AM093" / "documents"
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. Aadhaar PNG
+    aadhaar_dir = base_dir / "AADHAAR"
+    aadhaar_dir.mkdir(parents=True, exist_ok=True)
+    aadhaar_path = aadhaar_dir / "aadhaar.png"
+    img = Image.new("RGB", (200, 200), color="blue")
+    img.save(aadhaar_path)
+
+    # 2. Community PDF (1 page)
+    comm_dir = base_dir / "COMMUNITY_CERTIFICATE"
+    comm_dir.mkdir(parents=True, exist_ok=True)
+    comm_path = comm_dir / "community.pdf"
+    writer1 = PdfWriter()
+    writer1.add_blank_page(width=200, height=200)
+    with open(comm_path, "wb") as f:
+        writer1.write(f)
+
+    # 3. Passbook PDF (2 pages)
+    pb_dir = base_dir / "PASSBOOK"
+    pb_dir.mkdir(parents=True, exist_ok=True)
+    pb_path = pb_dir / "passbook.pdf"
+    writer2 = PdfWriter()
+    writer2.add_blank_page(width=200, height=200)
+    writer2.add_blank_page(width=200, height=200)
+    with open(pb_path, "wb") as f:
+        writer2.write(f)
+
+    # 4. Transfer Certificate PDF (1 page)
+    tc_dir = base_dir / "TRANSFER_CERTIFICATE"
+    tc_dir.mkdir(parents=True, exist_ok=True)
+    tc_path = tc_dir / "tc.pdf"
+    writer3 = PdfWriter()
+    writer3.add_blank_page(width=200, height=200)
+    with open(tc_path, "wb") as f:
+        writer3.write(f)
+
+    if not sub:
+        sub = StudentSubmission(
+            batch_id="batch_shadhanan_test",
+            department_id="CS_DEPT",
+            student_name="Shadhanan",
+            register_number="24AM093",
+            mobile_number="9876543210",
+            submission_status="Submitted",
+            documents=[
+                StudentDocumentMeta(document_name="Aadhaar Card", document_type="AADHAAR", status="Uploaded", file_path=str(aadhaar_path), file_size_mb=0.1),
+                StudentDocumentMeta(document_name="Community Certificate", document_type="COMMUNITY_CERTIFICATE", status="Uploaded", file_path=str(comm_path), file_size_mb=0.1),
+                StudentDocumentMeta(document_name="Passbook", document_type="PASSBOOK", status="Uploaded", file_path=str(pb_path), file_size_mb=0.1),
+                StudentDocumentMeta(document_name="Transfer Certificate", document_type="TRANSFER_CERTIFICATE", status="Uploaded", file_path=str(tc_path), file_size_mb=0.1),
+                StudentDocumentMeta(document_name="HSC Marksheet", document_type="HSC_MARKSHEET", status="Not Available"),
+                StudentDocumentMeta(document_name="SSLC Marksheet", document_type="SSLC_MARKSHEET", status="Not Available"),
+            ],
+        )
+        await sub.insert()
+    else:
+        sub.department_id = "CS_DEPT"
+        sub.documents = [
+            StudentDocumentMeta(document_name="Aadhaar Card", document_type="AADHAAR", status="Uploaded", file_path=str(aadhaar_path), file_size_mb=0.1),
+            StudentDocumentMeta(document_name="Community Certificate", document_type="COMMUNITY_CERTIFICATE", status="Uploaded", file_path=str(comm_path), file_size_mb=0.1),
+            StudentDocumentMeta(document_name="Passbook", document_type="PASSBOOK", status="Uploaded", file_path=str(pb_path), file_size_mb=0.1),
+            StudentDocumentMeta(document_name="Transfer Certificate", document_type="TRANSFER_CERTIFICATE", status="Uploaded", file_path=str(tc_path), file_size_mb=0.1),
+            StudentDocumentMeta(document_name="HSC Marksheet", document_type="HSC_MARKSHEET", status="Not Available"),
+            StudentDocumentMeta(document_name="SSLC Marksheet", document_type="SSLC_MARKSHEET", status="Not Available"),
+        ]
+        await sub.save()
+
+    return sub
 
 
 @pytest.mark.asyncio
@@ -57,7 +135,7 @@ async def test_download_all_documents_full_flow(client_async: AsyncClient):
     )
 
     # 2. Get Shadhanan submission (has 4 uploaded, 2 unavailable)
-    sub = await StudentSubmission.find_one({"register_number": "24AM093"})
+    sub = await ensure_shadhanan_student()
     assert sub is not None, "Shadhanan test submission not found"
     sub_id = str(sub.id)
 
@@ -104,7 +182,7 @@ async def test_download_all_documents_alias_endpoint(client_async: AsyncClient):
         data={"sub": str(admin_user.id), "role": UserRole.SUPER_ADMIN.value}
     )
 
-    sub = await StudentSubmission.find_one({"register_number": "24AM093"})
+    sub = await ensure_shadhanan_student()
     assert sub is not None
     sub_id = str(sub.id)
 
@@ -120,7 +198,7 @@ async def test_download_all_documents_alias_endpoint(client_async: AsyncClient):
 @pytest.mark.asyncio
 async def test_download_all_documents_security_unauthenticated(client_async: AsyncClient):
     """Test that unauthenticated requests are rejected with 401."""
-    sub = await StudentSubmission.find_one({"register_number": "24AM093"})
+    sub = await ensure_shadhanan_student()
     assert sub is not None
 
     res = await client_async.get(f"/student-submissions/{str(sub.id)}/documents/download-all")
@@ -143,7 +221,7 @@ async def test_download_all_documents_security_student_role_forbidden(client_asy
         data={"sub": str(student_user.id), "role": UserRole.STUDENT.value}
     )
 
-    sub = await StudentSubmission.find_one({"register_number": "24AM093"})
+    sub = await ensure_shadhanan_student()
     assert sub is not None
 
     res = await client_async.get(
@@ -169,7 +247,7 @@ async def test_download_all_documents_security_department_isolation(client_async
         data={"sub": str(other_dept_admin.id), "role": UserRole.DEPARTMENT_ADMIN.value}
     )
 
-    sub = await StudentSubmission.find_one({"register_number": "24AM093"})
+    sub = await ensure_shadhanan_student()
     assert sub is not None
 
     res = await client_async.get(

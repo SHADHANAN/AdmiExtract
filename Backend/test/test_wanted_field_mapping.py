@@ -34,7 +34,6 @@ from app.main import app
 from app.core.config import settings
 from app.models.user import User
 from app.models.wanted_field_config import DocumentFieldConfiguration, WantedFieldItem
-from app.models.excel_template import ExcelBatchTemplate
 from app.models.student_submission import StudentSubmission
 from app.services.wanted_field_service import (
     DOCUMENT_AVAILABLE_FIELDS_CATALOG,
@@ -63,13 +62,16 @@ async def setup_wanted_test_db():
     app.db.database.db = test_db
     app.db.database._is_connected = True
 
+    from app.models.excel_template import ExcelBatchTemplate
+    from app.models.doc_config_version import DocumentConfigurationVersion
     await init_beanie(
         database=cast(Any, test_db),
-        document_models=[User, DocumentFieldConfiguration, ExcelBatchTemplate, StudentSubmission],
+        document_models=[User, DocumentFieldConfiguration, StudentSubmission, ExcelBatchTemplate, DocumentConfigurationVersion],
     )
     await DocumentFieldConfiguration.find_all().delete()
-    await ExcelBatchTemplate.find_all().delete()
     await StudentSubmission.find_all().delete()
+    await ExcelBatchTemplate.find_all().delete()
+    await DocumentConfigurationVersion.find_all().delete()
 
     yield
 

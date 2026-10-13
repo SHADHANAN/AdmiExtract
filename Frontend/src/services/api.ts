@@ -45,7 +45,7 @@ api.interceptors.request.use(
 // Response interceptor to handle authentication and format errors
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     // Network or connection failure
     if (!error.response) {
       const errMsg = error?.message || ''
@@ -83,6 +83,19 @@ api.interceptors.response.use(
       }
     }
 
+    // If response was requested as Blob (e.g. file download) but backend returned error JSON
+    if (error.response?.data instanceof Blob) {
+      try {
+        const text = await error.response.data.text()
+        const parsed = JSON.parse(text)
+        if (parsed) {
+          error.response.data = parsed
+        }
+      } catch {
+        // Blob is not JSON; keep as-is
+      }
+    }
+
     // Preserve useful backend distinction
     let message = ''
     if (typeof error.response.data?.detail === 'string') {
@@ -92,20 +105,22 @@ api.interceptors.response.use(
         .map((d: any) => d.msg || JSON.stringify(d))
         .join(', ')
     } else if (status === 401) {
-      message = 'Invalid username or password'
+      message = 'Session expired or unauthorized. Please log in again.'
     } else if (status === 403) {
       message = 'Not authorized to perform this action'
     } else if (status === 404) {
-      message = 'Requested endpoint not found'
+      message = 'Requested resource not found'
     } else if (status === 422) {
       message = 'Validation error: please check input format'
     } else if (status >= 500) {
-      message = 'Internal server error occurred'
+      message = 'Internal server error occurred while processing request'
     } else {
       message = error.message || 'An unexpected error occurred'
     }
 
-    return Promise.reject(new Error(message))
+    const customError: any = new Error(message)
+    customError.response = error.response
+    customError.status = status
+    return Promise.reject(customError)
   }
 )
-

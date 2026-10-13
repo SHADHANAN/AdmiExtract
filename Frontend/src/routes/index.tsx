@@ -18,6 +18,10 @@ import { DocumentsPage } from '../pages/DocumentsPage'
 import { Settings } from '../pages/Settings'
 import { StudentUpload } from '../pages/StudentUpload'
 import { StudentDocuments } from '../pages/StudentDocuments'
+import { StudentVerification } from '../pages/StudentVerification'
+import { VerificationPage } from '../pages/VerificationPage'
+import { DataExtraction } from '../pages/DataExtraction'
+import { BatchDataExtraction } from '../pages/BatchDataExtraction'
 
 export const AppRoutes: React.FC = () => {
   return (
@@ -50,6 +54,14 @@ export const AppRoutes: React.FC = () => {
       <Route path="/upload/:batchId/documents/verify" element={<StudentDocuments />} />
       <Route path="/upload/:batchId/documents/success" element={<StudentDocuments />} />
 
+      <Route path="/student-verification" element={<StudentVerification />} />
+      <Route path="/student-verification/:token" element={<StudentVerification />} />
+      <Route path="/verify-session/:token" element={<StudentVerification />} />
+      <Route path="/student/verify/:token" element={<StudentVerification />} />
+      <Route path="/upload/verify/:token" element={<StudentVerification />} />
+      <Route path="/student/verify" element={<StudentVerification />} />
+      <Route path="/upload/verify" element={<StudentVerification />} />
+
       {/* Protected Admin Layout Routes */}
       <Route
         path="/"
@@ -61,6 +73,15 @@ export const AppRoutes: React.FC = () => {
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
+        <Route path="data-extraction" element={<DataExtraction />} />
+        <Route
+          path="data-extraction/:batchId"
+          element={
+            <ErrorBoundary fallbackTitle="Error loading Batch Data Extraction">
+              <BatchDataExtraction />
+            </ErrorBoundary>
+          }
+        />
         <Route path="departments" element={<Departments />} />
         <Route path="users" element={<Users />} />
         <Route path="overview" element={<Overview />} />
@@ -91,7 +112,7 @@ export const AppRoutes: React.FC = () => {
         />
         <Route path="students" element={<Students />} />
         <Route path="documents" element={<DocumentsPage />} />
-        <Route path="verification" element={<Navigate to="/students" replace />} />
+        <Route path="verification" element={<VerificationPage />} />
         <Route path="export" element={<ExportPage />} />
         <Route path="settings" element={<Settings />} />
       </Route>

@@ -9,11 +9,11 @@ from app.models.batch import AdmissionBatch
 from app.models.batch_class import BatchClass
 from app.models.doc_config_version import DocumentConfigurationVersion, DocumentRequirementItem
 from app.models.student_submission import StudentSubmission
+from app.models.wanted_field_config import DocumentFieldConfiguration
 from app.core.config import settings
 from beanie import init_beanie
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from app.models.excel_template import ExcelBatchTemplate
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def setup_test_db():
@@ -22,17 +22,15 @@ async def setup_test_db():
 
     test_client = AsyncIOMotorClient(settings.MONGODB_URI)
     test_db = test_client["automate_test_db"]
-    
+
     import app.db.database
     app.db.database.client = test_client
     app.db.database.db = test_db
     app.db.database._is_connected = True
 
-    from app.models.wanted_field_config import DocumentFieldConfiguration
-
     await init_beanie(
         database=cast(Any, test_db),
-        document_models=[User, Department, AdmissionBatch, BatchClass, DocumentConfigurationVersion, StudentSubmission, ExcelBatchTemplate, DocumentFieldConfiguration]
+        document_models=[User, Department, AdmissionBatch, BatchClass, DocumentConfigurationVersion, StudentSubmission, DocumentFieldConfiguration]
     )
     await User.find_all().delete()
     await Department.find_all().delete()
@@ -40,11 +38,10 @@ async def setup_test_db():
     await BatchClass.find_all().delete()
     await DocumentConfigurationVersion.find_all().delete()
     await StudentSubmission.find_all().delete()
-    await ExcelBatchTemplate.find_all().delete()
     await DocumentFieldConfiguration.find_all().delete()
-    
+
     yield
-    
+
     await test_client.drop_database("automate_test_db")
     test_client.close()
 
@@ -60,7 +57,7 @@ async def test_extract_logging_pipeline_development(client_async: AsyncClient, c
     # Set APP_ENV to development
     original_env = settings.APP_ENV
     settings.APP_ENV = "development"
-    
+
     try:
         # Create a mock batch in DB
         batch = AdmissionBatch(
@@ -72,7 +69,7 @@ async def test_extract_logging_pipeline_development(client_async: AsyncClient, c
             created_by="test-user"
         )
         await batch.insert()
-        
+
         # Create a mock doc config version for the batch
         doc_config = DocumentConfigurationVersion(
             batch_id=batch.id,
@@ -93,19 +90,19 @@ async def test_extract_logging_pipeline_development(client_async: AsyncClient, c
             "register_number": "REG123",
             "student_name": "John Doe"
         }
-        
+
         response = await client_async.post(
             "/student-submissions/extract",
             data=data,
             files=files
         )
-        
+
         assert response.status_code == 200
-        
+
         # Capture stdout
         captured = capsys.readouterr()
         stdout_output = captured.out
-        
+
         # Verify Step 10 logging sections are printed
         assert "UPLOADED FILES" in stdout_output
         assert "REQUIRED EXCEL COLUMNS" in stdout_output
@@ -121,7 +118,7 @@ async def test_extract_logging_pipeline_development(client_async: AsyncClient, c
         final_idx = stdout_output.index("FINAL RESPONSE")
 
         assert up_idx < col_idx < det_idx < final_idx
-        
+
     finally:
         settings.APP_ENV = original_env
 
@@ -131,7 +128,7 @@ async def test_extract_logging_pipeline_production(client_async: AsyncClient, ca
     # Set APP_ENV to production
     original_env = settings.APP_ENV
     settings.APP_ENV = "production"
-    
+
     try:
         # Create a mock batch in DB
         batch = AdmissionBatch(
@@ -143,7 +140,7 @@ async def test_extract_logging_pipeline_production(client_async: AsyncClient, ca
             created_by="test-user"
         )
         await batch.insert()
-        
+
         # Create a mock doc config version for the batch
         doc_config = DocumentConfigurationVersion(
             batch_id=batch.id,
@@ -163,25 +160,25 @@ async def test_extract_logging_pipeline_production(client_async: AsyncClient, ca
             "register_number": "REG456",
             "student_name": "Jane Doe"
         }
-        
+
         response = await client_async.post(
             "/student-submissions/extract",
             data=data,
             files=files
         )
-        
+
         assert response.status_code == 200
-        
+
         # Capture stdout
         captured = capsys.readouterr()
         stdout_output = captured.out
-        
+
         # In production mode, we should not have any of these debug logs
         assert "OCR TEXT" not in stdout_output
         assert "AI PROMPT" not in stdout_output
         assert "AI RESPONSE" not in stdout_output
         assert "FINAL JSON" not in stdout_output
-        
+
     finally:
         settings.APP_ENV = original_env
 
@@ -392,23 +389,6 @@ def test_strict_source_document_rules():
     assert is_document_authorized_for_field("INCOME", "Annual Family Income") is True
 
 
-def test_excel_writer_sanitizes_placeholders():
-    from app.services.excel_template_service import ExcelTemplateService
-
-    service = ExcelTemplateService()
-    test_data = {
-        "Address": "Not detected",
-        "Community Category": "N/A",
-        "EMIS ID": None,
-        "Aadhaar Number": "4152 6075 0523",
-    }
-
-    assert service._resolve_header_value("Address", test_data) is None
-    assert service._resolve_header_value("Community Category", test_data) is None
-    assert service._resolve_header_value("EMIS ID", test_data) is None
-    assert service._resolve_header_value("Aadhaar Number", test_data) == "4152 6075 0523"
-
-
 def test_boolean_field_and_expanded_source_rules():
     from app.utils.field_canonicalizer import (
         is_address_field,
@@ -486,23 +466,6 @@ def test_optional_document_rules():
 
     is_opt_req, req_doc_type = is_field_belonging_to_optional_doc("SSLC Mark Percentage", doc_requirements)
     assert is_opt_req is False
-
-
-def test_excel_writer_handles_optional_no_and_missing_null():
-    from app.services.excel_template_service import ExcelTemplateService
-
-    service = ExcelTemplateService()
-    test_data = {
-        "Annual Income": {"value": "No", "confidence": 0},
-        "Income Certificate Number": "No",
-        "SSLC Mark Percentage": {"value": None, "confidence": 0},
-        "Aadhaar Number": "1234 5678 9012",
-    }
-
-    assert service._resolve_header_value("Annual Income", test_data) == "No"
-    assert service._resolve_header_value("Income Certificate Number", test_data) == "No"
-    assert service._resolve_header_value("SSLC Mark Percentage", test_data) is None
-    assert service._resolve_header_value("Aadhaar Number", test_data) == "1234 5678 9012"
 
 
 def test_aadhaar_address_location_parsing_and_isolation():
@@ -585,22 +548,22 @@ def test_strict_non_hallucination_and_no_return_rules():
 
     ai_service = AIExtractionService()
 
-    # 1. Prompt includes strict non-hallucination policy and NO return instructions
+    # 1. Prompt includes strict non-hallucination policy and null return instructions
     prompt = ai_service.build_prompt("AADHAAR", "Name: Ramesh", ["Occupation", "EMIS ID"])
     assert "STRICT EXTRACTION POLICY & RULES" in prompt
     assert 'IF A REQUESTED FIELD IS NOT EXPLICITLY PRESENT OR FOUND IN THE DOCUMENT, YOU MUST RETURN:' in prompt
-    assert '"value": "NO", "confidence": 0' in prompt
+    assert '"value": null, "confidence": 0' in prompt
     assert "PRIORITIZE ACCURACY OVER COMPLETENESS" in prompt
 
-    # 2. Validation of missing / empty / null / ungrounded fields returns {"value": "NO", "confidence": 0}
+    # 2. Validation of missing / empty / null / ungrounded fields returns {"value": None, "confidence": 0}
     raw_llm_json = '{"Occupation": {"value": null, "confidence": 0}, "EMIS ID": {"value": "NOT DETECTED", "confidence": 0}, "Caste": "N/A"}'
     validated = ai_service._validate_and_format_json(raw_llm_json, ["Occupation", "EMIS ID", "Caste", "Mother Name"])
     assert validated is not None
 
-    assert validated["Occupation"] == {"value": "NO", "confidence": 0}
-    assert validated["EMIS ID"] == {"value": "NO", "confidence": 0}
-    assert validated["Caste"] == {"value": "NO", "confidence": 0}
-    assert validated["Mother Name"] == {"value": "NO", "confidence": 0}
+    assert validated["Occupation"] == {"value": None, "confidence": 0}
+    assert validated["EMIS ID"] == {"value": None, "confidence": 0}
+    assert validated["Caste"] == {"value": None, "confidence": 0}
+    assert validated["Mother Name"] == {"value": None, "confidence": 0}
 
     # 3. Address location components missing return NO with confidence 0
     loc_res = parse_location_components_from_address("")
@@ -789,13 +752,3 @@ def test_ifsc_code_extraction_and_canonicalization():
     assert filtered["IFSC CODE"]["confidence"] == 100
     assert filtered["Bank Name"]["value"] == "NO"
     assert filtered["Bank Name"]["confidence"] == 0
-
-
-
-
-
-
-
-
-
-

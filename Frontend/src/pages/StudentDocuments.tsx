@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useToastStore } from '../store/useToastStore'
 import { useAuthStore } from '../store/useAuthStore'
 import { Button } from '../components/ui/Button'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card'
+import { Card, CardTitle, CardContent } from '../components/ui/Card'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 import { api } from '../services/api'
 import { readSubmissionSession, clearSubmissionSession, getStudentMe } from '../services/studentIdentity'
@@ -31,14 +31,7 @@ import {
   Award,
   Milestone,
   AlertCircle,
-  Clock,
-  CheckCircle2,
   Layers,
-  Sparkles,
-  Edit2,
-  Save,
-  ArrowLeft,
-  ShieldAlert,
 } from 'lucide-react'
 import type { DocumentRequirement } from '../types'
 
@@ -47,30 +40,18 @@ interface DocumentState {
   file: File | null
   status: 'Pending' | 'Uploading' | 'Uploaded' | 'Not Available'
   progress: number
+  existingFileName?: string
+  existingDocumentId?: string
+  fileSizeMb?: number
+  version?: number
+  isReplacement?: boolean
 }
 
-interface ExtractedField {
-  value: string
-  confidence: number
-}
-
-interface ProcessingJobItem {
-  job_id: string
-  document_name: string
-  document_type: string
-  status: string
-  error?: string
-}
-
-
-
-/* ─── Stepper config ─── */
+/* ─── Stepper config (Store Once Flow) ─── */
 const STEPS = [
   { number: 1, label: 'Student Details' },
   { number: 2, label: 'Documents' },
-  { number: 3, label: 'Processing' },
-  { number: 4, label: 'Verification' },
-  { number: 5, label: 'Complete' },
+  { number: 3, label: 'Complete' },
 ]
 
 /* ─── Icon helper ─── */
@@ -89,12 +70,12 @@ const getDocIcon = (name: string) => {
 /* ═══════════════════════════════════════════════════════════════════
    StudentDocuments — Document upload workspace for verified students.
 
-   Route: /upload/:batchId/documents[/processing|/verify|/success]
+   PRODUCT RULE:
+   When a student uploads an admission document, the system ONLY receives
+   and persists the document. No AI processing, OCR, or verification at upload.
 
-   On mount this component reads the temporary submission session from
-   sessionStorage (written by StudentUpload after identity verification).
-   If the session is missing the student is redirected back to the
-   admissions portal root — no auth, no login required.
+   Route: /student/:batchId/documents[/success]
+          /upload/:batchId/documents[/success]
 ═══════════════════════════════════════════════════════════════════ */
 export const StudentDocuments: React.FC = () => {
   const { batchId } = useParams<{ batchId: string }>()
@@ -120,25 +101,25 @@ export const StudentDocuments: React.FC = () => {
   const [docStates, setDocStates] = useState<Record<string, DocumentState>>({})
   const [draggedOverDoc, setDraggedOverDoc] = useState<string | null>(null)
 
-  /* ── AI extraction ── */
-  const [extractedData, setExtractedData] = useState<Record<string, ExtractedField>>({})
-  const [editingFields, setEditingFields] = useState<Record<string, boolean>>({})
-  const [confirmCheckbox, setConfirmCheckbox] = useState(false)
-
   /* ── Submission receipt ── */
   const [submissionId, setSubmissionId] = useState('')
   const [submissionTime, setSubmissionTime] = useState('')
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [processingJobs, setProcessingJobs] = useState<ProcessingJobItem[]>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [savedDocuments, setSavedDocuments] = useState<
+    Array<{
+      document_name: string
+      document_type?: string
+      status: string
+      file_size_mb?: number
+      file_type?: string
+      version?: number
+      file_path?: string
+      filename?: string
+    }>
+  >([])
 
   /* ── Derive current step from URL path ── */
-  const step = location.pathname.endsWith('/processing')
-    ? 3
-    : location.pathname.endsWith('/verify')
-    ? 4
-    : location.pathname.endsWith('/success')
-    ? 5
-    : 2
+  const step = location.pathname.endsWith('/success') ? 3 : 2
 
   const basePath = location.pathname.startsWith('/student')
     ? `/student/${batchId}/documents`
@@ -148,7 +129,6 @@ export const StudentDocuments: React.FC = () => {
   useEffect(() => {
     const session = readSubmissionSession()
     if (!session || session.batch_id !== batchId) {
-      // No valid session — redirect to login root (not /login — just a public page)
       addToast('Your session has expired. Please identify yourself again.', 'error')
       navigate('/', { replace: true })
       return
@@ -162,6 +142,23 @@ export const StudentDocuments: React.FC = () => {
     if (session.class_name) setClassName(session.class_name)
     if (session.upload_link_id) setUploadLinkId(session.upload_link_id)
     if (session.token) setToken(session.token)
+    if (session.submission_id) setSubmissionId(session.submission_id)
+
+    if (session.uploaded_documents && session.uploaded_documents.length > 0) {
+      setSavedDocuments(session.uploaded_documents as any)
+    }
+
+    if (session.submission_id) {
+      const tokenParam = session.token ? `?token=${encodeURIComponent(session.token)}` : ''
+      const headers = session.token ? { 'X-Verification-Token': session.token } : undefined
+      api.get(`/student-submissions/public/${session.submission_id}${tokenParam}`, { headers })
+        .then((res) => {
+          if (res.data?.documents && Array.isArray(res.data.documents)) {
+            setSavedDocuments(res.data.documents)
+          }
+        })
+        .catch(() => {})
+    }
 
     const fetchStudentProfile = async () => {
       const tokenInStore = useAuthStore.getState().token
@@ -181,36 +178,46 @@ export const StudentDocuments: React.FC = () => {
       }
     }
     fetchStudentProfile()
-
     setSessionLoaded(true)
-  }, [batchId])
+  }, [batchId, navigate, addToast])
 
-  /* ── Load batch doc requirements ── */
+  /* ── Load document requirements for this batch/class ── */
   useEffect(() => {
     if (!sessionLoaded || !batchId) return
 
     const loadRequirements = async () => {
       setIsLoadingBatch(true)
       try {
-        const session = readSubmissionSession()
-        const currentClassId = classId || session?.class_id
-        const url = currentClassId
-          ? `/public/batches/${batchId}/doc-versions/current?classId=${encodeURIComponent(currentClassId)}`
+        const cleanClassId = classId && classId !== 'undefined' && classId !== 'null' ? classId.trim() : undefined
+        const url = cleanClassId
+          ? `/public/batches/${batchId}/doc-versions/current?classId=${encodeURIComponent(cleanClassId)}&class_id=${encodeURIComponent(cleanClassId)}`
           : `/public/batches/${batchId}/doc-versions/current`
         const currentV = await api.get(url)
-        const rawDocs = currentV.data.documents || []
+        const rawDocs = currentV.data?.documents || currentV.data || []
+        const isHexId = (val: string) => /^[0-9a-fA-F]{24}$/.test((val || '').trim())
         const dedupedMap = new Map<string, DocumentRequirement>()
         for (const d of rawDocs) {
-          const stableKey = (d.document_code || d.code || d.id || d.name || '').trim().toUpperCase()
+          const reqStatus = (d.requirement_status || d.type || (d.required ? 'REQUIRED' : 'OPTIONAL')).toUpperCase()
+          if (reqStatus === 'DISABLED') continue
+
+          const isMandatory = d.required !== undefined ? Boolean(d.required) : (reqStatus === 'REQUIRED' || reqStatus === 'MANDATORY')
+          const docDisplayName = (d.name || d.display_name || d.document_name || d.code || 'Document').trim()
+          const rawTypeCandidate = d.document_type || d.document_code || d.code || ''
+          const docTypeCode = (rawTypeCandidate && !isHexId(rawTypeCandidate) ? rawTypeCandidate : docDisplayName).trim()
+          const stableKey = (d.code && !isHexId(d.code) ? d.code : (docTypeCode || docDisplayName)).toUpperCase()
+
           if (!dedupedMap.has(stableKey)) {
             dedupedMap.set(stableKey, {
-              id: d.id || d.code || d.name,
-              name: d.name,
-              required: d.required,
-              allowedTypes: d.allowed_types || ['PDF', 'JPG', 'PNG'],
-              maxSizeMb: d.max_size_mb || 5,
+              id: d.id || d.code || docTypeCode || docDisplayName,
+              name: docDisplayName,
+              required: isMandatory,
+              allowedTypes: d.allowed_types || d.allowedTypes || ['PDF', 'JPG', 'PNG'],
+              maxSizeMb: d.max_size_mb || d.maxSizeMb || 5,
               description: d.description || '',
-              type: d.type || (d.required ? 'MANDATORY' : 'OPTIONAL'),
+              type: isMandatory ? 'MANDATORY' : 'OPTIONAL',
+              documentType: docTypeCode,
+              documentCode: docTypeCode,
+              code: docTypeCode,
             })
           }
         }
@@ -222,31 +229,71 @@ export const StudentDocuments: React.FC = () => {
       } finally {
         setIsLoadingBatch(false)
       }
-
     }
 
     loadRequirements()
   }, [sessionLoaded, batchId, classId])
 
-  /* ── Initialise doc states when requirements load ── */
+  /* ── Initialise doc states when requirements or saved documents load ── */
   useEffect(() => {
-    if (assignedRequirements.length > 0 && Object.keys(docStates).length === 0) {
-      const initial: Record<string, DocumentState> = {}
-      assignedRequirements
-        .filter((r) => r.type !== 'DISABLED')
-        .forEach((r) => {
-          initial[r.name] = { file: null, status: 'Pending', progress: 0 }
-        })
-      setDocStates(initial)
+    if (assignedRequirements.length > 0) {
+      setDocStates((prev) => {
+        const next: Record<string, DocumentState> = { ...prev }
+        assignedRequirements
+          .filter((r) => r.type !== 'DISABLED')
+          .forEach((r) => {
+            const existingSaved = savedDocuments.find(
+              (d) =>
+                d.document_name?.trim().toLowerCase() === r.name?.trim().toLowerCase() ||
+                (d as any).name?.trim().toLowerCase() === r.name?.trim().toLowerCase()
+            )
+
+            if (!next[r.name] || (next[r.name].status === 'Pending' && existingSaved)) {
+              if (
+                existingSaved &&
+                (existingSaved.status === 'Uploaded' ||
+                  existingSaved.status === 'Submitted' ||
+                  existingSaved.status === 'Verified')
+              ) {
+                const rawPath = (existingSaved as any).file_path || ''
+                const fname =
+                  (existingSaved as any).filename ||
+                  (rawPath ? rawPath.replace(/\\/g, '/').split('/').pop() : `${r.name}.pdf`)
+                const existingDocId = (existingSaved as any).id || (existingSaved as any).student_document_id
+                next[r.name] = {
+                  file: null,
+                  status: 'Uploaded',
+                  progress: 100,
+                  existingFileName: fname,
+                  existingDocumentId: existingDocId,
+                  fileSizeMb: existingSaved.file_size_mb,
+                  version: existingSaved.version || 1,
+                  isReplacement: false,
+                }
+              } else if (existingSaved && existingSaved.status === 'Not Available') {
+                next[r.name] = {
+                  file: null,
+                  status: 'Not Available',
+                  progress: 0,
+                  version: 1,
+                }
+              } else if (!next[r.name]) {
+                next[r.name] = { file: null, status: 'Pending', progress: 0, version: 1 }
+              }
+            }
+          })
+        return next
+      })
     }
-  }, [assignedRequirements])
+  }, [assignedRequirements, savedDocuments])
+
 
   /* ── Guard: direct URL access to deep steps without session ── */
   useEffect(() => {
     if (sessionLoaded && step > 2 && !studentName) {
       navigate(basePath, { replace: true })
     }
-  }, [step, studentName, sessionLoaded, basePath])
+  }, [step, studentName, sessionLoaded, basePath, navigate])
 
   /* ─────────────────────────────────────────────
      Upload helpers
@@ -275,23 +322,48 @@ export const StudentDocuments: React.FC = () => {
       return
     }
 
+    const prevDocState = docStates[req.name]
+    const isReplacing = prevDocState?.status === 'Uploaded'
+
     setDocStates((prev) => ({
       ...prev,
-      [req.name]: { ...prev[req.name], status: 'Uploading', progress: 0 },
+      [req.name]: {
+        ...prev[req.name],
+        status: 'Uploading',
+        progress: 0,
+        isReplacement: isReplacing,
+      },
     }))
 
     let progress = 0
     const interval = setInterval(() => {
-      progress += 10 + Math.floor(Math.random() * 15)
+      progress += 20 + Math.floor(Math.random() * 25)
       setDocStates((prev) => {
         if (progress >= 100) {
           clearInterval(interval)
-          return { ...prev, [req.name]: { file, status: 'Uploaded', progress: 100 } }
+          if (isReplacing) {
+            addToast(`Replaced "${req.name}" with ${file.name}`, 'success')
+          } else {
+            addToast(`Selected "${req.name}" (${file.name})`, 'success')
+          }
+          return {
+            ...prev,
+            [req.name]: {
+              file,
+              status: 'Uploaded',
+              progress: 100,
+              existingFileName: file.name,
+              fileSizeMb: Number((file.size / (1024 * 1024)).toFixed(2)),
+              version: 1,
+              isReplacement: isReplacing,
+            },
+          }
         }
         return { ...prev, [req.name]: { ...prev[req.name], progress } }
       })
-    }, 100)
+    }, 80)
   }
+
 
   const handleFileChange = (req: DocumentRequirement, e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) startSimulatedUpload(req, e.target.files[0])
@@ -304,7 +376,11 @@ export const StudentDocuments: React.FC = () => {
   }
 
   const handleRemoveFile = (docName: string) => {
-    setDocStates((prev) => ({ ...prev, [docName]: { file: null, status: 'Pending', progress: 0 } }))
+    setDocStates((prev) => ({
+      ...prev,
+      [docName]: { file: null, status: 'Pending', progress: 0, existingFileName: undefined, fileSizeMb: undefined },
+    }))
+    setSavedDocuments((prev) => prev.filter((d) => d.document_name !== docName && (d as any).name !== docName))
     addToast(`Cleared upload for ${docName}.`, 'info')
   }
 
@@ -341,7 +417,7 @@ export const StudentDocuments: React.FC = () => {
   const canSubmit = enabledDocs.length > 0 && missingRequired.length === 0 && missingOptional.length === 0
 
   /* ─────────────────────────────────────────────
-     Step 2 → 3: Trigger AI extraction
+     Step 2 → 3: Save Documents (Store Once, No AI at upload)
   ───────────────────────────────────────────── */
   const handleUploadSubmit = async () => {
     if (!canSubmit) {
@@ -349,8 +425,7 @@ export const StudentDocuments: React.FC = () => {
       return
     }
 
-    navigate(`${basePath}/processing`)
-    setIsProcessing(true)
+    setIsSubmitting(true)
 
     const formData = new FormData()
     formData.append('batch_id', batchId!)
@@ -358,139 +433,83 @@ export const StudentDocuments: React.FC = () => {
     formData.append('student_name', studentName)
     if (mobileNum) formData.append('mobile_number', mobileNum)
     if (email) formData.append('email', email)
+    if (classId) formData.append('class_id', classId)
+    if (className) formData.append('class_name', className)
+    if (uploadLinkId) formData.append('upload_link_id', uploadLinkId)
+    if (token) formData.append('token', token)
 
-    Object.values(docStates).forEach((ds) => {
-      if (ds.file) formData.append('files', ds.file)
-    })
+    const metadata: Array<{
+      document_id?: string
+      document_name: string
+      document_type?: string
+      filename?: string
+      file_size_mb?: number
+      file_index?: number
+      is_new_file: boolean
+      status: string
+    }> = []
 
-    // Initialise processing queue display for uploaded documents
-    const initialJobs: ProcessingJobItem[] = enabledDocs
-      .filter((req) => docStates[req.name]?.status === 'Uploaded')
-      .map((req) => ({
-        job_id: req.name,
-        document_name: req.name,
-        document_type: req.type || 'DOCUMENT',
-        status: 'QUEUED',
-      }))
-    setProcessingJobs(initialJobs)
+    let uploadFileIdx = 0
 
-    let pollInterval: any = null
-
-    try {
-      const response = await api.post('/student-submissions/extract-async', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      const currentSubId = response.data.submission_id
-
-      // Poll extraction status every 1.5 seconds
-      pollInterval = setInterval(async () => {
-        try {
-          const statusRes = await api.get(`/student-submissions/${currentSubId}/status`)
-          const data = statusRes.data
-
-          if (data.documents && data.documents.length > 0) {
-            setProcessingJobs(data.documents)
-          }
-
-          if (data.status === 'READY_FOR_VERIFICATION' || data.status === 'PARTIAL_SUCCESS') {
-            clearInterval(pollInterval)
-            const rawExtracted = data.verification_fields || data.extracted_data || {}
-            setExtractedData(rawExtracted)
-            setIsProcessing(false)
-            addToast('Documents processed! Please verify details.', 'success')
-            navigate(`${basePath}/verify`)
-          } else if (data.status === 'FAILED') {
-            clearInterval(pollInterval)
-            setIsProcessing(false)
-            addToast('Document extraction failed. Try again.', 'error')
-            navigate(basePath)
-          }
-        } catch (pollErr) {
-          console.error('Error polling status:', pollErr)
-        }
-      }, 1500)
-    } catch (err: any) {
-      if (pollInterval) clearInterval(pollInterval)
-      setIsProcessing(false)
-      addToast(err.response?.data?.detail || 'Document extraction failed. Try again.', 'error')
-      navigate(basePath)
-    }
-  }
-
-  /* ─────────────────────────────────────────────
-     Step 4 → 5: Confirm and save submission
-  ───────────────────────────────────────────── */
-  const handleConfirmSubmit = async () => {
-    if (!confirmCheckbox) {
-      addToast('Please review details and check the confirmation box.', 'error')
-      return
-    }
-
-    setIsProcessing(true)
-
-    const formattedDocs = enabledDocs.map((req) => {
+    enabledDocs.forEach((req) => {
       const s = docStates[req.name]
-      return {
-        document_name: req.name,
-        status:
-          s?.status === 'Uploaded'
-            ? 'Uploaded'
-            : s?.status === 'Not Available'
-            ? 'Not Available'
-            : 'Pending',
-        file_path: s?.file
-          ? `uploads/${batchId}/${registerNum}/${s.file.name}`
-          : undefined,
-        file_size_mb: s?.file ? Number((s.file.size / (1024 * 1024)).toFixed(1)) : undefined,
-        file_type: s?.file ? s.file.name.split('.').pop()?.toUpperCase() : undefined,
-        uploaded_at: new Date().toISOString(),
+      const actualDocType = req.documentType || req.code || req.id || req.name
+      if (s?.status === 'Uploaded') {
+        if (s.file) {
+          metadata.push({
+            document_id: s.existingDocumentId,
+            document_name: req.name,
+            document_type: actualDocType,
+            filename: s.file.name,
+            file_index: uploadFileIdx,
+            is_new_file: true,
+            status: 'Uploaded',
+          })
+          formData.append('files', s.file)
+          uploadFileIdx++
+        } else {
+          // Preserved previously uploaded document
+          metadata.push({
+            document_id: s.existingDocumentId,
+            document_name: req.name,
+            document_type: actualDocType,
+            filename: s.existingFileName || `${req.name}.pdf`,
+            file_size_mb: s.fileSizeMb,
+            is_new_file: false,
+            status: 'Uploaded',
+          })
+        }
+      } else if (s?.status === 'Not Available') {
+        metadata.push({
+          document_id: s.existingDocumentId,
+          document_name: req.name,
+          document_type: actualDocType,
+          is_new_file: false,
+          status: 'Not Available',
+        })
       }
     })
 
-    const verifiedDict: Record<string, string | null> = {}
-    Object.keys(extractedData).forEach((k) => {
-      verifiedDict[k] = extractedData[k].value
-    })
-
-    const payload = {
-      batch_id: batchId,
-      batch_name: batchName,
-      class_id: classId,
-      class_name: className,
-      upload_link_id: uploadLinkId,
-      token: token,
-      student_name: studentName,
-      register_number: registerNum,
-      mobile_number: mobileNum,
-      email: email || undefined,
-      submission_status: 'Verified',
-      documents: formattedDocs,
-      extracted_data: verifiedDict,
-    }
+    formData.append('documents_metadata', JSON.stringify(metadata))
 
     try {
-      const response = await api.post('/student-submissions/confirm', payload)
+      const response = await api.post('/student-submissions/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
       const data = response.data
       setSubmissionId(data.id)
-      setSubmissionTime(new Date(data.submitted_at).toLocaleString())
-      setIsProcessing(false)
+      setSubmissionTime(new Date(data.submitted_at || Date.now()).toLocaleString())
+      setSavedDocuments(data.documents || [])
       clearSubmissionSession()
-      addToast('Application submitted & Excel updated!', 'success')
+      addToast('Documents uploaded successfully and securely saved!', 'success')
       navigate(`${basePath}/success`)
     } catch (err: any) {
-      setIsProcessing(false)
-      addToast(err.response?.data?.detail || 'Finalization failed. Try again.', 'error')
+      const errMsg = err.response?.data?.detail || 'Document upload failed. Please try again.'
+      addToast(errMsg, 'error')
+    } finally {
+      setIsSubmitting(false)
     }
   }
-
-  const handleFieldChange = (fieldName: string, val: string) =>
-    setExtractedData((prev) => ({
-      ...prev,
-      [fieldName]: { ...prev[fieldName], value: val },
-    }))
-
-  const toggleEditField = (fieldName: string) =>
-    setEditingFields((prev) => ({ ...prev, [fieldName]: !prev[fieldName] }))
 
   /* ─────────────────────────────────────────────
      Loading & session guard states
@@ -552,13 +571,13 @@ export const StudentDocuments: React.FC = () => {
         </div>
       </header>
 
-      {/* ── Stepper ── */}
-      <div className="w-full max-w-4xl mx-auto px-4 pt-8 pb-4">
+      {/* ── 3-Step Progress Stepper ── */}
+      <div className="w-full max-w-2xl mx-auto px-4 pt-8 pb-4">
         <div className="relative flex items-center justify-between">
           <div className="absolute left-0 top-1/2 h-0.5 w-full -translate-y-1/2 bg-border dark:bg-border/40" />
           <div
             className="absolute left-0 top-1/2 h-0.5 -translate-y-1/2 bg-primary transition-all duration-500"
-            style={{ width: `${((step - 1) / 4) * 100}%` }}
+            style={{ width: `${((step - 1) / (STEPS.length - 1)) * 100}%` }}
           />
           {STEPS.map((s) => {
             const done = step > s.number
@@ -586,6 +605,13 @@ export const StudentDocuments: React.FC = () => {
               </div>
             )
           })}
+        </div>
+        {/* Mobile current step indicator badge */}
+        <div className="sm:hidden text-center mt-3">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/20">
+            <span>Step {step} of 3:</span>
+            <span className="font-bold">{STEPS[step - 1]?.label}</span>
+          </span>
         </div>
       </div>
 
@@ -698,105 +724,112 @@ export const StudentDocuments: React.FC = () => {
 
                                 {req.description && (
                                   <p className="text-xs text-muted-foreground font-medium mt-1">{req.description}</p>
-                              )}
+                                )}
 
-                              <div className="flex items-center gap-3 text-3xs font-mono text-muted-foreground/80 mt-1.5 flex-wrap">
-                                <span>Accepted: <strong className="text-foreground">{allowedTypes.join(', ')}</strong></span>
-                                <span>Max: <strong className="text-foreground">{maxSizeMb} MB</strong></span>
-                              </div>
+                                <div className="flex items-center gap-3 text-3xs font-mono text-muted-foreground/80 mt-1.5 flex-wrap">
+                                  <span>Accepted: <strong className="text-foreground">{allowedTypes.join(', ')}</strong></span>
+                                  <span>Max: <strong className="text-foreground">{maxSizeMb} MB</strong></span>
+                                </div>
 
-                              <div className="mt-2 text-xs">
-                                {isUploaded && state.file ? (
-                                  <div className="flex items-center gap-2 text-green-600 font-semibold truncate max-w-[280px]">
-                                    <Check className="h-4 w-4 shrink-0 stroke-[2.5]" />
-                                    <span className="truncate">{state.file.name}</span>
-                                    <span className="text-3xs text-muted-foreground font-normal shrink-0">
-                                      ({(state.file.size / 1024 / 1024).toFixed(2)} MB)
+                                <div className="mt-2 text-xs">
+                                  {isUploaded && (state.file || state.existingFileName) ? (
+                                    <div className="flex items-center gap-2 text-green-600 font-semibold truncate max-w-[280px]">
+                                      <Check className="h-4 w-4 shrink-0 stroke-[2.5]" />
+                                      <span className="truncate">{state.file ? state.file.name : (state.existingFileName || 'Document uploaded')}</span>
+                                      <span className="text-3xs text-muted-foreground font-normal shrink-0">
+                                        ({state.file ? (state.file.size / 1024 / 1024).toFixed(2) : (state.fileSizeMb ? Number(state.fileSizeMb).toFixed(2) : '0.50')} MB)
+                                      </span>
+                                    </div>
+                                  ) : isNA ? (
+                                    <span className="text-muted-foreground italic font-medium">
+                                      Waived: Marked as Not Available
                                     </span>
-                                  </div>
-                                ) : isNA ? (
-                                  <span className="text-muted-foreground italic font-medium">
-                                    Waived: Marked as Not Available
-                                  </span>
-                                ) : isUploading ? (
-                                  <div className="w-[180px] sm:w-[240px]">
-                                    <div className="flex items-center justify-between text-3xs text-primary font-bold mb-1">
-                                      <span className="animate-pulse">Uploading...</span>
-                                      <span>{state.progress}%</span>
+                                  ) : isUploading ? (
+                                    <div className="w-[180px] sm:w-[240px]">
+                                      <div className="flex items-center justify-between text-3xs text-primary font-bold mb-1">
+                                        <span className="animate-pulse">Uploading...</span>
+                                        <span>{state.progress}%</span>
+                                      </div>
+                                      <div className="w-full bg-secondary h-1.5 rounded-full overflow-hidden border border-border/20">
+                                        <div
+                                          className="bg-primary h-full rounded-full transition-all duration-150"
+                                          style={{ width: `${state.progress}%` }}
+                                        />
+                                      </div>
                                     </div>
-                                    <div className="w-full bg-secondary h-1.5 rounded-full overflow-hidden border border-border/20">
-                                      <div
-                                        className="bg-primary h-full rounded-full transition-all duration-150"
-                                        style={{ width: `${state.progress}%` }}
-                                      />
-                                    </div>
-                                  </div>
-                                ) : null}
+                                  ) : null}
+                                </div>
                               </div>
                             </div>
-                          </div>
 
-                          <div className="flex items-center justify-end gap-3 shrink-0 flex-wrap sm:flex-nowrap">
-                            {!isMandatory && (
-                              <div className="flex items-center gap-2 bg-secondary/50 hover:bg-secondary border border-border/60 py-1.5 px-3 rounded-lg transition-colors select-none">
-                                <input
-                                  type="checkbox"
-                                  id={`na-${req.name}`}
-                                  checked={isNA}
-                                  onChange={() => handleToggleNotAvailable(req.name)}
-                                  className="h-4 w-4 accent-primary cursor-pointer"
-                                />
-                                <label htmlFor={`na-${req.name}`} className="text-xs font-bold text-muted-foreground cursor-pointer">
-                                  I don't have this
-                                </label>
-                              </div>
-                            )}
+                            <div className="flex items-center justify-end gap-3 shrink-0 flex-wrap sm:flex-nowrap">
+                              {!isMandatory && (
+                                <div className="flex items-center gap-2 bg-secondary/50 hover:bg-secondary border border-border/60 py-1.5 px-3 rounded-lg transition-colors select-none">
+                                  <input
+                                    type="checkbox"
+                                    id={`na-${req.name}`}
+                                    checked={isNA}
+                                    onChange={() => handleToggleNotAvailable(req.name)}
+                                    className="h-4 w-4 accent-primary cursor-pointer"
+                                  />
+                                  <label htmlFor={`na-${req.name}`} className="text-xs font-bold text-muted-foreground cursor-pointer">
+                                    I don't have this
+                                  </label>
+                                </div>
+                              )}
 
-                            {isUploaded ? (
-                              <div className="inline-flex gap-2">
-                                <label className="relative flex items-center justify-center p-2 rounded-lg border border-border bg-card hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer transition-colors shadow-2xs">
+                              {isUploaded ? (
+                                <div className="inline-flex items-center gap-2">
+                                  <label
+                                    htmlFor={`reupload-${req.id || req.name}`}
+                                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary text-xs font-bold transition-all cursor-pointer shadow-2xs select-none"
+                                    title="Replace this document with a new file"
+                                  >
+                                    <RefreshCw className="h-3.5 w-3.5" />
+                                    <span>Re-upload</span>
+                                    <input
+                                      id={`reupload-${req.id || req.name}`}
+                                      type="file"
+                                      onChange={(e) => handleFileChange(req, e)}
+                                      className="hidden"
+                                      accept={allowedTypes.map((t) => `.${t.toLowerCase()}`).join(',')}
+                                    />
+                                  </label>
+                                  <button
+                                    onClick={() => handleRemoveFile(req.name)}
+                                    className="p-2 rounded-lg border border-destructive/20 bg-destructive/5 hover:bg-destructive/10 text-destructive transition-colors cursor-pointer shadow-2xs"
+                                    title="Clear upload"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              ) : isNA ? (
+                                <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border/80 bg-secondary/40 text-xs font-bold text-muted-foreground select-none">
+                                  <AlertTriangle className="h-3.5 w-3.5" /> Waived
+                                </span>
+                              ) : isUploading ? (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/20 bg-primary/5 text-xs font-bold text-primary select-none">
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> uploading
+                                </span>
+                              ) : (
+                                <label className="relative flex items-center justify-center gap-2 px-4 py-2 border border-dashed border-primary/50 bg-primary/2 hover:bg-primary/5 text-primary text-xs font-bold rounded-lg cursor-pointer transition-all duration-200 hover:border-primary">
                                   <input
                                     type="file"
                                     onChange={(e) => handleFileChange(req, e)}
                                     className="hidden"
                                     accept={allowedTypes.map((t) => `.${t.toLowerCase()}`).join(',')}
                                   />
-                                  <RefreshCw className="h-4 w-4" />
+                                  <Upload className="h-3.5 w-3.5" />
+                                  <span>Upload File</span>
                                 </label>
-                                <button
-                                  onClick={() => handleRemoveFile(req.name)}
-                                  className="p-2 rounded-lg border border-destructive/20 bg-destructive/5 hover:bg-destructive/10 text-destructive transition-colors cursor-pointer shadow-2xs"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </div>
-                            ) : isNA ? (
-                              <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border/80 bg-secondary/40 text-xs font-bold text-muted-foreground select-none">
-                                <AlertTriangle className="h-3.5 w-3.5" /> Waived
-                              </span>
-                            ) : isUploading ? (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/20 bg-primary/5 text-xs font-bold text-primary select-none">
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" /> uploading
-                              </span>
-                            ) : (
-                              <label className="relative flex items-center justify-center gap-2 px-4 py-2 border border-dashed border-primary/50 bg-primary/2 hover:bg-primary/5 text-primary text-xs font-bold rounded-lg cursor-pointer transition-all duration-200 hover:border-primary">
-                                <input
-                                  type="file"
-                                  onChange={(e) => handleFileChange(req, e)}
-                                  className="hidden"
-                                  accept={allowedTypes.map((t) => `.${t.toLowerCase()}`).join(',')}
-                                />
-                                <Upload className="h-3.5 w-3.5" />
-                                <span>Upload File</span>
-                              </label>
-                            )}
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </Card>
-                    )
-                  })}
-                </div>
-              )}
+                        </Card>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Right: Checklist sidebar */}
@@ -805,7 +838,7 @@ export const StudentDocuments: React.FC = () => {
                   <div className="h-1 bg-gradient-to-r from-primary to-indigo-500" />
                   <div className="px-6 py-4 border-b border-border bg-secondary/20 flex items-center gap-2">
                     <FileCheck className="h-4 w-4 text-primary" />
-                    <CardTitle className="text-sm font-bold text-foreground">Verification Checklist</CardTitle>
+                    <CardTitle className="text-sm font-bold text-foreground">Upload Checklist</CardTitle>
                   </div>
                   <CardContent className="p-6 space-y-6">
                     <div className="grid grid-cols-3 gap-3 text-center">
@@ -861,9 +894,9 @@ export const StudentDocuments: React.FC = () => {
                       </div>
                     ) : (
                       <div className="p-4 bg-green-500/5 border border-green-500/10 rounded-xl flex gap-3 text-green-600">
-                        <ShieldCheck className="h-5 w-5 shrink-0 mt-0.5 animate-pulse" />
+                        <ShieldCheck className="h-5 w-5 shrink-0 mt-0.5" />
                         <div className="text-xs font-semibold leading-relaxed">
-                          All documents ready! Proceed to AI validation.
+                          All documents ready for secure persistent storage.
                         </div>
                       </div>
                     )}
@@ -873,9 +906,19 @@ export const StudentDocuments: React.FC = () => {
                         variant="primary"
                         className="w-full py-5 rounded-xl font-bold shadow-md shadow-primary/10 text-sm flex items-center justify-center gap-2 cursor-pointer transition-all"
                         onClick={handleUploadSubmit}
-                        disabled={!canSubmit}
+                        disabled={!canSubmit || isSubmitting}
                       >
-                        Submit Documents <ArrowRight className="h-4.5 w-4.5" />
+                        {isSubmitting ? (
+                          <>
+                            <Loader2 className="h-4.5 w-4.5 animate-spin" />
+                            <span>Saving Documents...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Submit Documents</span>
+                            <ArrowRight className="h-4.5 w-4.5" />
+                          </>
+                        )}
                       </Button>
                     </div>
                   </CardContent>
@@ -884,345 +927,8 @@ export const StudentDocuments: React.FC = () => {
             </div>
           )}
 
-          {/* ══ STEP 3: Processing ══ */}
+          {/* ══ STEP 3: Complete / Saved ══ */}
           {step === 3 && (
-            <Card className="border-border bg-card text-card-foreground shadow-md max-w-xl w-full mx-auto overflow-hidden rounded-2xl">
-              <div className="h-1.5 bg-gradient-to-r from-primary via-emerald-500 to-primary" />
-              <CardContent className="p-6 sm:p-8 text-center space-y-6">
-                <div className="relative mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-primary border border-primary/20 shadow-xs">
-                  <Loader2 className="h-10 w-10 animate-spin" />
-                </div>
-                <div className="space-y-2">
-                  <h3 className="text-xl font-bold text-foreground tracking-tight">Processing Your Documents</h3>
-                  <p className="text-sm text-muted-foreground max-w-sm mx-auto leading-relaxed">
-                    Please wait while our verification engine processes your uploaded certificates and extracts admission fields.
-                  </p>
-                </div>
-
-                {/* Per-document live concurrent status list */}
-                {processingJobs.length > 0 && (
-                  <div className="bg-secondary/40 dark:bg-secondary/30 border border-border rounded-xl p-4 text-left space-y-3 max-w-md w-full mx-auto shadow-2xs">
-                    <div className="text-xs font-bold text-foreground/90 border-b border-border/80 pb-2.5 flex items-center justify-between">
-                      <span className="uppercase tracking-wider text-[11px] font-extrabold text-muted-foreground">Document Status</span>
-                      <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 font-bold inline-flex items-center gap-1.5">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        Live Validation
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      {processingJobs.map((j) => {
-                        const isCompleted = j.status === 'COMPLETED'
-                        const isProcessing = j.status === 'PROCESSING'
-                        const isFailed = j.status === 'FAILED'
-                        const isQueued = j.status === 'QUEUED' || j.status === 'RETRY_PENDING'
-                        return (
-                          <div
-                            key={j.job_id || j.document_name}
-                            className="flex items-center justify-between p-2.5 rounded-lg bg-card border border-border text-xs shadow-2xs hover:bg-secondary/40 transition-colors"
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                              <span className="font-semibold text-foreground truncate" title={j.document_name}>
-                                {j.document_name}
-                              </span>
-                            </div>
-                            <div className="shrink-0">
-                              {isCompleted && (
-                                <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-bold px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/25 text-[10px]">
-                                  <Check className="h-3 w-3 stroke-[3]" /> Completed
-                                </span>
-                              )}
-                              {isProcessing && (
-                                <span className="inline-flex items-center gap-1 text-primary font-bold px-2 py-0.5 rounded-md bg-primary/10 border border-primary/25 text-[10px] animate-pulse">
-                                  <Loader2 className="h-3 w-3 animate-spin" /> Processing
-                                </span>
-                              )}
-                              {isQueued && (
-                                <span className="inline-flex items-center gap-1 text-muted-foreground font-semibold px-2 py-0.5 rounded-md bg-secondary border border-border text-[10px]">
-                                  <Clock className="h-3 w-3" /> Queued
-                                </span>
-                              )}
-                              {isFailed && (
-                                <span className="inline-flex items-center gap-1 text-destructive font-bold px-2 py-0.5 rounded-md bg-destructive/10 border border-destructive/25 text-[10px]">
-                                  <X className="h-3 w-3 stroke-[3]" /> Retry Needed
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Friendly Verification Progress Stages */}
-                <div className="bg-secondary/40 dark:bg-secondary/30 text-left text-xs p-4 rounded-xl border border-border shadow-2xs max-w-md w-full mx-auto space-y-3">
-                  <div className="font-bold text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border/80 pb-2">
-                    Verification Pipeline
-                  </div>
-                  {[
-                    { label: 'Documents uploaded', status: 'done' },
-                    { label: 'Document validation', status: 'done' },
-                    { label: 'Extraction in progress', status: 'progress' },
-                    { label: 'Verification ready', status: 'pending' },
-                  ].map((stage, i) => (
-                    <div key={i} className="flex items-center gap-2.5">
-                      {stage.status === 'done' ? (
-                        <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                      ) : stage.status === 'progress' ? (
-                        <Loader2 className="h-4 w-4 text-primary animate-spin shrink-0" />
-                      ) : (
-                        <div className="h-4 w-4 rounded-full border-2 border-border dark:border-muted-foreground/40 shrink-0" />
-                      )}
-                      <span
-                        className={`text-xs ${
-                          stage.status === 'progress'
-                            ? 'font-bold text-foreground'
-                            : stage.status === 'done'
-                            ? 'font-medium text-foreground/90'
-                            : 'text-muted-foreground'
-                        }`}
-                      >
-                        {stage.label}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* ══ STEP 4: Verify AI Fields ══ */}
-          {step === 4 && (() => {
-            const getFieldIcon = (name: string) => {
-              const lower = name.toLowerCase()
-              if (lower.includes('aadhaar') || lower.includes('aadhar')) return <CreditCard className="h-4 w-4 text-blue-500" />
-              if (lower.includes('community') || lower.includes('caste')) return <Award className="h-4 w-4 text-amber-500" />
-              if (lower.includes('category')) return <Users className="h-4 w-4 text-purple-500" />
-              if (lower.includes('birth') || lower.includes('dob')) return <Baby className="h-4 w-4 text-pink-500" />
-              if (lower.includes('income') || lower.includes('bank') || lower.includes('ifsc') || lower.includes('account')) return <CircleDollarSign className="h-4 w-4 text-emerald-500" />
-              if (lower.includes('mark') || lower.includes('sslc') || lower.includes('hsc')) return <Award className="h-4 w-4 text-purple-500" />
-              return <FileText className="h-4 w-4 text-primary" />
-            }
-
-            const PROFILE_FIELDS = ['student name', 'register number', 'mobile number', 'email', 'name', 'register no', 'mobile']
-            const isProfileField = (fieldName: string) => {
-              const lower = fieldName.toLowerCase().trim()
-              return PROFILE_FIELDS.some(p => lower === p || lower.includes('student name') || lower.includes('register number') || lower.includes('mobile number'))
-            }
-
-            const isYesNoQuestionField = (name: string): boolean => {
-              if (!name) return false
-              const lower = name.trim().toLowerCase()
-              if (lower.includes('yes/no') || lower.includes('yes / no') || lower.endsWith('?')) return true
-              if (['is ', 'did ', 'does ', 'whether ', 'has '].some((p) => lower.startsWith(p))) return true
-              if (['same as', 'first graduate', 'special admission', 'differently abled', 'orphan'].some((p) => lower.includes(p))) return true
-              return false
-            }
-
-            const documentFields = Object.keys(extractedData).filter(f => !isProfileField(f))
-
-            return (
-              <Card className="border border-border bg-card shadow-xl max-w-3xl mx-auto overflow-hidden rounded-2xl">
-                <div className="h-2 bg-gradient-to-r from-primary to-indigo-500" />
-                <CardHeader className="text-center pt-8 pb-6 border-b border-border">
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-600 mb-4 border border-indigo-500/10">
-                    <Sparkles className="h-6 w-6" />
-                  </div>
-                  <CardTitle className="text-2xl font-black text-foreground">Verify Extracted Information</CardTitle>
-                  <CardDescription className="mt-1">
-                    Review your account profile details and verified document fields before final submission.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="p-6 md:p-8 space-y-6">
-
-                  {/* Section 1: Account Profile (Read Only) */}
-                  <div className="p-5 rounded-2xl border border-primary/20 bg-primary/5 space-y-3">
-                    <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-primary">
-                      <Lock className="h-3.5 w-3.5" />
-                      <span>Section 1: Account Profile (Read Only)</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                      <div>
-                        <span className="text-muted-foreground block font-semibold">Student Name</span>
-                        <span className="font-bold text-foreground text-sm">{studentName}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground block font-semibold">Register Number</span>
-                        <span className="font-bold text-foreground text-sm">{registerNum}</span>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground block font-semibold">Mobile Number</span>
-                        <span className="font-bold text-foreground text-sm">{mobileNum}</span>
-                      </div>
-                      {email && (
-                        <div>
-                          <span className="text-muted-foreground block font-semibold">Email</span>
-                          <span className="font-bold text-foreground text-sm">{email}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Section 2: Document Extraction Results */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-extrabold uppercase tracking-wider text-foreground flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-primary" />
-                        <span>Section 2: Document Extraction Results</span>
-                      </h4>
-                      <span className="text-2xs font-semibold text-muted-foreground bg-secondary px-2.5 py-1 rounded-full border border-border">
-                        {documentFields.length} Document Field{documentFields.length !== 1 ? 's' : ''}
-                      </span>
-                    </div>
-
-                    {documentFields.length === 0 ? (
-                      <div className="p-6 rounded-2xl border border-dashed border-border text-center space-y-2 bg-secondary/10">
-                        <CheckCircle className="h-8 w-8 text-green-500 mx-auto" />
-                        <p className="text-sm font-bold text-foreground">All Profile Details Verified</p>
-                        <p className="text-xs text-muted-foreground">
-                          Account profile details verified from student identification. No additional document fields required.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 gap-4">
-                        {documentFields.map((fieldName) => {
-                          const item = extractedData[fieldName]
-                          const value = typeof item === 'object' && item !== null ? item.value : item
-                          const rawConf = typeof item === 'object' && item !== null ? item.confidence : undefined
-                          const isYesNoQuestion = isYesNoQuestionField(fieldName)
-                          const isMissingValue =
-                            value === null ||
-                            value === undefined ||
-                            String(value).trim() === '' ||
-                            String(value).trim().toLowerCase() === 'not detected' ||
-                            String(value).trim().toUpperCase() === 'NULL' ||
-                            (!isYesNoQuestion && (value === 'NO' || value === 'No' || rawConf === 0))
-                          const isOptionalUnuploaded = (value === 'No' || value === 'NO') && rawConf === 0
-                          const confidence = isMissingValue ? 0 : (rawConf !== undefined && rawConf !== null ? rawConf : 80)
-                          const isLow = !isMissingValue && !isOptionalUnuploaded && confidence > 0 && confidence < 90
-                          const isEditing = editingFields[fieldName]
-
-                          return (
-                            <div
-                              key={fieldName}
-                              className={`p-5 rounded-2xl border transition-all duration-300 ${
-                                isLow
-                                  ? 'border-amber-500/40 bg-amber-500/5 dark:bg-amber-950/10 shadow-sm ring-1 ring-amber-500/20'
-                                  : 'border-border bg-card hover:bg-secondary/10'
-                              }`}
-                            >
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                <div className="flex-1 space-y-1.5 min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    {getFieldIcon(fieldName)}
-                                    <span className="text-xs font-bold text-foreground uppercase tracking-wider">
-                                      {fieldName}
-                                    </span>
-                                    <span
-                                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-3xs font-extrabold uppercase border ${
-                                        isMissingValue
-                                          ? 'bg-secondary/80 text-muted-foreground border-border'
-                                          : confidence >= 95
-                                          ? 'bg-green-500/10 text-green-600 border-green-500/15'
-                                          : confidence >= 90
-                                          ? 'bg-blue-500/10 text-blue-600 border-blue-500/15'
-                                          : 'bg-amber-500/10 text-amber-600 border-amber-500/15'
-                                      }`}
-                                    >
-                                      {isLow && <ShieldAlert className="h-3 w-3 stroke-[2.5]" />}
-                                      {confidence}% confidence
-                                    </span>
-                                    {isLow && (
-                                      <span className="text-3xs font-bold text-amber-600 animate-pulse bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-900/60">
-                                        Review Flagged
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  {isEditing ? (
-                                    <input
-                                      type="text"
-                                      value={value === 'NO' || value === 'NULL' ? '' : value || ''}
-                                      onChange={(e) => handleFieldChange(fieldName, e.target.value)}
-                                      className="flex h-10 w-full rounded-lg border border-primary bg-card px-3 py-2 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                      autoFocus
-                                    />
-                                  ) : (
-                                    <div className="text-base font-bold text-foreground truncate">
-                                      {!isMissingValue && value !== null && value !== undefined && String(value).trim() !== '' ? (
-                                        String(value)
-                                      ) : (
-                                        <span className="text-muted-foreground italic font-normal">Not detected</span>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-
-                                <div className="shrink-0">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="font-bold flex items-center gap-1.5 cursor-pointer hover:bg-secondary"
-                                    onClick={() => toggleEditField(fieldName)}
-                                  >
-                                    {isEditing ? (
-                                      <><Save className="h-3.5 w-3.5 text-primary" /> <span>Done</span></>
-                                    ) : (
-                                      <><Edit2 className="h-3.5 w-3.5 text-muted-foreground" /> <span>Edit</span></>
-                                    )}
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex items-start gap-3 bg-secondary/30 border border-border p-4 rounded-xl select-none mt-6">
-                    <input
-                      type="checkbox"
-                      id="confirm-cb"
-                      checked={confirmCheckbox}
-                      onChange={(e) => setConfirmCheckbox(e.target.checked)}
-                      className="h-5 w-5 accent-primary cursor-pointer mt-0.5"
-                    />
-                    <label htmlFor="confirm-cb" className="text-xs font-semibold text-muted-foreground leading-relaxed cursor-pointer">
-                      I confirm that the above information is correct. I have reviewed and corrected any OCR extraction mistakes.
-                    </label>
-                  </div>
-
-                  <div className="flex gap-4 pt-4 border-t border-border mt-6">
-                    <Button
-                      variant="outline"
-                      className="w-full py-5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer transition-all"
-                      onClick={() => navigate(basePath)}
-                    >
-                      <ArrowLeft className="h-4 w-4" /> Back to Uploads
-                    </Button>
-                    <Button
-                      variant="primary"
-                      className="w-full py-5 rounded-xl font-bold shadow-md shadow-primary/10 text-sm flex items-center justify-center gap-2 cursor-pointer transition-all"
-                      onClick={handleConfirmSubmit}
-                      disabled={!confirmCheckbox || isProcessing}
-                    >
-                      {isProcessing ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <><span>Confirm &amp; Submit</span> <ArrowRight className="h-4 w-4" /></>
-                      )}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })()}
-
-
-          {/* ══ STEP 5: Success ══ */}
-          {step === 5 && (
             <Card className="border border-border bg-card shadow-2xl max-w-xl mx-auto overflow-hidden rounded-2xl">
               <div className="h-2 bg-gradient-to-r from-emerald-500 to-green-500" />
               <CardContent className="p-8 space-y-8 text-center">
@@ -1230,9 +936,12 @@ export const StudentDocuments: React.FC = () => {
                   <CheckCircle className="h-10 w-10 animate-[bounce_1s_ease-in-out_1]" />
                 </div>
                 <div className="space-y-2">
-                  <h3 className="text-2xl font-black text-foreground">Submission Successful</h3>
+                  <h3 className="text-2xl font-black text-foreground">Document Upload Completed</h3>
+                  <p className="text-base font-semibold text-green-600 dark:text-green-400">
+                    Document uploaded successfully
+                  </p>
                   <p className="text-sm text-muted-foreground">
-                    Your documents have been successfully verified and cataloged under your admissions cohort file profile.
+                    Your documents have been securely saved and are available for admissions staff processing.
                   </p>
                 </div>
 
@@ -1244,7 +953,7 @@ export const StudentDocuments: React.FC = () => {
                     <div>
                       <span className="text-muted-foreground block text-2xs uppercase font-semibold">Submission ID</span>
                       <span className="font-bold text-foreground font-mono truncate block max-w-[200px]">
-                        {submissionId || 'sub_pending'}
+                        {submissionId || 'sub_stored'}
                       </span>
                     </div>
                     <div>
@@ -1259,20 +968,69 @@ export const StudentDocuments: React.FC = () => {
                       <span className="text-muted-foreground block text-2xs uppercase font-semibold">Register Number</span>
                       <span className="font-bold text-foreground font-mono">{registerNum}</span>
                     </div>
+                    {mobileNum && (
+                      <div>
+                        <span className="text-muted-foreground block text-2xs uppercase font-semibold">Mobile</span>
+                        <span className="font-bold text-foreground">{mobileNum}</span>
+                      </div>
+                    )}
+                    {email && (
+                      <div>
+                        <span className="text-muted-foreground block text-2xs uppercase font-semibold">Email</span>
+                        <span className="font-bold text-foreground truncate block">{email}</span>
+                      </div>
+                    )}
                     <div>
-                      <span className="text-muted-foreground block text-2xs uppercase font-semibold">Submission Time</span>
+                      <span className="text-muted-foreground block text-2xs uppercase font-semibold">Saved Time</span>
                       <span className="font-bold text-foreground font-mono">
                         {submissionTime || new Date().toLocaleString()}
                       </span>
                     </div>
                     <div>
                       <span className="text-muted-foreground block text-2xs uppercase font-semibold">Status</span>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-3xs font-extrabold uppercase bg-green-100 text-green-800 border border-green-200">
-                        Verified
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-3xs font-extrabold uppercase bg-green-100 text-green-800 border border-green-200 dark:bg-green-950/40 dark:text-green-300 dark:border-green-800">
+                        <ShieldCheck className="h-3 w-3" /> Successfully Saved
                       </span>
                     </div>
                   </div>
                 </div>
+
+                {savedDocuments.length > 0 && (
+                  <div className="border border-border rounded-xl bg-secondary/10 p-4 text-left space-y-2.5">
+                    <h5 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                      Stored Documents ({savedDocuments.filter((d) => d.status === 'Uploaded').length})
+                    </h5>
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {savedDocuments.map((d, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center justify-between text-xs py-1.5 px-2 rounded-lg bg-card border border-border/60"
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
+                            <span className="font-semibold text-foreground truncate">{d.document_name}</span>
+                            {d.status === 'Uploaded' && d.version && (
+                              <span className="inline-flex items-center px-1.5 py-0.2 rounded text-3xs font-extrabold bg-primary/10 text-primary border border-primary/20">
+                                v{d.version}
+                              </span>
+                            )}
+                          </div>
+                          <div className="shrink-0">
+                            {d.status === 'Uploaded' ? (
+                              <span className="text-3xs font-bold text-green-600 bg-green-500/10 px-2 py-0.5 rounded border border-green-500/20">
+                                Saved {d.file_size_mb ? `(${d.file_size_mb} MB)` : ''}
+                              </span>
+                            ) : (
+                              <span className="text-3xs font-medium text-muted-foreground italic">
+                                Waived
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="pt-2">
                   <Button

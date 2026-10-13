@@ -13,7 +13,6 @@ from app.models.batch_class import BatchClass
 from app.models.upload_link import UploadLink
 from app.models.student_submission import StudentSubmission
 from app.models.doc_config_version import DocumentConfigurationVersion
-from app.models.excel_template import ExcelBatchTemplate
 from app.models.wanted_field_config import DocumentFieldConfiguration
 from app.core.config import settings
 from app.core.security import create_access_token
@@ -42,7 +41,6 @@ async def setup_test_db():
             UploadLink,
             StudentSubmission,
             DocumentConfigurationVersion,
-            ExcelBatchTemplate,
             DocumentFieldConfiguration,
         ],
     )
@@ -53,7 +51,6 @@ async def setup_test_db():
     await UploadLink.find_all().delete()
     await StudentSubmission.find_all().delete()
     await DocumentConfigurationVersion.find_all().delete()
-    await ExcelBatchTemplate.find_all().delete()
     await DocumentFieldConfiguration.find_all().delete()
 
     yield
@@ -69,7 +66,7 @@ async def client_async():
 
 
 @pytest.mark.asyncio
-async def test_section_roster_association_and_isolation(client_async: AsyncClient):
+async def test_section_student_association_and_isolation(client_async: AsyncClient):
     """
     Test:
     1. Upload link creation tied to Section A.
@@ -392,4 +389,3 @@ async def test_section_card_statistics(client_async: AsyncClient):
     assert resp_stats_b.status_code == 200
     stats_b = resp_stats_b.json()
     assert stats_b == {"students": 2, "pending": 1, "verified": 1, "rejected": 0}
-
