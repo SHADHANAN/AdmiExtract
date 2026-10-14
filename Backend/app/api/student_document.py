@@ -184,8 +184,49 @@ async def serve_student_document_version_file(
         ".webp": "image/webp",
     }
     media_type = media_type_map.get(file_ext) or mimetypes.guess_type(str(resolved_path))[0] or "application/octet-stream"
-    clean_name = re.sub(r'[^a-zA-Z0-9_-]', '_', doc.document_name)
-    safe_filename = f"{clean_name}_v{target_version.version_number}{file_ext}"
+
+    # Look up actual student name from StudentSubmission or User record
+    student_name = None
+    if getattr(doc, "submission_id", None):
+        try:
+            from app.models.student_submission import StudentSubmission
+            sub = await StudentSubmission.get(doc.submission_id)
+            if sub and sub.student_name:
+                student_name = sub.student_name
+        except Exception:
+            pass
+
+    if not student_name and doc.student_id:
+        try:
+            from app.models.student_submission import StudentSubmission
+            sub = await StudentSubmission.find_one(
+                StudentSubmission.register_number == doc.student_id,
+                StudentSubmission.batch_id == doc.batch_id,
+            )
+            if sub and sub.student_name:
+                student_name = sub.student_name
+        except Exception:
+            pass
+
+    if not student_name and doc.student_id:
+        try:
+            from app.models.user import User
+            u = await User.find_one(User.register_number == doc.student_id)
+            if not u:
+                u = await User.find_one(User.username == doc.student_id)
+            if u and u.name:
+                student_name = u.name
+        except Exception:
+            pass
+
+    from app.utils.file_security import format_document_download_filename, build_content_disposition_header
+    safe_filename = format_document_download_filename(
+        register_number=doc.student_id,
+        student_name=student_name,
+        document_name=doc.document_name,
+        original_filename_or_ext=resolved_path.name or file_ext,
+    )
+    content_disp = build_content_disposition_header(safe_filename, disposition_type="inline")
 
     try:
         await AuditLog(
@@ -194,13 +235,13 @@ async def serve_student_document_version_file(
             actor_username=current_user.username,
             actor_role=current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
             submission_id=str(doc.id),
-            student_name=f"Student_{doc.student_id}",
+            student_name=student_name or f"Student_{doc.student_id}",
             register_number=str(doc.student_id),
             batch_id=doc.batch_id,
             class_id=doc.class_id,
             documents_count=1,
             result="SUCCESS",
-            failure_info=f"Version: {target_version.version_number} | Doc: {doc.document_name}",
+            failure_info=f"Version: {target_version.version_number} | Doc: {doc.document_name} | File: {safe_filename}",
         ).insert()
     except Exception:
         pass
@@ -210,7 +251,7 @@ async def serve_student_document_version_file(
         media_type=media_type,
         filename=safe_filename,
         headers={
-            "Content-Disposition": f'inline; filename="{safe_filename}"',
+            "Content-Disposition": content_disp,
             "X-Content-Type-Options": "nosniff",
             "Cache-Control": "private, no-store",
         },

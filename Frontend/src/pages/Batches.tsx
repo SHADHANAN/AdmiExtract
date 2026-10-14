@@ -262,16 +262,14 @@ export const Batches: React.FC = () => {
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
                     <FolderOpen className="h-4.5 w-4.5" />
                   </div>
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold capitalize ${
-                    batch.status === 'active'
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold capitalize ${batch.status === 'active'
                       ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
                       : batch.status === 'closed'
-                      ? 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'
-                      : 'bg-secondary text-muted-foreground border border-border'
-                  }`}>
-                    <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${
-                      batch.status === 'active' ? 'bg-emerald-500' : batch.status === 'closed' ? 'bg-rose-500' : 'bg-muted-foreground'
-                    }`} />
+                        ? 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'
+                        : 'bg-secondary text-muted-foreground border border-border'
+                    }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${batch.status === 'active' ? 'bg-emerald-500' : batch.status === 'closed' ? 'bg-rose-500' : 'bg-muted-foreground'
+                      }`} />
                     {batch.status}
                   </span>
                 </div>
@@ -420,7 +418,7 @@ export const Batches: React.FC = () => {
           />
 
           <Input
-            label="Academic Year"
+            label="Batch"
             type="text"
             placeholder="2025-2029"
             value={newBatchYear}

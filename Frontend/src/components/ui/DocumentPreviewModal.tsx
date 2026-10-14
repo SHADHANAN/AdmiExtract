@@ -33,6 +33,62 @@ export interface DocumentPreviewTarget {
   fileType?: string
   fileName?: string
   studentName?: string
+  registerNumber?: string
+}
+
+export function parseContentDispositionFilename(header: string | null | undefined): string | null {
+  if (!header) return null
+
+  // 1. Check RFC 5987 / RFC 6266 filename*=UTF-8''encoded_name
+  const starMatch = header.match(/filename\*\s*=\s*UTF-8''([^;\r\n]+)/i)
+  if (starMatch && starMatch[1]) {
+    try {
+      const decoded = decodeURIComponent(starMatch[1].trim().replace(/^["']|["']$/g, ''))
+      if (decoded) return decoded
+    } catch {
+      // Fall through to standard filename
+    }
+  }
+
+  // 2. Check standard filename="quoted_name" or filename=unquoted_name
+  const standardMatch = header.match(/filename\s*=\s*(?:"([^"]+)"|([^;\s\r\n]+))/i)
+  if (standardMatch) {
+    const val = (standardMatch[1] || standardMatch[2] || '').trim()
+    if (val) return val
+  }
+
+  return null
+}
+
+export function sanitizeFilenamePart(part: string | undefined | null, fallback: string): string {
+  if (!part) return fallback
+  let clean = part.trim()
+  // Strip version suffix like " (v1)"
+  clean = clean.replace(/\s*\([vV]\d+\)/g, '')
+  // Replace disallowed characters and whitespace with underscores
+  clean = clean.replace(/[\s\\/:*?"<>|\x00-\x1f\x7f;,=]+/g, '_')
+  clean = clean.replace(/_+/g, '_').replace(/^_+|_+$/g, '')
+  return clean || fallback
+}
+
+export function computeDocumentDownloadFilename(target: DocumentPreviewTarget, fallbackExt = 'pdf'): string {
+  const reg = sanitizeFilenamePart(target.registerNumber, 'STUDENT')
+  const name = sanitizeFilenamePart(target.studentName, 'UNKNOWN')
+  const doc = sanitizeFilenamePart(target.documentName, 'Document')
+
+  let ext = ''
+  if (target.fileName && target.fileName.includes('.')) {
+    const parts = target.fileName.split('.')
+    const rawExt = parts.pop() || fallbackExt
+    ext = `.${rawExt.toLowerCase()}`
+  } else if (target.fileType) {
+    const cleanFt = target.fileType.toLowerCase().replace(/[^a-z0-9]/g, '')
+    ext = cleanFt ? `.${cleanFt}` : `.${fallbackExt}`
+  } else {
+    ext = `.${fallbackExt}`
+  }
+
+  return `${reg}_${name}_${doc}${ext}`
 }
 
 interface DocumentPreviewModalProps {
@@ -110,6 +166,7 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({ targ
     desc: 'The document file could not be loaded or previewed. Please retry or contact the administrator.',
   })
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  const [serverFileName, setServerFileName] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1.0)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [retryCount, setRetryCount] = useState(0)
@@ -150,6 +207,7 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({ targ
     let cancelled = false
     revokePrevBlob()
     setBlobUrl(null)
+    setServerFileName(null)
     setPdfDoc(null)
     setPageNum(1)
     setNumPages(1)
@@ -188,6 +246,12 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({ targ
           setErrorInfo(resolveErrorMessage(res.status))
           setLoadState('error')
           return
+        }
+
+        const disposition = res.headers.get('content-disposition')
+        const headerFilename = parseContentDispositionFilename(disposition)
+        if (headerFilename) {
+          setServerFileName(headerFilename)
         }
 
         const blob = await res.blob()
@@ -305,6 +369,7 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({ targ
     if (!target) {
       revokePrevBlob()
       setBlobUrl(null)
+      setServerFileName(null)
       setPdfDoc(null)
       setLoadState('idle')
       resetTransform()
@@ -339,8 +404,8 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({ targ
     const a = document.createElement('a')
     a.href = blobUrl
     a.download =
-      target.fileName ||
-      `${target.documentName.replace(/\s+/g, '_')}.${(target.fileType || 'pdf').toLowerCase()}`
+      serverFileName ||
+      computeDocumentDownloadFilename(target, isPdf ? 'pdf' : (target.fileType || 'jpg').toLowerCase())
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -377,10 +442,10 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({ targ
     setIsDragging(false)
   }
 
-  // Display filename: prefer target.fileName, otherwise synthesize clean name
+  // Authoritative download filename: prefer server header, fallback to computed format
   const displayFileName =
-    target.fileName ||
-    `${target.documentName.toLowerCase().replace(/\s+/g, '_')}.${isPdf ? 'pdf' : (target.fileType || 'jpg').toLowerCase()}`
+    serverFileName ||
+    computeDocumentDownloadFilename(target, isPdf ? 'pdf' : (target.fileType || 'jpg').toLowerCase())
 
   return (
     <div

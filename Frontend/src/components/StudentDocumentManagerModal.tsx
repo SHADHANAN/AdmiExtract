@@ -18,7 +18,6 @@ import {
   Sparkles,
   Eye,
   CheckCircle2,
-  Clock,
   RefreshCw,
   Plus,
   Check,
@@ -444,60 +443,39 @@ export const StudentDocumentManagerModal: React.FC<StudentDocumentManagerProps> 
                     </div>
 
                     {/* Actions Toolbar */}
-                    <div className="pt-3 border-t border-border flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {/* 1. View / Preview */}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setPreviewTarget({
-                              studentDocumentId: doc.id,
-                              versionId: doc.active_version_id,
-                              documentName: doc.document_name,
-                              fileName: activeVersion?.original_filename,
-                              fileType: activeVersion?.mime_type,
-                              studentName: student.studentName || student.name,
-                            })
-                          }}
-                          className="cursor-pointer gap-1 text-xs py-1 h-8"
-                        >
-                          <Eye className="h-3.5 w-3.5 text-primary" /> Preview
-                        </Button>
-
-                        {/* 2. Re-upload / Replace */}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedDocForUploadVersion(doc)
-                            setUploadFile(null)
-                          }}
-                          className="cursor-pointer gap-1 text-xs py-1 h-8"
-                          title="Re-upload or replace this document file"
-                        >
-                          <RefreshCw className="h-3.5 w-3.5 text-blue-500" /> Re-upload
-                        </Button>
-
-                        {/* 3. Extraction History */}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setSelectedDocExtractions(doc)}
-                          className="cursor-pointer gap-1 text-xs py-1 h-8"
-                        >
-                          <Clock className="h-3.5 w-3.5 text-muted-foreground" /> Extractions
-                        </Button>
-                      </div>
-
-                      {/* 5. Extract Data */}
+                    <div className="pt-3 border-t border-border flex items-center gap-2 flex-wrap">
+                      {/* 1. View / Preview */}
                       <Button
-                        variant="primary"
+                        variant="outline"
                         size="sm"
-                        onClick={() => setSelectedDocForExtract(doc)}
-                        className="cursor-pointer gap-1.5 text-xs py-1 h-8 shadow-xs"
+                        onClick={() => {
+                          setPreviewTarget({
+                            studentDocumentId: doc.id,
+                            versionId: doc.active_version_id,
+                            documentName: doc.document_name,
+                            fileName: activeVersion?.original_filename,
+                            fileType: activeVersion?.mime_type,
+                            studentName: student.studentName || student.name,
+                            registerNumber: studentId,
+                          })
+                        }}
+                        className="cursor-pointer gap-1 text-xs py-1 h-8"
                       >
-                        <Sparkles className="h-3.5 w-3.5" /> Extract Data
+                        <Eye className="h-3.5 w-3.5 text-primary" /> Preview
+                      </Button>
+
+                      {/* 2. Re-upload / Replace */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedDocForUploadVersion(doc)
+                          setUploadFile(null)
+                        }}
+                        className="cursor-pointer gap-1 text-xs py-1 h-8"
+                        title="Re-upload or replace this document file"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5 text-blue-500" /> Re-upload
                       </Button>
                     </div>
                   </div>
@@ -701,6 +679,7 @@ export const StudentDocumentManagerModal: React.FC<StudentDocumentManagerProps> 
                               fileName: v.original_filename,
                               fileType: v.mime_type,
                               studentName: student.studentName || student.name,
+                              registerNumber: studentId,
                             })
                           }}
                           className="cursor-pointer gap-1 text-xs py-1 h-7"

@@ -530,6 +530,7 @@ export const Students: React.FC = () => {
                             fileType: doc.fileType,
                             fileName: doc.fileName,
                             studentName: selectedStudent.name,
+                            registerNumber: selectedStudent.registerNum || selectedStudent.id,
                           })
                         }
                       }}
@@ -581,6 +582,7 @@ export const Students: React.FC = () => {
                                 fileType: doc.fileType,
                                 fileName: doc.fileName,
                                 studentName: selectedStudent.name,
+                                registerNumber: selectedStudent.registerNum || selectedStudent.id,
                               })
                             }}
                             className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white dark:bg-emerald-500 dark:hover:bg-emerald-400 dark:text-slate-950 transition-colors shadow-2xs cursor-pointer"

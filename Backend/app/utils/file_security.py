@@ -207,3 +207,99 @@ def is_safe_storage_path(target_path: Path, storage_root: Optional[Path] = None)
         return resolved == root or root in resolved.parents
     except Exception:
         return False
+
+
+def format_document_download_filename(
+    register_number: Optional[str],
+    student_name: Optional[str],
+    document_name: Optional[str],
+    original_filename_or_ext: Optional[str] = None,
+    original_filename: Optional[str] = None,
+    mime_type: Optional[str] = None,
+) -> str:
+    """
+    Generate an authoritative, standardized document download filename using the exact format:
+    RegisterNumber_StudentName_DocumentName.extension
+
+    Examples:
+    - 23CS001_Arun_Kumar_Aadhaar_Card.jpg
+    - 23CS001_Arun_Kumar_Community_Certificate.pdf
+    - 23CS001_Arun_Kumar_12th_HSC_Marksheet.jpg
+
+    Rules:
+    1. Retrieve the student's actual register number and name from the authorized student record,
+       and the document name from the document's configured display name.
+    2. Sanitize filename characters safely, preserve non-English names where supported,
+       and preserve the original file extension.
+    3. Never use a hardcoded register number or student name. If a field is missing, use a safe fallback.
+    """
+    def _clean_segment(text: Optional[str], fallback: str) -> str:
+        if not text or not str(text).strip():
+            return fallback
+        val = str(text).strip()
+        # Remove version suffix like "(v1)" if present
+        val = re.sub(r'\s*\(v\d+\)\s*$', '', val, flags=re.IGNORECASE)
+        # Strip forbidden characters: path separators, control chars, quotes, punctuation that breaks headers
+        # Preserve Unicode letters (non-English), digits, and safe characters
+        val = re.sub(r'[\s\\/:*?"<>|\x00-\x1f\x7f;,=]+', '_', val)
+        # Collapse multiple underscores
+        val = re.sub(r'_+', '_', val).strip('._')
+        return val or fallback
+
+    clean_reg = _clean_segment(register_number, "STUDENT")
+    clean_name = _clean_segment(student_name, "UNKNOWN")
+    clean_doc = _clean_segment(document_name, "Document")
+
+    # Resolve extension source
+    source_ref = original_filename_or_ext or original_filename
+
+    ext = ""
+    if source_ref:
+        raw_ref = str(source_ref).strip()
+        if raw_ref.startswith("."):
+            ext = raw_ref.lower()
+        else:
+            p_ext = Path(raw_ref).suffix.lower()
+            if p_ext:
+                ext = p_ext
+            elif "." in raw_ref:
+                ext = "." + raw_ref.split(".")[-1].lower()
+
+    if not ext and mime_type:
+        mime_clean = str(mime_type).strip().lower()
+        if "pdf" in mime_clean:
+            ext = ".pdf"
+        elif "jpeg" in mime_clean or "jpg" in mime_clean:
+            ext = ".jpg"
+        elif "png" in mime_clean:
+            ext = ".png"
+        elif "webp" in mime_clean:
+            ext = ".webp"
+
+    if not ext:
+        ext = ".pdf"
+
+    # Sanitize extension (alphanumeric only after dot)
+    ext = "." + re.sub(r'[^a-zA-Z0-9]', '', ext.lstrip('.'))
+    if ext == ".":
+        ext = ".pdf"
+
+    return f"{clean_reg}_{clean_name}_{clean_doc}{ext}"
+
+
+def build_content_disposition_header(filename: str, disposition_type: str = "inline") -> str:
+    """
+    Construct an RFC 6266 / RFC 5987 compliant Content-Disposition header.
+    Supports UTF-8 encoded filenames for non-English student names while providing
+    safe ASCII fallback for older clients.
+    """
+    import urllib.parse
+
+    ascii_fallback = re.sub(r'[^\x20-\x7E]', '_', filename).replace('"', '\\"')
+    encoded = urllib.parse.quote(filename, encoding="utf-8")
+
+    if ascii_fallback == filename:
+        return f'{disposition_type}; filename="{filename}"'
+    else:
+        return f'{disposition_type}; filename="{ascii_fallback}"; filename*=UTF-8\'\'{encoded}'
+

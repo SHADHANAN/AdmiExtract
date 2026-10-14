@@ -65,6 +65,7 @@ async def test_document_preview_full_flow(client_async: AsyncClient, db_client):
         "department_id": "AIML",
         "student_name": "Preview Test Student",
         "register_number": "PREV_REG_01",
+        "normalized_register_number": "prev_reg_01",
         "mobile_number": "9876543210",
         "submission_status": "Submitted",
         "documents": [
@@ -87,6 +88,7 @@ async def test_document_preview_full_flow(client_async: AsyncClient, db_client):
         "department_id": "AIML",
         "student_name": "JPG Student",
         "register_number": "PREV_REG_02",
+        "normalized_register_number": "prev_reg_02",
         "mobile_number": "9876543211",
         "submission_status": "Submitted",
         "documents": [
@@ -104,6 +106,7 @@ async def test_document_preview_full_flow(client_async: AsyncClient, db_client):
         "department_id": "AIML",
         "student_name": "PNG Student",
         "register_number": "PREV_REG_03",
+        "normalized_register_number": "prev_reg_03",
         "mobile_number": "9876543212",
         "submission_status": "Submitted",
         "documents": [
@@ -125,7 +128,7 @@ async def test_document_preview_full_flow(client_async: AsyncClient, db_client):
         assert res_pdf.status_code == 200
         assert res_pdf.headers.get("content-type") == "application/pdf"
         assert "inline" in res_pdf.headers.get("content-disposition", "")
-        assert "Aadhaar_Card.pdf" in res_pdf.headers.get("content-disposition", "")
+        assert "PREV_REG_01_Preview_Test_Student_Aadhaar_Card.pdf" in res_pdf.headers.get("content-disposition", "")
         assert len(res_pdf.content) > 1000
         assert res_pdf.content.startswith(b"%PDF")
 
@@ -210,6 +213,7 @@ async def test_document_preview_security(client_async: AsyncClient, db_client):
         "department_id": "AIML",
         "student_name": "AIML Preview Student",
         "register_number": "SEC_PREV_01",
+        "normalized_register_number": "sec_prev_01",
         "mobile_number": "9876543210",
         "submission_status": "Submitted",
         "documents": [
