@@ -44,4 +44,4 @@ google-genai>=1.0.0
 rapidfuzz>=3.6.0
 pypdf>=4.0.0
 pillow>=10.0.0
-rapidocr_onnxruntime>=1.4.0
+rapidocr-onnxruntime>=1.4.0
