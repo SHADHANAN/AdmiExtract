@@ -46,16 +46,16 @@ class AIExtractionService:
     ) -> str:
         """
         Generate dynamic AI extraction prompt based strictly on requested target fields.
-        Enforces strict non-hallucination policy and "NULL" with 0 confidence for missing fields.
+        Enforces strict non-hallucination policy and null with 0 confidence for missing fields.
         """
         fields_bullet_list = "\n".join([f"- {field}" for field in required_fields])
 
-        # Build dynamic example JSON structure demonstrating both extracted and NO fields
+        # Build dynamic example JSON structure demonstrating both extracted and null fields
         example_json_dict = {}
         if required_fields:
             example_json_dict[required_fields[0]] = {"value": "Sample Value", "confidence": 100}
         if len(required_fields) > 1:
-            example_json_dict[required_fields[1]] = {"value": "NO", "confidence": 0}
+            example_json_dict[required_fields[1]] = {"value": None, "confidence": 0}
         example_json_str = json.dumps(example_json_dict, indent=2)
 
         from app.utils.field_canonicalizer import is_yes_no_question_field
@@ -73,7 +73,7 @@ SPECIAL ADDRESS EXTRACTION RULE:
 
         boolean_hint = """
 SPECIAL BOOLEAN / YES-NO QUESTION RULE:
-- For fields asking Yes/No questions or boolean flags (e.g. "Communication address same as permanent address", "Is EMIS ID Available", "Is the student the first graduate in the family?", "Did you come under any special admission Quota?", "Did you belong to differently abled category?", "Orphan Category (Yes/No)"), return ONLY "Yes" or "No" (or "NO" with confidence 0 if not determinable).
+- For fields asking Yes/No questions or boolean flags (e.g. "Communication address same as permanent address", "Is EMIS ID Available", "Is the student the first graduate in the family?", "Did you come under any special admission Quota?", "Did you belong to differently abled category?", "Orphan Category (Yes/No)"), return ONLY "Yes" or "No".
 - Never return full text addresses or multi-word descriptive sentences for boolean fields.
 """
 
@@ -84,7 +84,7 @@ SPECIAL EMIS ID EXTRACTION RULE:
 - Source Document: Transfer Certificate (TC) ONLY. Search ONLY the uploaded Transfer Certificate for the EMIS ID.
 - Extract the EMIS ID exactly as printed. The EMIS ID is usually a numeric identifier (commonly 9–11 digits, depending on the format issued).
 - Do NOT extract Admission Number, Register Number, Roll Number, UDISE Code, or any other ID as the EMIS ID.
-- If the EMIS ID is not present in the Transfer Certificate, return "value": "NO", "confidence": 0.
+- If the EMIS ID is not present in the Transfer Certificate, return "value": null, "confidence": 0.
 - Do NOT search other documents (Aadhaar, Community Certificate, Income Certificate, etc.) for the EMIS ID.
 - Preserve the value exactly as printed without adding or removing digits.
 """
@@ -105,13 +105,13 @@ STRICT EXTRACTION POLICY & RULES:
 3. NEVER copy values from unrelated documents or fill blanks with likely values (e.g. guessing Occupation as "Farmer" when not explicitly mentioned).
 4. Do NOT derive values unless explicitly allowed by field-specific rules.
 5. IF A REQUESTED FIELD IS NOT EXPLICITLY PRESENT OR FOUND IN THE DOCUMENT, YOU MUST RETURN:
-   "value": "NO", "confidence": 0
+   "value": null, "confidence": 0
 6. CONFIDENCE SCORE RULES:
    - 100: Value explicitly visible and verified in the document.
    - 70-99: OCR uncertainty but the value is still present in the text.
-   - 0: Field not found (value MUST be "NO").
+   - 0: Field not found (value MUST be null).
    - NEVER assign high confidence to guessed or inferred values.
-7. PRIORITIZE ACCURACY OVER COMPLETENESS: Returning "NO" is always preferable to returning an incorrect or guessed value. Preserve exact document values whenever possible.
+7. PRIORITIZE ACCURACY OVER COMPLETENESS: Returning null is always preferable to returning an incorrect or guessed value. Preserve exact document values whenever possible.
 8. Extract ONLY the requested target fields listed above. Never return extra fields outside the list.
 9. Return valid JSON ONLY. No markdown wrappers, no extra explanation text.
 10. The JSON structure MUST map each requested target field name to an object containing "value" and "confidence" (integer between 0 and 100).
@@ -252,7 +252,7 @@ CLEAN OCR TEXT:
                 if f in heuristic_data:
                     final_extracted[f] = heuristic_data[f]
                 else:
-                    final_extracted[f] = {"value": "NO", "confidence": 0}
+                    final_extracted[f] = {"value": None, "confidence": 0}
         else:
             final_extracted.update(parsed_llm_result)
             _log("\n" + "=" * 24)
@@ -297,7 +297,7 @@ CLEAN OCR TEXT:
                 if matching_key:
                     field_data = data[matching_key]
                 else:
-                    field_data = {"value": "NO", "confidence": 0}
+                    field_data = {"value": None, "confidence": 0}
             else:
                 field_data = data[field]
 
@@ -306,8 +306,12 @@ CLEAN OCR TEXT:
                 conf = field_data.get("confidence")
 
                 if val is None or str(val).strip().upper() in ["NO", "NULL", "NONE", "N/A", "NOT DETECTED", "NOT FOUND", "UNAVAILABLE", ""]:
-                    val = "NO"
-                    conf = 0
+                    if is_yes_no_question_field(field):
+                        val = "No" if str(val).strip().upper() == "NO" and conf and conf > 0 else None
+                    else:
+                        val = None
+                    if val is None:
+                        conf = 0
                 else:
                     try:
                         conf = int(conf) if conf is not None else 80
@@ -317,10 +321,9 @@ CLEAN OCR TEXT:
 
                 if is_yes_no_question_field(field):
                     norm_val = normalize_yes_no_value(val)
-                    if norm_val is None or norm_val == "No":
-                        val = "NO" if conf == 0 or norm_val is None else "No"
-                        if norm_val is None:
-                            conf = 0
+                    if norm_val is None:
+                        val = None
+                        conf = 0
                     else:
                         val = norm_val
 
@@ -330,22 +333,29 @@ CLEAN OCR TEXT:
                 }
             elif field_data is None:
                 formatted[field] = {
-                    "value": "NO",
+                    "value": None,
                     "confidence": 0,
                 }
             else:
                 val_str = str(field_data).strip()
                 if not val_str or val_str.upper() in ["NO", "NULL", "NONE", "N/A", "NOT DETECTED", "NOT FOUND", "UNAVAILABLE"]:
-                    formatted[field] = {
-                        "value": "NO",
-                        "confidence": 0,
-                    }
+                    if is_yes_no_question_field(field):
+                        norm_val = normalize_yes_no_value(val_str)
+                        formatted[field] = {
+                            "value": norm_val,
+                            "confidence": 100 if norm_val else 0,
+                        }
+                    else:
+                        formatted[field] = {
+                            "value": None,
+                            "confidence": 0,
+                        }
                 else:
                     if is_yes_no_question_field(field):
                         norm_val = normalize_yes_no_value(val_str)
                         formatted[field] = {
-                            "value": norm_val if norm_val else "NO",
-                            "confidence": (100 if norm_val else 0) if norm_val else 0,
+                            "value": norm_val,
+                            "confidence": 100 if norm_val else 0,
                         }
                     else:
                         formatted[field] = {
@@ -474,11 +484,20 @@ CLEAN OCR TEXT:
                 else:
                     results[field] = {"value": "No", "confidence": 100}
 
-            # Date of Birth
+            # Date of Birth (Strictly require DOB contextual label, never confuse with Issue Date)
             elif any(k in f_norm for k in ["dob", "date of birth", "birth"]):
-                m = re.search(r"(?:DOB|DATE OF BIRTH)\s*[:\s]*(\d{2}[/\.\-]\d{2}[/\.\-]\d{4})", text, re.IGNORECASE)
+                m = re.search(r"(?:DOB|DATE OF BIRTH|BIRTH DATE|பிறந்த\s*தேதி)\s*[:\s\.\-]*(\d{2}[/\.\-]\d{2}[/\.\-]\d{4})", text, re.IGNORECASE)
                 if not m:
-                    m = re.search(r"\b(\d{2}[/\.\-]\d{2}[/\.\-]\d{4})\b", text)
+                    lines = text.splitlines()
+                    for line in lines:
+                        line_clean = line.strip()
+                        if any(bad in line_clean.lower() for bad in ["issue", "leaving", "admission date", "valid", "printed", "download"]):
+                            continue
+                        if re.search(r"\b(?:dob|birth|born)\b", line_clean, re.IGNORECASE):
+                            dm = re.search(r"\b(\d{2}[/\.\-]\d{2}[/\.\-]\d{4})\b", line_clean)
+                            if dm:
+                                m = dm
+                                break
                 if m:
                     raw_date = m.group(1).replace("-", "/")
                     if "dd.mm.yyyy" in f_norm:
@@ -499,12 +518,22 @@ CLEAN OCR TEXT:
                 elif "backward class" in text.lower():
                     results[field] = {"value": "BC", "confidence": 90}
 
+            # Aadhaar Number (Strictly requires Aadhaar context / label)
+            elif any(k in f_norm for k in ["aadhaar", "aadhar", "uid"]) and not any(k in f_norm for k in ["is ", "available"]):
+                m = re.search(r"(?:Aadhaar|Aadhar|UIDAI|UID|ஆதார்)\s*(?:No\.?|Number)?\s*[:\s\.\-]*([0-9]{4}\s+[0-9]{4}\s+[0-9]{4}|[0-9]{12})", text, re.IGNORECASE)
+                if not m and any(k in text.lower() for k in ["aadhaar", "aadhar", "uidai", "mera aadhaar", "ஆதார்"]):
+                    m = re.search(r"\b([2-9][0-9]{3}\s+[0-9]{4}\s+[0-9]{4})\b", text)
+                if m:
+                    raw_aadhaar = re.sub(r"\s+", " ", m.group(1).strip())
+                    digits = re.sub(r"\D", "", raw_aadhaar)
+                    if len(digits) == 12:
+                        results[field] = {"value": raw_aadhaar, "confidence": 95}
+
             # EMIS ID
             elif "emis" in f_norm and not any(q in f_norm for q in ["is ", "available"]):
                 m = re.search(r"EMIS\s*(?:ID)?\s*(?:NO\.?)?[\s\.:]*(\d{9,16})", text, re.IGNORECASE)
                 if m:
                     results[field] = {"value": m.group(1).strip(), "confidence": 95}
-
 
             # Permanent Address / Address
             elif "address" in f_norm:
@@ -580,4 +609,3 @@ CLEAN OCR TEXT:
                     results[field] = {"value": m.group(1), "confidence": 90}
 
         return results
-

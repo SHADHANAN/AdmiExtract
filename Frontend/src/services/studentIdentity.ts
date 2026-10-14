@@ -15,6 +15,19 @@ export interface VerifyIdentityResponse {
   class_name?: string | null
   upload_link_id?: string | null
   token?: string | null
+  submission_id?: string | null
+  submission_status?: string | null
+  uploaded_documents?: Array<{
+    document_name: string
+    document_type?: string | null
+    status: string
+    file_path?: string | null
+    filename?: string | null
+    file_size_mb?: number | null
+    file_type?: string | null
+    version?: number | null
+    uploaded_at?: string | null
+  }> | null
 }
 
 /** Session key used to persist the student's temporary submission context in sessionStorage. */
@@ -27,10 +40,23 @@ export interface StudentSubmissionSession {
   class_name?: string | null
   upload_link_id?: string | null
   token?: string | null
+  submission_id?: string | null
   register_number: string
   student_name: string
   mobile_number: string
   email?: string
+  submission_status?: string | null
+  uploaded_documents?: Array<{
+    document_name: string
+    document_type?: string | null
+    status: string
+    file_path?: string | null
+    filename?: string | null
+    file_size_mb?: number | null
+    file_type?: string | null
+    version?: number | null
+    uploaded_at?: string | null
+  }> | null
 }
 
 /**
@@ -80,4 +106,3 @@ export async function getStudentMe(): Promise<StudentProfile> {
   const response = await api.get('/students/me')
   return response.data as StudentProfile
 }
-

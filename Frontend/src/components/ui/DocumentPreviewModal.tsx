@@ -24,8 +24,11 @@ import { useAuthStore } from '../../store/useAuthStore'
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker
 
 export interface DocumentPreviewTarget {
-  submissionId: string
-  documentIndex: number
+  submissionId?: string
+  documentIndex?: number
+  studentDocumentId?: string
+  versionId?: string
+  versionNumber?: number
   documentName: string
   fileType?: string
   fileName?: string
@@ -156,12 +159,28 @@ export const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({ targ
 
     const fetchDoc = async () => {
       try {
-        const url = `${API_BASE_URL}/student-submissions/${target.submissionId}/documents/${target.documentIndex}/file`
-        const res = await fetch(url, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
+        let url = ''
+        if (target.studentDocumentId) {
+          url = target.versionId
+            ? `${API_BASE_URL}/student-documents/${target.studentDocumentId}/versions/${target.versionId}/file`
+            : `${API_BASE_URL}/student-documents/${target.studentDocumentId}/file`
+        } else if (target.submissionId !== undefined && target.documentIndex !== undefined) {
+          url = `${API_BASE_URL}/student-submissions/${target.submissionId}/documents/${target.documentIndex}/file`
+        } else {
+          setErrorInfo({
+            title: 'Invalid Target',
+            desc: 'Missing document reference ID.',
+          })
+          setLoadState('error')
+          return
+        }
+
+        const headers: Record<string, string> = {}
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
+
+        const res = await fetch(url, { headers })
 
         if (cancelled) return
 

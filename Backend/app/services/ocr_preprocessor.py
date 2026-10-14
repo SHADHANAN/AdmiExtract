@@ -146,7 +146,7 @@ class OCRPreprocessor:
         if not text:
             return results
 
-        # 1. Aadhaar Number (12 digits, format XXXX XXXX XXXX, XXXX-XXXX-XXXX, XXXX XXXX\nXXXX, or XXXXXXXXXXXX)
+        # 1. Aadhaar Number (12 digits, format XXXX XXXX XXXX, XXXX-XXXX-XXXX, or XXXXXXXXXXXX ONLY with explicit Aadhaar context)
         from app.utils.normalization import (
             normalize_aadhaar_digits,
             validate_and_normalize_aadhaar,
@@ -168,8 +168,8 @@ class OCRPreprocessor:
                 aadhaar_found_digits = norm
                 break
 
-        # Pattern B: 4-4-4 digit pattern with spaces, hyphens, or newlines (e.g. 1234 5678 9012, 1234-5678-9012, 1234 5678\n9012)
-        if not aadhaar_found_digits:
+        # Pattern B: 4-4-4 digit pattern ONLY when Aadhaar context exists in document
+        if not aadhaar_found_digits and any(k in text.lower() for k in ["aadhaar", "aadhar", "uid", "uidai", "ஆதார்"]):
             raw_matches = re.findall(
                 r"\b([2-9][0-9OIlSBG]{3}[\s\-\n\r]+[0-9OIlSBG]{4}[\s\-\n\r]+[0-9OIlSBG]{4})\b",
                 text
@@ -182,15 +182,6 @@ class OCRPreprocessor:
                         aadhaar_found_digits = norm
                         break
 
-        # Pattern C: Continuous 12 digits (with Aadhaar context in document)
-        if not aadhaar_found_digits and any(k in text.lower() for k in ["aadhaar", "aadhar", "uid", "uidai", "ஆதார்"]):
-            cont_matches = re.findall(r"\b([2-9]\d{11})\b", text)
-            for cm in cont_matches:
-                norm = normalize_aadhaar_digits(cm)
-                if norm:
-                    aadhaar_found_digits = norm
-                    break
-
         if aadhaar_found_digits:
             formatted_aadhaar = f"{aadhaar_found_digits[:4]} {aadhaar_found_digits[4:8]} {aadhaar_found_digits[8:]}"
             results["aadhaar_number"] = {"value": aadhaar_found_digits, "confidence": 100}
@@ -198,17 +189,14 @@ class OCRPreprocessor:
             results["Aadhaar Card"] = {"value": formatted_aadhaar, "confidence": 100}
             results["Aadhaar Number (without space)"] = {"value": aadhaar_found_digits, "confidence": 100}
 
-        # 2. VID (16 digits, format 9183 9618 9309 8831)
+        # 2. VID (16 digits, format 9183 9618 9309 8831 with explicit VID marker)
         vid_match = re.search(r"\bVID\s*[:\-]?\s*([2-9]\d{3}\s?\d{4}\s?\d{4}\s?\d{4})\b", text, re.IGNORECASE)
-        if not vid_match:
-            vid_match = re.search(r"\b([2-9]\d{3}\s?\d{4}\s?\d{4}\s?\d{4})\b", text)
         if vid_match:
             results["VID"] = {"value": vid_match.group(1).strip(), "confidence": 100}
 
-        # 3. DOB (Date of Birth format DD/MM/YYYY or DD-MM-YYYY)
-        dob_match = re.search(r"(?:DOB|Date of Birth)\s*[:/\-]?\s*(\d{2}[/-]\d{2}[/-]\d{4})", text, re.IGNORECASE)
-        if not dob_match:
-            dob_match = re.search(r"\b(\d{2}[/-]\d{2}[/-]\d{4})\b", text)
+        # 3. DOB (Date of Birth format DD/MM/YYYY or DD-MM-YYYY strictly with DOB / Date of Birth / பிறந்த தேதி label)
+        # Never match arbitrary dates like Issue Date or Leaving Date as DOB
+        dob_match = re.search(r"(?:DOB|Date of Birth|Birth Date|பிறந்த\s*தேதி)\s*[:/\-]?\s*(\d{2}[/-]\d{2}[/-]\d{4})", text, re.IGNORECASE)
         if dob_match:
             results["DOB"] = {"value": dob_match.group(1).strip(), "confidence": 100}
 

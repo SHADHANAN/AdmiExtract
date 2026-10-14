@@ -22,6 +22,8 @@ export interface DocumentTypeOverviewItem {
   fields: WantedFieldItem[]
   available_fields?: string[]
   template_headers: string[]
+  class_id?: string | null
+  scope?: 'SECTION' | 'BATCH'
 }
 
 export interface DocumentFieldConfigurationResponse {
@@ -157,6 +159,26 @@ export const wantedFieldService = {
       allowed_types: options?.allowed_types,
       max_size_mb: options?.max_size_mb,
     })
+    return response.data
+  },
+
+  // Update document requirement settings (status, limits, description)
+  async updateDocumentRequirement(
+    batchId: string,
+    docType: string,
+    payload: {
+      requirement_status?: 'REQUIRED' | 'OPTIONAL' | 'DISABLED'
+      display_name?: string
+      description?: string
+      allowed_types?: string[]
+      max_size_mb?: number
+    },
+    classId?: string
+  ): Promise<DocumentFieldConfigurationResponse> {
+    const url = classId
+      ? `/wanted-fields/${batchId}/${encodeURIComponent(docType)}/requirement?class_id=${encodeURIComponent(classId)}`
+      : `/wanted-fields/${batchId}/${encodeURIComponent(docType)}/requirement`
+    const response = await api.patch(url, payload)
     return response.data
   },
 }

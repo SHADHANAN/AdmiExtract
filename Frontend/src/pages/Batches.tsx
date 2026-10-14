@@ -173,7 +173,7 @@ export const Batches: React.FC = () => {
   // Filter batches
   const filteredBatches = batches.filter((batch) => {
     const matchesSearch = batch.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          batch.department.toLowerCase().includes(searchTerm.toLowerCase())
+      batch.department.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesDept = selectedDept ? batch.department === selectedDept : true
     const matchesYear = selectedYear ? batch.academicYear === selectedYear : true
     const matchesStatus = selectedStatus ? batch.status === selectedStatus : true
@@ -186,125 +186,127 @@ export const Batches: React.FC = () => {
   const uniqueYears = Array.from(new Set(batches.map((b) => b.academicYear)))
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in duration-300">
       <PageHeader
         title="Admission Batches"
-        description="Monitor student cohorts, manage multiple classes within batches, and configure link options."
+        description="Monitor student cohorts, manage section allocations within batches, and configure student upload links."
         action={
           <Button variant="primary" onClick={() => setIsModalOpen(true)} className="cursor-pointer">
-            <Plus className="mr-2 h-4 w-4" /> New Batch
+            <Plus className="mr-1.5 h-4 w-4" /> New Batch
           </Button>
         }
       />
 
       {/* Search & Filter Controls */}
-      <div className="flex flex-col md:flex-row gap-3.5 bg-[#0F172A]/70 p-4 rounded-2xl border border-white/[0.08] shadow-lg shadow-black/20">
+      <div className="flex flex-col md:flex-row gap-3 bg-card p-3.5 sm:p-4 rounded-xl border border-border shadow-xs">
         <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-3 h-4 w-4 text-slate-500" />
+          <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Search admission cohorts by name..."
+            placeholder="Search admission cohorts by name or department..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-white/[0.08] rounded-xl bg-[#111827]/80 text-sm text-white placeholder:text-slate-500 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 hover:border-white/[0.18]"
+            className="w-full pl-10 pr-4 py-2 border border-input rounded-lg bg-card text-sm text-foreground placeholder:text-muted-foreground/60 transition-all focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
           />
         </div>
 
-        <div className="flex flex-wrap gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={selectedDept}
             onChange={(e) => setSelectedDept(e.target.value)}
-            className="px-3.5 py-2 border border-white/[0.08] rounded-xl bg-[#111827]/80 text-xs font-semibold text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 hover:border-white/[0.18] cursor-pointer"
+            className="h-9 px-3 border border-input rounded-lg bg-card text-xs font-semibold text-foreground transition-all focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer"
           >
-            <option value="" className="bg-[#111827] text-white">All Departments</option>
+            <option value="">All Departments</option>
             {uniqueDepts.map((d) => (
-              <option key={d} value={d} className="bg-[#111827] text-white">{d}</option>
+              <option key={d} value={d}>{d}</option>
             ))}
           </select>
 
           <select
             value={selectedYear}
             onChange={(e) => setSelectedYear(e.target.value)}
-            className="px-3.5 py-2 border border-white/[0.08] rounded-xl bg-[#111827]/80 text-xs font-semibold text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 hover:border-white/[0.18] cursor-pointer"
+            className="h-9 px-3 border border-input rounded-lg bg-card text-xs font-semibold text-foreground transition-all focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer"
           >
-            <option value="" className="bg-[#111827] text-white">All Academic Years</option>
+            <option value="">All Academic Years</option>
             {uniqueYears.map((y) => (
-              <option key={y} value={y} className="bg-[#111827] text-white">{y}</option>
+              <option key={y} value={y}>{y}</option>
             ))}
           </select>
 
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-            className="px-3.5 py-2 border border-white/[0.08] rounded-xl bg-[#111827]/80 text-xs font-semibold text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 hover:border-white/[0.18] cursor-pointer"
+            className="h-9 px-3 border border-input rounded-lg bg-card text-xs font-semibold text-foreground transition-all focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary cursor-pointer"
           >
-            <option value="" className="bg-[#111827] text-white">All Statuses</option>
-            <option value="active" className="bg-[#111827] text-white">Active</option>
-            <option value="closed" className="bg-[#111827] text-white">Closed</option>
-            <option value="archived" className="bg-[#111827] text-white">Archived</option>
+            <option value="">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="closed">Closed</option>
+            <option value="archived">Archived</option>
           </select>
         </div>
       </div>
 
       {/* Batch Cards Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {filteredBatches.map((batch) => {
-          const statusColors = {
-            active: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-            closed: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
-            archived: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
-          }
-
           const classesList: BatchClass[] = batch.classes || []
 
           return (
             <Card
               key={batch.id}
               onClick={() => navigate(`/batches/${batch.id}`)}
-              className="group relative flex flex-col justify-between hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-300 hover:-translate-y-1 cursor-pointer rounded-2xl border border-white/[0.08] overflow-hidden bg-[#111827]"
+              className="group relative flex flex-col justify-between hover:border-primary/50 hover:shadow-xs transition-all duration-200 cursor-pointer border-border/80"
             >
-              <div className="h-1.5 w-full bg-gradient-to-r from-indigo-500 via-indigo-600 to-purple-600" />
-              
-              <CardHeader className="pb-3">
-                <div className="flex justify-between items-start">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-400 border border-indigo-500/25 shadow-xs">
-                    <FolderOpen className="h-5 w-5" />
+              <CardHeader className="pb-3 border-b border-border/60">
+                <div className="flex justify-between items-start gap-2">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
+                    <FolderOpen className="h-4.5 w-4.5" />
                   </div>
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${statusColors[batch.status]}`}>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold capitalize ${
+                    batch.status === 'active'
+                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20'
+                      : batch.status === 'closed'
+                      ? 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20'
+                      : 'bg-secondary text-muted-foreground border border-border'
+                  }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${
+                      batch.status === 'active' ? 'bg-emerald-500' : batch.status === 'closed' ? 'bg-rose-500' : 'bg-muted-foreground'
+                    }`} />
                     {batch.status}
                   </span>
                 </div>
-                <div className="mt-3">
-                  <CardTitle className="text-lg font-bold text-white group-hover:text-indigo-400 transition-colors truncate">
+                <div className="mt-2.5 min-w-0">
+                  <CardTitle className="text-base font-bold text-foreground group-hover:text-primary transition-colors truncate">
                     {batch.name}
                   </CardTitle>
-                  <CardDescription className="text-xs font-semibold uppercase tracking-wider text-slate-400 mt-1">
+                  <CardDescription className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mt-0.5 truncate">
                     {batch.department}
                   </CardDescription>
                 </div>
               </CardHeader>
 
-              <CardContent className="space-y-4 pt-0">
-                <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed min-h-[2rem]">
+              <CardContent className="space-y-3.5 pt-3.5 flex-1 flex flex-col justify-between">
+                <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed min-h-[2rem]">
                   {batch.description || 'Institutional admission batch cohort.'}
                 </p>
 
                 {/* Batch Section Summary Indicator */}
-                <div className="bg-[#0F172A]/80 p-2.5 rounded-xl border border-white/[0.08] flex items-center justify-between text-xs font-semibold text-white">
-                  <div className="flex items-center gap-2">
-                    <Layers className="h-3.5 w-3.5 text-indigo-400" />
-                    <span>Dept: <strong className="text-indigo-400">{batch.department}</strong></span>
+                <div className="bg-secondary/40 p-2.5 rounded-lg border border-border/60 flex items-center justify-between text-xs font-semibold text-foreground">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <Layers className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <span className="truncate">Dept: <strong className="text-foreground">{batch.department}</strong></span>
                   </div>
-                  <span className="px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/20 text-[11px] font-bold">
+                  <span className="px-2 py-0.5 rounded-md bg-secondary text-foreground border border-border text-[11px] font-bold shrink-0">
                     {classesList.length} {classesList.length === 1 ? 'Section' : 'Sections'}
                   </span>
                 </div>
-                <div className="flex justify-between items-center text-xs text-slate-400 pt-3 border-t border-white/[0.08]">
-                  <div className="flex items-center gap-1.5 font-medium">
-                    <Calendar className="h-3.5 w-3.5 text-indigo-400" />
+
+                <div className="flex justify-between items-center text-xs text-muted-foreground pt-3 border-t border-border/60">
+                  <div className="flex items-center gap-1.5 font-medium font-mono text-[11px]">
+                    <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
                     <span>{batch.academicYear}</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1">
                     <Button
                       size="sm"
                       variant="outline"
@@ -312,7 +314,7 @@ export const Batches: React.FC = () => {
                         e.stopPropagation()
                         navigate(`/batches/${batch.id}`)
                       }}
-                      className="cursor-pointer text-xs"
+                      className="cursor-pointer text-xs h-7.5 px-2.5"
                     >
                       Open
                     </Button>
@@ -336,10 +338,10 @@ export const Batches: React.FC = () => {
                           addToast('Failed to copy link to clipboard.', 'error')
                         }
                       }}
-                      className="cursor-pointer p-1.5"
+                      className="cursor-pointer p-1.5 h-7.5 w-7.5"
                       title="Share Portal Link"
                     >
-                      <Share2 className="h-4 w-4" />
+                      <Share2 className="h-3.5 w-3.5" />
                     </Button>
                     <Button
                       size="sm"
@@ -348,10 +350,10 @@ export const Batches: React.FC = () => {
                         e.stopPropagation()
                         openEditModal(batch)
                       }}
-                      className="cursor-pointer p-1.5 text-muted-foreground hover:text-foreground"
+                      className="cursor-pointer p-1.5 h-7.5 w-7.5 text-muted-foreground hover:text-foreground"
                       title="Edit Batch"
                     >
-                      <Edit3 className="h-4 w-4" />
+                      <Edit3 className="h-3.5 w-3.5" />
                     </Button>
                     <Button
                       size="sm"
@@ -367,10 +369,10 @@ export const Batches: React.FC = () => {
                           }
                         }
                       }}
-                      className="cursor-pointer p-1.5 text-muted-foreground hover:text-destructive"
+                      className="cursor-pointer p-1.5 h-7.5 w-7.5 text-muted-foreground hover:text-destructive"
                       title="Delete Batch"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 </div>
@@ -381,10 +383,10 @@ export const Batches: React.FC = () => {
       </div>
 
       {filteredBatches.length === 0 && (
-        <div className="flex flex-col items-center justify-center p-12 text-center bg-card rounded-2xl border border-dashed border-border/80">
-          <FolderOpen className="h-12 w-12 text-muted-foreground/60 mb-3" />
+        <div className="flex flex-col items-center justify-center p-12 text-center bg-card rounded-xl border border-dashed border-border">
+          <FolderOpen className="h-10 w-10 text-muted-foreground/50 mb-3" />
           <h3 className="text-base font-bold text-foreground tracking-tight">No cohorts found</h3>
-          <p className="text-sm text-muted-foreground mt-1 max-w-sm">Try updating your search query or criteria filters to locate admission batches.</p>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1 max-w-sm">Try updating your search query or criteria filters to locate admission batches.</p>
         </div>
       )}
 
@@ -411,7 +413,7 @@ export const Batches: React.FC = () => {
           <Input
             label="Batch Name"
             type="text"
-            placeholder="CSE 2025-2029"
+            placeholder="AIML 2025-2029"
             value={newBatchName}
             onChange={(e) => setNewBatchName(e.target.value)}
             required

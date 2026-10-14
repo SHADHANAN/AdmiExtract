@@ -2,23 +2,33 @@ import os
 import pytest
 import pytest_asyncio
 from pathlib import Path
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
+from app.main import app
+from app.core.config import settings
 from app.core.security import create_access_token, get_password_hash
 from app.models.user import UserRole
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def setup_db():
+    import app.db.database as db_mod
+    db_mod.client = AsyncIOMotorClient(settings.MONGODB_URI, serverSelectionTimeoutMS=2000)
+    db_mod.db = db_mod.client[settings.DATABASE_NAME]
+    await db_mod._run_db_setup()
+
+
 @pytest_asyncio.fixture
 async def client_async():
-    async with AsyncClient(base_url="http://127.0.0.1:8000") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
 
 @pytest_asyncio.fixture
 async def db_client():
-    client = AsyncIOMotorClient("mongodb://localhost:27017")
-    db = client["admiextract"]
+    client = AsyncIOMotorClient(settings.MONGODB_URI)
+    db = client[settings.DATABASE_NAME]
     yield db
     client.close()
 
@@ -173,6 +183,13 @@ async def test_student_deletion_full_lifecycle_and_file_safety(client_async: Asy
     test_unique_file.write_bytes(b"%PDF-1.4 unique test file content")
     test_shared_file.write_bytes(b"%PDF-1.4 shared test file content")
 
+    # Pre-clean stale test session/job/student records if left from previous failed runs
+    await db_client["submission_sessions"].delete_many({"submission_id": "sub_test_del_session"})
+    await db_client["document_processing_jobs"].delete_many({"job_id": "job_test_del_1"})
+    await db_client["document_processing_jobs"].delete_many({"file_path": {"$regex": "test_unique_del_doc"}})
+    await db_client["document_processing_jobs"].delete_many({"file_path": {"$regex": "test_shared_del_doc"}})
+    await db_client["student_submissions"].delete_many({"register_number": {"$in": ["DEL_TEST_A", "DEL_TEST_B"]}})
+
     # Create submission A in DB
     ins_a = await db_client["student_submissions"].insert_one({
         "batch_id": "batch_b988676d",
@@ -272,7 +289,12 @@ async def test_student_deletion_full_lifecycle_and_file_safety(client_async: Asy
         assert audit["files_preserved_count"] >= 1
 
     finally:
-        # Cleanup any remaining files or docs
+        # Cleanup any remaining files, docs, sessions, or jobs
+        await db_client["submission_sessions"].delete_many({"submission_id": "sub_test_del_session"})
+        await db_client["document_processing_jobs"].delete_many({"job_id": "job_test_del_1"})
+        await db_client["document_processing_jobs"].delete_many({"file_path": {"$regex": "test_unique_del_doc"}})
+        await db_client["document_processing_jobs"].delete_many({"file_path": {"$regex": "test_shared_del_doc"}})
+        await db_client["student_submissions"].delete_one({"_id": sub_a_id})
         await db_client["student_submissions"].delete_one({"_id": sub_b_id})
         if test_unique_file.exists():
             try:

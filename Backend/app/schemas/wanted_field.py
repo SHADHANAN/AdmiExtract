@@ -23,6 +23,14 @@ class AddFieldPayload(BaseModel):
     field_name: str = Field(..., description="Field name to add to document's available fields")
 
 
+class UpdateDocumentRequirementPayload(BaseModel):
+    requirement_status: Optional[str] = Field(None, description="REQUIRED, OPTIONAL, DISABLED")
+    display_name: Optional[str] = None
+    description: Optional[str] = None
+    allowed_types: Optional[List[str]] = None
+    max_size_mb: Optional[float] = None
+
+
 class SaveDocumentWantedFieldsPayload(BaseModel):
     fields: List[WantedFieldItemSchema] = Field(default_factory=list)
     requirement_status: Optional[str] = None
@@ -67,3 +75,5 @@ class DocumentTypeOverviewItem(BaseModel):
     fields: List[WantedFieldItemSchema] = Field(default_factory=list)
     available_fields: List[str] = Field(default_factory=list)
     template_headers: List[str] = Field(default_factory=list)
+    class_id: Optional[str] = None
+    scope: Optional[str] = None  # SECTION or BATCH

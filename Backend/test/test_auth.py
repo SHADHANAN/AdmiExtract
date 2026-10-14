@@ -18,7 +18,7 @@ async def setup_test_db():
 
     test_client = AsyncIOMotorClient(settings.MONGODB_URI)
     test_db = test_client["automate_test_db"]
-    
+
     # Override client and database in app.db.database for the API endpoints
     import app.db.database
     app.db.database.client = test_client
@@ -28,22 +28,20 @@ async def setup_test_db():
     from app.models.batch import AdmissionBatch
     from app.models.student_submission import StudentSubmission
     from app.models.doc_config_version import DocumentConfigurationVersion
-    from app.models.excel_template import ExcelBatchTemplate
     from app.models.wanted_field_config import DocumentFieldConfiguration
     from app.models.department import Department
     from app.models.batch_class import BatchClass
 
-    await init_beanie(database=cast(Any, test_db), document_models=[User, AdmissionBatch, StudentSubmission, DocumentConfigurationVersion, ExcelBatchTemplate, DocumentFieldConfiguration, Department, BatchClass])
+    await init_beanie(database=cast(Any, test_db), document_models=[User, AdmissionBatch, StudentSubmission, DocumentConfigurationVersion, DocumentFieldConfiguration, Department, BatchClass])
     # Ensure clear collection
     await User.find_all().delete()
     await AdmissionBatch.find_all().delete()
     await StudentSubmission.find_all().delete()
     await DocumentConfigurationVersion.find_all().delete()
-    await ExcelBatchTemplate.find_all().delete()
     await DocumentFieldConfiguration.find_all().delete()
-    
+
     yield
-    
+
     # Clean up test database
     await test_client.drop_database("automate_test_db")
     test_client.close()
@@ -68,7 +66,7 @@ async def test_register_success(client_async: AsyncClient):
     assert data["email"] == "test@example.com"
     assert "id" in data
     assert "password" not in data
-    
+
     # Verify in DB that password is NOT plain text and is hashed
     user = await User.find_one(User.username == "testuser")
     assert user is not None
@@ -345,7 +343,7 @@ async def test_admin_user_cannot_access_students_me_and_does_not_overwrite_stude
 def test_aadhaar_regex_extraction_unit():
     from app.services.ocr_preprocessor import OCRPreprocessor
     preprocessor = OCRPreprocessor()
-    
+
     sample_text = """
     Government of India
     Unique Identification Authority of India
@@ -387,87 +385,3 @@ def test_field_canonicalizer_unit():
     # Verify duplicate keys were eliminated
     assert "Aadhaar Card Number" not in merged
     assert "Community" not in merged
-
-
-@pytest.mark.asyncio
-async def test_append_or_update_student_row_in_excel_unit(tmp_path):
-    import openpyxl
-    from unittest.mock import AsyncMock
-    from app.services.excel_template_service import ExcelTemplateService
-    from app.models.excel_template import ExcelBatchTemplate
-
-    # Create dummy template workbook with headers in Row 1
-    template_file = tmp_path / "template.xlsx"
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    assert ws is not None
-    ws.append(["Student Name", "Register Number", "Mobile Number", "Aadhaar Card", "Community"])
-    wb.save(template_file)
-    wb.close()
-
-    from types import SimpleNamespace
-    mock_template = SimpleNamespace(
-        batch_id="AIML_2025",
-        template_filename="template.xlsx",
-        file_path=str(template_file),
-        headers=["Student Name", "Register Number", "Mobile Number", "Aadhaar Card", "Community"],
-        lookup_column="Register Number",
-        field_mappings={},
-    )
-
-    mock_repo = AsyncMock()
-    mock_repo.get_by_batch_id.return_value = mock_template
-
-    service = ExcelTemplateService(repository=mock_repo)
-
-    student_data = {
-        "Student Name": "Praveen",
-        "Register Number": "24AM076",
-        "Mobile Number": "9488203077",
-        "Aadhaar Card": "9573 0978 4448",
-        "Community Certificate": "BC",
-    }
-
-    # Append first record (Row 2)
-    success = await service.append_or_update_student_row_in_excel("AIML_2025", "24AM076", student_data)
-    assert success is True
-
-    # Read back saved file
-    wb_read = openpyxl.load_workbook(template_file, data_only=True)
-    ws_read = wb_read.active
-    assert ws_read is not None
-    row2 = [cell.value for cell in ws_read[2]]
-    assert row2[0] == "Praveen"
-    assert row2[1] == "24AM076"
-    assert row2[2] == "9488203077"
-    assert row2[3] == "9573 0978 4448"
-    assert row2[4] == "BC"
-    wb_read.close()
-
-    # Update existing record (Row 2)
-    student_data_update = {
-        "Student Name": "Praveen Kumar",
-        "Register Number": "24AM076",
-        "Mobile Number": "9488203077",
-        "Aadhaar Card": "9573 0978 4448",
-        "Community Certificate": "MBC",
-    }
-    success_update = await service.append_or_update_student_row_in_excel("AIML_2025", "24AM076", student_data_update)
-    assert success_update is True
-
-    wb_read2 = openpyxl.load_workbook(template_file, data_only=True)
-    ws_read2 = wb_read2.active
-    assert ws_read2 is not None
-    assert ws_read2.max_row == 2  # No new row created, updated Row 2!
-    row2_updated = [cell.value for cell in ws_read2[2]]
-    assert row2_updated[0] == "Praveen Kumar"
-    assert row2_updated[4] == "MBC"
-    wb_read2.close()
-
-
-
-
-
-
-
-

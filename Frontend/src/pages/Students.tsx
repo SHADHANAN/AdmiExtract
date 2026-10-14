@@ -6,6 +6,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import { EmptyState } from '../components/ui/EmptyState'
 import { DocumentPreviewModal, type DocumentPreviewTarget } from '../components/ui/DocumentPreviewModal'
 import { DeleteStudentModal, type DeleteStudentTarget } from '../components/ui/DeleteStudentModal'
+import { StudentDocumentManagerModal } from '../components/StudentDocumentManagerModal'
 import { useStudentStore } from '../store/useStudentStore'
 import { useBatchStore } from '../store/useBatchStore'
 import { useToastStore } from '../store/useToastStore'
@@ -24,6 +25,7 @@ import {
   ArrowRight,
   Trash2,
   Download,
+  Layers,
 } from 'lucide-react'
 import type { StudentSubmission } from '../types'
 import { studentSubmissionService } from '../services/studentSubmission'
@@ -44,6 +46,7 @@ export const Students: React.FC = () => {
   const [selectedSection, setSelectedSection] = useState<string>('ALL')
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL')
   const [selectedStudent, setSelectedStudent] = useState<StudentSubmission | null>(null)
+  const [docManagerStudent, setDocManagerStudent] = useState<StudentSubmission | null>(null)
 
   // DocumentPreviewModal state — lazy loaded per-click
   const [previewTarget, setPreviewTarget] = useState<DocumentPreviewTarget | null>(null)
@@ -199,7 +202,7 @@ export const Students: React.FC = () => {
   const renderDocStatusBadge = (status: string) => {
     if (status === 'Uploaded') {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-800 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border dark:border-emerald-800/40">
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
           Uploaded
         </span>
       )
@@ -372,6 +375,15 @@ export const Students: React.FC = () => {
                   {/* Actions */}
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1.5">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => setDocManagerStudent(student)}
+                        className="gap-1 text-xs py-1 px-2.5"
+                        title="Manage Student Documents & Extractions"
+                      >
+                        <Layers className="h-3.5 w-3.5" /> Docs
+                      </Button>
                       <Button
                         variant="outline"
                         size="sm"
@@ -655,6 +667,13 @@ export const Students: React.FC = () => {
       <DocumentPreviewModal
         target={previewTarget}
         onClose={() => setPreviewTarget(null)}
+      />
+
+      {/* ── STUDENT DOCUMENT MANAGER MODAL ── */}
+      <StudentDocumentManagerModal
+        isOpen={Boolean(docManagerStudent)}
+        onClose={() => setDocManagerStudent(null)}
+        student={docManagerStudent}
       />
 
       {/* AI Verification badge (kept from original) */}

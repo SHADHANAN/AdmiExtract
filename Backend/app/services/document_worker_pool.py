@@ -21,7 +21,6 @@ from app.models.document_job import (
     SubmissionProcessingStatus,
 )
 from app.services.document_processing_pipeline import DocumentProcessingPipeline, PipelineProfiler
-from app.services.excel_template_service import ExcelTemplateService
 from app.services.wanted_field_service import WantedFieldService
 from app.services.doc_config_version_service import DocConfigVersionService
 
@@ -61,13 +60,12 @@ class DocumentWorkerPool:
 
     def __init__(self):
         self.pipeline = DocumentProcessingPipeline()
-        self.excel_service = ExcelTemplateService()
         self.wanted_field_service = WantedFieldService()
         self.doc_config_service = DocConfigVersionService()
-        
+
         self.concurrency = int(getattr(settings, "EXTRACTION_WORKER_CONCURRENCY", 4))
         self.timeout_seconds = int(getattr(settings, "JOB_TIMEOUT_SECONDS", 300))
-        
+
         self.worker_tasks: List[asyncio.Task] = []
         self.supervisor_task: Optional[asyncio.Task] = None
         self._running = False
@@ -190,18 +188,11 @@ class DocumentWorkerPool:
             fbytes = await uf.read()
             processed_files.append((fname, fbytes))
 
-        # Retrieve Excel Headers for the batch
+        # Retrieve Document Extraction Fields for the batch
         try:
-            excel_template = await self.excel_service.get_template_by_batch(batch_id)
-            excel_headers = excel_template.headers if (excel_template and excel_template.headers) else []
+            excel_headers = await self.doc_config_service.get_batch_extraction_fields(batch_id)
         except Exception:
             excel_headers = []
-
-        if not excel_headers:
-            try:
-                excel_headers = await self.doc_config_service.get_batch_extraction_fields(batch_id)
-            except Exception:
-                excel_headers = []
 
         if not excel_headers:
             excel_headers = [

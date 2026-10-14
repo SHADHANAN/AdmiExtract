@@ -72,12 +72,14 @@ async def _run_db_setup():
     from app.models.department import Department
     from app.models.upload_link import UploadLink
     from app.models.student_submission import StudentSubmission
-    from app.models.excel_template import ExcelBatchTemplate
     from app.models.doc_config_version import DocumentConfigurationVersion
     from app.models.batch import AdmissionBatch
     from app.models.batch_class import BatchClass
     from app.models.wanted_field_config import DocumentFieldConfiguration
     from app.models.document_job import DocumentProcessingJob, SubmissionSession
+    from app.models.student_document import StudentDocument
+    from app.models.document_extraction_request import DocumentExtractionRequest
+    from app.models.document_extraction_result import DocumentExtractionResult
     from app.models.audit_log import AuditLog
     from app.core.security import get_password_hash
 
@@ -97,13 +99,60 @@ async def _run_db_setup():
                 {"$set": {"slug": token}}
             )
 
-    # Drop legacy unique batch_id_1 index on excel_templates to allow non-unique per-class template index creation
-    try:
-        index_info = await db["excel_templates"].index_information()
-        if "batch_id_1" in index_info:
-            await db["excel_templates"].drop_index("batch_id_1")
-    except Exception:
-        pass
+    # Safe migration for global register number uniqueness before creating unique index
+    from app.utils.normalization import normalize_register_number
+    sub_cursor = db["student_submissions"].find({})
+    seen_normalized: set[str] = set()
+    async for sub_doc in sub_cursor:
+        sub_id = sub_doc["_id"]
+        raw_reg = sub_doc.get("register_number", "")
+        norm = normalize_register_number(raw_reg)
+        if not norm:
+            norm = f"UNKNOWN_{str(sub_id)[-6:]}"
+
+        existing_norm = sub_doc.get("normalized_register_number")
+        is_conflict = sub_doc.get("has_duplicate_conflict", False)
+
+        if is_conflict and existing_norm:
+            # Already disambiguated conflict document from a prior migration run
+            seen_normalized.add(existing_norm)
+            continue
+
+        target_norm = existing_norm if existing_norm else norm
+
+        if target_norm in seen_normalized:
+            # Duplicate conflict found: disambiguate key and mark conflict flag without deleting document
+            disambiguated = f"{norm}-CONFLICT-{str(sub_id)[-6:]}"
+            await db["student_submissions"].update_one(
+                {"_id": sub_id},
+                {
+                    "$set": {
+                        "normalized_register_number": disambiguated,
+                        "has_duplicate_conflict": True,
+                        "conflict_original_normalized_register_number": norm,
+                    }
+                }
+            )
+            seen_normalized.add(disambiguated)
+            print(f"[DB SETUP] Disambiguated duplicate register number '{raw_reg}' in submission {sub_id} to '{disambiguated}'.")
+        else:
+            seen_normalized.add(target_norm)
+            if not existing_norm or existing_norm != target_norm:
+                await db["student_submissions"].update_one(
+                    {"_id": sub_id},
+                    {
+                        "$set": {
+                            "normalized_register_number": target_norm,
+                            "has_duplicate_conflict": False,
+                        }
+                    }
+                )
+
+    from app.models.document_verification import DocumentFieldVerification
+    from app.models.batch_extraction import BatchExtractionRequest
+    from app.models.verification_token import VerificationToken
+    from app.models.verification_notification import VerificationNotification
+    from app.models.excel_template import ExcelBatchTemplate
 
     await init_beanie(
         database=cast(Any, db),
@@ -112,7 +161,6 @@ async def _run_db_setup():
             Department,
             UploadLink,
             StudentSubmission,
-            ExcelBatchTemplate,
             DocumentConfigurationVersion,
             AdmissionBatch,
             BatchClass,
@@ -120,9 +168,27 @@ async def _run_db_setup():
             DocumentProcessingJob,
             SubmissionSession,
             AuditLog,
+            StudentDocument,
+            DocumentExtractionRequest,
+            DocumentExtractionResult,
+            DocumentFieldVerification,
+            BatchExtractionRequest,
+            VerificationToken,
+            VerificationNotification,
+            ExcelBatchTemplate,
         ],
         allow_index_dropping=True,
     )
+
+    # Consolidate legacy duplicate StudentDocument records if any exist
+    try:
+        from app.repositories.student_document_repository import StudentDocumentRepository
+        doc_repo = StudentDocumentRepository()
+        merged_count = await doc_repo.consolidate_duplicate_documents()
+        if merged_count > 0:
+            print(f"[DB SETUP] Successfully consolidated {merged_count} duplicate StudentDocument record(s).")
+    except Exception as cons_err:
+        print(f"[DB SETUP] Note during document consolidation: {cons_err}")
 
     # Seed default AIML Department
     aiml_dept = await Department.find_one(Department.code == "AIML")
@@ -157,31 +223,34 @@ async def _run_db_setup():
             is_active=True,
         ).insert()
 
-    # Seed default Super Admin user (username: admin, password: admin123, department: null)
-    admin_user = await User.find_one(User.username == "admin")
-    if not admin_user:
-        await User(
-            username="admin",
-            name="Super Admin",
-            email="admin@test.com",
-            password=get_password_hash("admin123"),
-            role=UserRole.SUPER_ADMIN,
-            department_code=None,
-            is_active=True,
-        ).insert()
+    # Seed default user accounts ONLY in non-production environments to avoid default credentials in production
+    is_prod_env = settings.APP_ENV in ("production", "staging") or bool(os.getenv("RENDER"))
+    if not is_prod_env:
+        # Seed default Super Admin user (username: admin, password: admin123, department: null)
+        admin_user = await User.find_one(User.username == "admin")
+        if not admin_user:
+            await User(
+                username="admin",
+                name="Super Admin",
+                email="admin@test.com",
+                password=get_password_hash("admin123"),
+                role=UserRole.SUPER_ADMIN,
+                department_code=None,
+                is_active=True,
+            ).insert()
 
-    # Seed default Department Admin user (username: aiml, password: aiml123, department: AIML)
-    aiml_user = await User.find_one(User.username == "aiml")
-    if not aiml_user:
-        await User(
-            username="aiml",
-            name="AIML Department Admin",
-            email="aiml@test.com",
-            password=get_password_hash("aiml123"),
-            role=UserRole.DEPARTMENT_ADMIN,
-            department_code="AIML",
-            is_active=True,
-        ).insert()
+        # Seed default Department Admin user (username: aiml, password: aiml123, department: AIML)
+        aiml_user = await User.find_one(User.username == "aiml")
+        if not aiml_user:
+            await User(
+                username="aiml",
+                name="AIML Department Admin",
+                email="aiml@test.com",
+                password=get_password_hash("aiml123"),
+                role=UserRole.DEPARTMENT_ADMIN,
+                department_code="AIML",
+                is_active=True,
+            ).insert()
 
     _is_connected = True
 

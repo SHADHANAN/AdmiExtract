@@ -37,8 +37,8 @@ export const DocumentsPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <PageHeader
-          title="Document Configuration"
-          description="Manage required certificates, ID documents, and wanted field extraction mappings for admission cohorts."
+          title="Document Requirements"
+          description="Manage required certificates and identity documents for admission cohort collections."
         />
 
         {batches.length > 0 && (
@@ -64,7 +64,7 @@ export const DocumentsPage: React.FC = () => {
       {batches.length === 0 ? (
         <EmptyState
           title="No Admission Batches Found"
-          description="Create your first admission batch to configure required documents and wanted fields."
+          description="Create your first admission batch to configure required documents for student collection."
           icon={<FolderOpen className="h-12 w-12 text-muted-foreground/60" />}
           action={
             <Button variant="primary" onClick={() => navigate('/batches')} className="cursor-pointer">

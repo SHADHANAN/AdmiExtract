@@ -25,15 +25,12 @@ async def setup_test_db():
     test_client = AsyncIOMotorClient(settings.MONGODB_URI)
     test_db = test_client["automate_test_db"]
 
-    import app.db.database
-    app.db.database.client = test_client
-    app.db.database.db = test_db
-    app.db.database._is_connected = True
+    import app.db.database as db_mod
+    db_mod.client = test_client
+    db_mod.db = test_db
+    db_mod._is_connected = True
 
-    await init_beanie(
-        database=cast(Any, test_db),
-        document_models=[User, Department, AdmissionBatch, BatchClass, UploadLink, StudentSubmission],
-    )
+    await db_mod._run_db_setup()
     await User.find_all().delete()
     await Department.find_all().delete()
     await AdmissionBatch.find_all().delete()
@@ -251,26 +248,17 @@ async def test_student_verify_identity_with_email_payload(client_async: AsyncCli
     )
     await link.insert()
 
-    # Mock Excel template check so verification succeeds
-    from unittest.mock import MagicMock, patch
-    mock_meta = MagicMock()
-    mock_meta.file_path = "dummy.xlsx"
-
-    with patch("app.api.student_submission._excel_repo.get_by_batch_id", return_value=mock_meta), \
-         patch("os.path.exists", return_value=True):
-        res = await client_async.post(
-            "/student/verify",
-            json={
-                "token": link.token,
-                "student_name": "John Doe",
-                "register_number": "24IT001",
-                "mobile_number": "9876543210",
-                "email": "john.doe@example.com",
-            },
-        )
-        assert res.status_code == 200, res.text
-        data = res.json()
-        assert data["batch_id"] == batch.id
-        assert data["batch_name"] == batch.name
-
-
+    res = await client_async.post(
+        "/student/verify",
+        json={
+            "token": link.token,
+            "student_name": "John Doe",
+            "register_number": "24IT001",
+            "mobile_number": "9876543210",
+            "email": "john.doe@example.com",
+        },
+    )
+    assert res.status_code == 200, res.text
+    data = res.json()
+    assert data["batch_id"] == batch.id
+    assert data["batch_name"] == batch.name

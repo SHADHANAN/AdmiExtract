@@ -27,7 +27,6 @@ from app.services.field_mapping_service import (
     format_for_excel_write,
 )
 from app.services.document_processing_pipeline import DocumentProcessingPipeline
-from app.services.excel_template_service import ExcelTemplateService
 from app.services.gemini_service import GeminiService
 
 
@@ -326,73 +325,7 @@ def test_scenario_18_gemini_quota_429_classification_and_fallback():
     assert retry_delay_2 == 5.0
 
 
-# =========================================================================
-# Scenario 19: Invalid field never reaches Excel
-# =========================================================================
-@pytest.mark.asyncio
-async def test_scenario_19_invalid_field_never_reaches_excel(tmp_path):
-    template_file = tmp_path / "test_template.xlsx"
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    assert ws is not None
-    ws.append([
-        "Student Name",
-        "Register Number",
-        "Father Name",
-        "Mother Name",
-        "Gender",
-        "State",
-        "Taluk Code",
-        "Is Communication Address Same as Permanent Address",
-    ])
-    wb.save(template_file)
-    wb.close()
 
-    from types import SimpleNamespace
-    mock_template = SimpleNamespace(
-        batch_id="AIML_2025",
-        template_filename="test_template.xlsx",
-        file_path=str(template_file),
-        headers=[
-            "Student Name", "Register Number", "Father Name", "Mother Name",
-            "Gender", "State", "Taluk Code", "Is Communication Address Same as Permanent Address",
-        ],
-        lookup_column="Register Number",
-        field_mappings={},
-    )
-    mock_repo = AsyncMock()
-    mock_repo.get_by_batch_id.return_value = mock_template
-    service = ExcelTemplateService(repository=mock_repo)
-
-    # Dirty / Contaminated extracted student data
-    student_data = {
-        "Student Name": "PRAVEEN S",
-        "Register Number": "24AM076",
-        "Father Name": "Vadugar Community BC",             # Contaminated with caste -> MUST BE REJECTED
-        "Mother Name": "GENDER FEMALE TRANSGENDER",        # Contaminated with multi-gender OCR -> REJECTED
-        "Gender": "GENDER MALE FEMALE TRANSGENDER",        # Contaminated OCR options list -> REJECTED
-        "State": "Of Tamil Nadu Belongs To Vadugar Community", # Contaminated phrase -> REJECTED
-        "Taluk Code": "Namakkal Taluk Mohanur Road",       # Narrative text -> REJECTED
-        "Is Communication Address Same as Permanent Address": "12/4 Mohanur Road Namakkal", # Address in bool -> Coerced to No
-    }
-
-    success = await service.append_or_update_student_row_in_excel("AIML_2025", "24AM076", student_data)
-    assert success is True
-
-    # Read back saved workbook
-    wb_read = openpyxl.load_workbook(template_file, data_only=True)
-    ws_read = wb_read.active
-    assert ws_read is not None
-    row2 = [cell.value for cell in ws_read[2]]
-
-    assert row2[0] == "PRAVEEN S"  # Valid name written
-    assert row2[1] == "24AM076"    # Valid reg no written
-    assert row2[2] is None         # Father Name contaminated -> BLANK
-    assert row2[3] is None         # Mother Name contaminated -> BLANK
-    assert row2[4] is None         # Gender contaminated -> BLANK
-    assert row2[5] is None         # State contaminated -> BLANK
-    assert row2[6] is None         # Taluk Code contaminated -> BLANK
-    assert row2[7] == "No"         # Address string in boolean column coerced to 'No'
 
 
 # =========================================================================
@@ -668,4 +601,3 @@ def test_scenario_28_end_to_end_regression_exact_case():
 
     # 7. Community Category must be BC from Community Certificate
     assert merged["Community Category"]["value"] == "BC"
-

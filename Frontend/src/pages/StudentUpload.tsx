@@ -15,6 +15,9 @@ import {
   UserCheck,
   ArrowRight,
   Check,
+  AlertTriangle,
+  AlertCircle,
+  Info,
 } from 'lucide-react'
 import {
   verifyStudentIdentity,
@@ -25,9 +28,7 @@ import {
 const STEPS = [
   { number: 1, label: 'Student Details' },
   { number: 2, label: 'Documents' },
-  { number: 3, label: 'Processing' },
-  { number: 4, label: 'Verification' },
-  { number: 5, label: 'Complete' },
+  { number: 3, label: 'Complete' },
 ]
 
 /**
@@ -48,17 +49,22 @@ export const StudentUpload: React.FC = () => {
   const [isLoadingToken, setIsLoadingToken] = useState(true)
   const [errorStatus, setErrorStatus] = useState<number | null>(null)
   const [errorMessage, setErrorMessage] = useState<string>('')
- 
+
   // Student identity form fields
   const [studentName, setStudentName] = useState('')
   const [registerNum, setRegisterNum] = useState('')
   const [mobileNum, setMobileNum] = useState('')
   const [email, setEmail] = useState('')
   const [isPreFilled, setIsPreFilled] = useState(false)
- 
+
   // Submission state
   const [isVerifying, setIsVerifying] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [errorBanner, setErrorBanner] = useState<{
+    title: string
+    desc: string
+    type: 'warning' | 'error' | 'info'
+  } | null>(null)
 
   // Auto-fill student profile if authenticated user is logged in
   useEffect(() => {
@@ -87,7 +93,7 @@ export const StudentUpload: React.FC = () => {
     }
     fetchStudentProfile()
   }, [])
- 
+
   // Resolve the upload link on mount to get the portal title and validate it is active
   useEffect(() => {
     const resolveToken = async () => {
@@ -112,10 +118,10 @@ export const StudentUpload: React.FC = () => {
         setIsLoadingToken(false)
       }
     }
- 
+
     if (token) resolveToken()
   }, [token])
- 
+
   // --- Validation helpers ---
   const validate = (): boolean => {
     const errors: Record<string, string> = {}
@@ -132,13 +138,14 @@ export const StudentUpload: React.FC = () => {
     setFieldErrors(errors)
     return Object.keys(errors).length === 0
   }
- 
+
   // --- Continue handler — calls backend verify, then writes session ---
   const handleContinue = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!validate() || !token) return
- 
+
     setIsVerifying(true)
+    setErrorBanner(null)
     try {
       const cleanEmail = email.trim().toLowerCase()
       const result = await verifyStudentIdentity({
@@ -148,7 +155,7 @@ export const StudentUpload: React.FC = () => {
         mobile_number: mobileNum.trim(),
         email: cleanEmail,
       })
- 
+
       // Write temporary submission session to sessionStorage (no JWT, no login)
       writeSubmissionSession({
         batch_id: result.batch_id,
@@ -157,12 +164,15 @@ export const StudentUpload: React.FC = () => {
         class_name: result.class_name,
         upload_link_id: result.upload_link_id,
         token: result.token || token,
+        submission_id: result.submission_id,
         register_number: registerNum.trim(),
         student_name: studentName.trim(),
         mobile_number: mobileNum.trim(),
         email: cleanEmail,
+        submission_status: result.submission_status,
+        uploaded_documents: result.uploaded_documents,
       })
- 
+
       const batchId = result.batch_id
       if (!batchId || batchId === 'undefined' || batchId === 'null' || !batchId.trim()) {
         addToast('Upload link could not be generated.', 'error')
@@ -175,7 +185,14 @@ export const StudentUpload: React.FC = () => {
     } catch (err: any) {
       const message: string =
         err?.message ||
-        'Verification failed. Please check your details and try again.'
+        'Unable to continue. Please check your details and try again.'
+
+      setErrorBanner({
+        title: 'Unable to Continue',
+        desc: message,
+        type: 'error',
+      })
+
       addToast(`❌ ${message}`, 'error')
     } finally {
       setIsVerifying(false)
@@ -198,7 +215,7 @@ export const StudentUpload: React.FC = () => {
   if (errorStatus !== null) {
     let errorTitle = 'Upload Link Expired'
     let errorDesc = errorMessage
-    
+
     if (errorStatus === 404) {
       errorTitle = 'Invalid Link'
       errorDesc = errorMessage || 'Invalid upload link.'
@@ -314,7 +331,7 @@ export const StudentUpload: React.FC = () => {
         {/* Mobile current step indicator badge */}
         <div className="sm:hidden text-center mt-3">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/20">
-            <span>Step 1 of 5:</span>
+            <span>Step 1 of 3:</span>
             <span className="font-bold">Student Details</span>
           </span>
         </div>
@@ -355,12 +372,46 @@ export const StudentUpload: React.FC = () => {
                   </span>
                 ) : (
                   <span>
-                    Enter your details exactly as registered. Your register number will be verified
-                    against the admission batch student list.
+                    Enter your details to continue with document submission. Your register number and submitted details will be linked with your uploaded documents.
                   </span>
                 )}
               </p>
             </div>
+
+            {/* Error / Advisory banner */}
+            {errorBanner && (
+              <div
+                className={`flex items-start gap-3 rounded-xl p-3.5 sm:p-4 mb-5 text-xs sm:text-[13px] leading-relaxed border shadow-2xs transition-all animate-in fade-in duration-200 ${
+                  errorBanner.type === 'warning'
+                    ? 'bg-amber-500/10 dark:bg-amber-950/40 border-amber-500/30 text-amber-900 dark:text-amber-200'
+                    : errorBanner.type === 'info'
+                    ? 'bg-blue-500/10 dark:bg-blue-950/40 border-blue-500/30 text-blue-900 dark:text-blue-200'
+                    : 'bg-destructive/10 dark:bg-destructive/20 border-destructive/30 text-destructive dark:text-red-300'
+                }`}
+              >
+                <div
+                  className={`p-1.5 rounded-lg shrink-0 mt-0.5 ${
+                    errorBanner.type === 'warning'
+                      ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
+                      : errorBanner.type === 'info'
+                      ? 'bg-blue-500/20 text-blue-700 dark:text-blue-300'
+                      : 'bg-destructive/20 text-destructive'
+                  }`}
+                >
+                  {errorBanner.type === 'warning' ? (
+                    <AlertTriangle className="h-4 w-4" />
+                  ) : errorBanner.type === 'info' ? (
+                    <Info className="h-4 w-4" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4" />
+                  )}
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm tracking-tight mb-0.5">{errorBanner.title}</h4>
+                  <p className="leading-relaxed opacity-90">{errorBanner.desc}</p>
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handleContinue} className="space-y-4 sm:space-y-5" noValidate>
               {/* Name */}
@@ -465,7 +516,7 @@ export const StudentUpload: React.FC = () => {
                 {isVerifying ? (
                   <>
                     <Loader2 className="h-5 w-5 animate-spin" />
-                    <span>Verifying...</span>
+                    <span>Continuing...</span>
                   </>
                 ) : (
                   <>

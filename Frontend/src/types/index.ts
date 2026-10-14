@@ -47,15 +47,18 @@ export interface DocumentRequirement {
   maxSizeMb: number; // e.g. 5, 10
   description?: string;
   type?: RequirementType; // For backward compatibility
+  documentType?: string;
+  documentCode?: string;
+  code?: string;
   extractionFields?: string[];
 }
 
 export type StudentDocStatus = 'Uploaded' | 'Not Available' | 'Pending';
-export type StudentVerificationStatus = 
-  | 'Submitted' 
-  | 'AI Processing' 
-  | 'Verification Pending' 
-  | 'Verified' 
+export type StudentVerificationStatus =
+  | 'Submitted'
+  | 'AI Processing'
+  | 'Verification Pending'
+  | 'Verified'
   | 'Rejected'
   | 'Pending';
 export type AiProcessingStatus = 'Complete' | 'Processing' | 'Requires Review';
@@ -180,5 +183,3 @@ export interface BatchState {
   updateUploadLinkExpiry: (linkId: string, expiresAt: string | null) => Promise<void>;
   deleteUploadLink: (linkId: string) => void;
 }
-
-

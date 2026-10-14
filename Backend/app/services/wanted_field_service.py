@@ -3,20 +3,58 @@ from typing import Any, Dict, List, Optional, Tuple
 from app.models.wanted_field_config import DocumentFieldConfiguration, WantedFieldItem
 from app.repositories.wanted_field_repository import WantedFieldRepository
 from app.services.field_mapping_service import is_mapping_compatible, get_canonical_source_field
-from app.services.field_source_rules import normalize_document_type
-from app.models.excel_template import ExcelBatchTemplate
+from app.services.field_source_rules import normalize_document_type, resolve_canonical_document_type
 from app.models.student_submission import StudentSubmission
+
+
+CANONICAL_DOC_CODE_MAP = {
+    "AADHAAR": "AADHAAR",
+    "AADHAAR_CARD": "AADHAAR",
+    "AADHAR": "AADHAAR",
+    "AADHAR_CARD": "AADHAAR",
+    "BANK_PASSBOOK": "BANK_PASSBOOK",
+    "PASSBOOK": "BANK_PASSBOOK",
+    "BANK_STATEMENT": "BANK_PASSBOOK",
+    "BANK_ACCOUNT": "BANK_PASSBOOK",
+    "COMMUNITY": "COMMUNITY",
+    "COMMUNITY_CERTIFICATE": "COMMUNITY",
+    "CASTE": "COMMUNITY",
+    "CASTE_CERTIFICATE": "COMMUNITY",
+    "INCOME": "INCOME",
+    "INCOME_CERTIFICATE": "INCOME",
+    "TC": "TC",
+    "TRANSFER_CERTIFICATE": "TRANSFER_CERTIFICATE",
+    "TRANSFER_CERTIFICATE_TC": "TRANSFER_CERTIFICATE",
+    "SSLC": "SSLC",
+    "SSLC_MARKSHEET": "SSLC",
+    "10TH": "SSLC",
+    "10TH_SSLC": "SSLC",
+    "10TH_SSLC_MARKSHEET": "SSLC",
+    "10TH_MARKSHEET": "SSLC",
+    "HSC": "HSC",
+    "HSC_MARKSHEET": "HSC",
+    "12TH": "HSC",
+    "12TH_HSC": "HSC",
+    "12TH_HSC_MARKSHEET": "HSC",
+    "12TH_MARKSHEET": "HSC",
+    "BIRTH_CERTIFICATE": "BIRTH_CERTIFICATE",
+    "BIRTH": "BIRTH_CERTIFICATE",
+    "NATIVITY": "NATIVITY",
+    "NATIVITY_CERTIFICATE": "NATIVITY",
+    "PASSPORT": "PASSPORT",
+    "ALLOTMENT_ORDER": "ALLOTMENT_ORDER",
+}
 
 
 def normalize_document_code(code: str) -> str:
     """
     Normalize document code to a clean uppercase alphanumeric string with underscores.
-    e.g. 'Aadhaar Card' -> 'AADHAAR_CARD', 'TC-1' -> 'TC_1', '  emis id ' -> 'EMIS_ID'.
+    e.g. 'Aadhaar Card' -> 'AADHAAR', 'AADHAAR_CARD' -> 'AADHAAR'.
     """
     cleaned = re.sub(r'[\s\-]+', '_', code.strip().upper())
     cleaned = re.sub(r'[^A-Z0-9_]', '', cleaned)
     cleaned = re.sub(r'_+', '_', cleaned).strip('_')
-    return cleaned
+    return CANONICAL_DOC_CODE_MAP.get(cleaned, cleaned)
 
 
 # Standard Available Fields Catalog per Document Type
@@ -47,6 +85,8 @@ DOCUMENT_AVAILABLE_FIELDS_CATALOG: Dict[str, List[str]] = {
         "Community Category",
         "Caste",
         "Transfer Certificate Number",
+        "Academic Year of Joining",
+        "Academic Year",
     ],
     "COMMUNITY": [
         "Community Category",
@@ -91,10 +131,57 @@ DOCUMENT_AVAILABLE_FIELDS_CATALOG: Dict[str, List[str]] = {
         "Taluk",
         "Nativity",
     ],
+    "BANK_PASSBOOK": [
+        "Account Number",
+        "IFSC Code",
+        "Bank Name",
+        "Branch",
+        "Account Holder Name",
+        "MICR Code",
+    ],
+    "TC": [
+        "Student Name",
+        "Register Number",
+        "Date of Birth",
+        "Course",
+        "Institution",
+        "Leaving Date",
+        "EMIS ID",
+        "Father's Name",
+        "Mother's Name",
+        "Admission Number",
+        "Issue Date",
+        "School Name",
+        "Community Category",
+        "Caste",
+        "Transfer Certificate Number",
+        "Academic Year of Joining",
+        "Academic Year",
+    ],
+    "PASSPORT": [
+        "Passport Number",
+        "Given Name",
+        "Surname",
+        "Date of Birth",
+        "Nationality",
+        "Expiry Date",
+        "Place of Issue",
+    ],
+    "BIRTH_CERTIFICATE": [
+        "Student Name",
+        "Date of Birth",
+        "Gender",
+        "Father's Name",
+        "Mother's Name",
+        "Place of Birth",
+        "Registration Number",
+    ],
     "BONAFIDE": [
         "Student Name",
         "School Name",
         "Admission Number",
+        "Academic Year of Joining",
+        "Academic Year",
     ],
     "MIGRATION": [
         "Migration Number",
@@ -108,25 +195,33 @@ DOCUMENT_AVAILABLE_FIELDS_CATALOG: Dict[str, List[str]] = {
 DEFAULT_DOCUMENT_WANTED_FIELDS: Dict[str, List[str]] = {
     "AADHAAR": ["Aadhaar Number"],
     "TRANSFER_CERTIFICATE": ["Transfer Certificate Number", "School Name", "Admission Number", "Issue Date", "Date of Leaving"],
+    "TC": ["Transfer Certificate Number", "School Name", "Admission Number", "Issue Date", "Date of Leaving"],
     "COMMUNITY": ["Community Category"],
+    "BANK_PASSBOOK": ["Account Number", "IFSC Code", "Bank Name"],
     "INCOME": ["Annual Family Income"],
     "SSLC": ["SSLC Mark Percentage"],
     "HSC": ["HSC Mark Percentage"],
     "NATIVITY": ["Nativity"],
     "BONAFIDE": ["School Name"],
     "MIGRATION": ["Migration Number", "University", "Year"],
+    "PASSPORT": ["Passport Number"],
+    "BIRTH_CERTIFICATE": ["Registration Number", "Date of Birth"],
 }
 
 DOCUMENT_DISPLAY_NAMES: Dict[str, str] = {
     "AADHAAR": "Aadhaar Card",
     "TRANSFER_CERTIFICATE": "Transfer Certificate (TC)",
+    "TC": "Transfer Certificate (TC)",
     "COMMUNITY": "Community Certificate",
+    "BANK_PASSBOOK": "Bank Passbook",
     "INCOME": "Income Certificate",
     "SSLC": "SSLC Marksheet (10th)",
     "HSC": "HSC Marksheet (12th)",
     "NATIVITY": "Nativity Certificate",
     "BONAFIDE": "Bonafide Certificate",
     "MIGRATION": "Migration Certificate",
+    "PASSPORT": "Passport",
+    "BIRTH_CERTIFICATE": "Birth Certificate",
 }
 
 
@@ -290,7 +385,46 @@ class WantedFieldService:
         norm_type = normalize_document_code(doc_type) or normalize_document_type(doc_type)
         config = await self.repository.get_by_batch_and_doc_type(batch_id, norm_type, class_id=class_id)
         if not config:
-            raise ValueError(f"Document type '{doc_type}' not found for this batch.")
+            # Check if this document exists in batch's DocumentConfigurationVersion
+            from app.models.doc_config_version import DocumentConfigurationVersion
+            doc_ver = await DocumentConfigurationVersion.find_one(
+                DocumentConfigurationVersion.batch_id == batch_id,
+                DocumentConfigurationVersion.is_current == True,
+            )
+            if not doc_ver:
+                doc_ver = await DocumentConfigurationVersion.find(
+                    DocumentConfigurationVersion.batch_id == batch_id
+                ).sort("-version").first_or_none()
+
+            doc_item = None
+            if doc_ver and doc_ver.documents:
+                for d in doc_ver.documents:
+                    code = normalize_document_code(d.id or d.name) or normalize_document_type(d.name)
+                    if code == norm_type:
+                        doc_item = d
+                        break
+
+            if doc_item:
+                catalog_fields = DOCUMENT_AVAILABLE_FIELDS_CATALOG.get(norm_type, [doc_item.name])
+                initial_fields = [WantedFieldItem(field=f, enabled=False, excel_header=None) for f in catalog_fields]
+                if field_clean not in catalog_fields:
+                    catalog_fields.append(field_clean)
+                    initial_fields.append(WantedFieldItem(field=field_clean, enabled=False, excel_header=None))
+                is_req = doc_item.required if doc_item.required is not None else (doc_item.type == "MANDATORY")
+                return await self.repository.save_or_update(
+                    batch_id=batch_id,
+                    document_type=norm_type,
+                    fields=initial_fields,
+                    display_name=doc_item.name,
+                    description=doc_item.description,
+                    available_fields=catalog_fields,
+                    class_id=class_id,
+                    requirement_status="REQUIRED" if is_req else "OPTIONAL",
+                    allowed_types=doc_item.allowed_types or ["PDF", "JPG", "PNG"],
+                    max_size_mb=doc_item.max_size_mb or 5.0,
+                )
+            else:
+                raise ValueError(f"Document type '{doc_type}' not found for this batch.")
 
         # Add to fields if not already present
         existing_field_names = [f.field for f in config.fields]
@@ -349,19 +483,6 @@ class WantedFieldService:
             # Hard delete if safe
             await self.repository.delete_document_type(batch_id, norm_type, class_id=class_id)
             is_archived = False
-
-        # Synchronize ExcelBatchTemplate by removing mappings from this document
-        template = await ExcelBatchTemplate.find_one(
-            ExcelBatchTemplate.batch_id == batch_id,
-            ExcelBatchTemplate.class_id == class_id,
-        ) or await ExcelBatchTemplate.find_one(ExcelBatchTemplate.batch_id == batch_id)
-
-        if template and template.field_mappings:
-            mappings = dict(template.field_mappings)
-            for f in config.fields:
-                mappings.pop(f.field, None)
-            template.field_mappings = mappings
-            await template.save()
 
         return {
             "success": True,
@@ -440,6 +561,37 @@ class WantedFieldService:
                 config.available_fields = [f.field for f in config.fields]
             return config
 
+        # Fallback to check DocumentConfigurationVersion for this batch
+        from app.models.doc_config_version import DocumentConfigurationVersion
+        doc_ver = await DocumentConfigurationVersion.find_one(
+            DocumentConfigurationVersion.batch_id == batch_id,
+            DocumentConfigurationVersion.is_current == True,
+        )
+        if not doc_ver:
+            doc_ver = await DocumentConfigurationVersion.find(
+                DocumentConfigurationVersion.batch_id == batch_id
+            ).sort("-version").first_or_none()
+
+        if doc_ver and doc_ver.documents:
+            for d in doc_ver.documents:
+                code = normalize_document_code(d.id or d.name) or normalize_document_type(d.name)
+                if code == norm_type:
+                    catalog_fields = DOCUMENT_AVAILABLE_FIELDS_CATALOG.get(norm_type, [d.name])
+                    initial_fields = [WantedFieldItem(field=f, enabled=False, excel_header=None) for f in catalog_fields]
+                    is_req = d.required if d.required is not None else (d.type == "MANDATORY")
+                    return await self.repository.save_or_update(
+                        batch_id=batch_id,
+                        document_type=norm_type,
+                        fields=initial_fields,
+                        display_name=d.name,
+                        description=d.description,
+                        available_fields=catalog_fields,
+                        class_id=class_id,
+                        requirement_status="REQUIRED" if is_req else "OPTIONAL",
+                        allowed_types=d.allowed_types or ["PDF", "JPG", "PNG"],
+                        max_size_mb=d.max_size_mb or 5.0,
+                    )
+
         return None
 
     async def save_document_configuration(
@@ -457,7 +609,6 @@ class WantedFieldService:
     ) -> DocumentFieldConfiguration:
         """
         Validate and save wanted field configuration for a specific document type.
-        Synchronizes enabled mappings into ExcelBatchTemplate.field_mappings.
         """
         norm_type = normalize_document_code(doc_type) or normalize_document_type(doc_type)
 
@@ -482,27 +633,40 @@ class WantedFieldService:
             allowed_types=allowed_types,
             max_size_mb=max_size_mb,
         )
-
-        # 3. Synchronize with ExcelBatchTemplate.field_mappings
-        template = await ExcelBatchTemplate.find_one(
-            ExcelBatchTemplate.batch_id == batch_id,
-            ExcelBatchTemplate.class_id == class_id,
-        ) or await ExcelBatchTemplate.find_one(ExcelBatchTemplate.batch_id == batch_id)
-
-        if template:
-            mappings = dict(template.field_mappings or {})
-            # Update mappings for this document's configured fields
-            for item in fields:
-                if item.enabled and item.excel_header:
-                    mappings[item.field] = item.excel_header
-                else:
-                    # If field was disabled or unmapped, remove its mapping
-                    mappings.pop(item.field, None)
-
-            template.field_mappings = mappings
-            await template.save()
-
         return saved_config
+
+    async def update_document_requirement(
+        self,
+        batch_id: str,
+        doc_type: str,
+        class_id: Optional[str] = None,
+        requirement_status: Optional[str] = None,
+        display_name: Optional[str] = None,
+        description: Optional[str] = None,
+        allowed_types: Optional[List[str]] = None,
+        max_size_mb: Optional[float] = None,
+    ) -> DocumentFieldConfiguration:
+        """
+        Update requirement status, display name, description or file limits for a document type.
+        """
+        norm_type = normalize_document_code(doc_type) or normalize_document_type(doc_type)
+        config = await self.repository.get_by_batch_and_doc_type(batch_id, norm_type, class_id=class_id)
+        if not config:
+            raise ValueError(f"Document type '{doc_type}' not found for batch '{batch_id}'.")
+
+        if requirement_status is not None:
+            config.requirement_status = requirement_status
+        if display_name is not None:
+            config.display_name = display_name
+        if description is not None:
+            config.description = description
+        if allowed_types is not None:
+            config.allowed_types = allowed_types
+        if max_size_mb is not None:
+            config.max_size_mb = max_size_mb
+
+        await config.save()
+        return config
 
     async def get_batch_overview(
         self, batch_id: str, class_id: Optional[str] = None
@@ -511,20 +675,22 @@ class WantedFieldService:
         Return overview status across all CONFIGURED document types for a batch.
         If staff has not created any document types for this batch, returns [].
         """
-        # Fetch template to know available headers
-        template = await ExcelBatchTemplate.find_one(
-            ExcelBatchTemplate.batch_id == batch_id,
-            ExcelBatchTemplate.class_id == class_id,
-        ) or await ExcelBatchTemplate.find_one(ExcelBatchTemplate.batch_id == batch_id)
-        template_headers = template.headers if template else []
-
         # Get only the document configurations that exist in MongoDB for this batch
         configs = await self.repository.list_by_batch(batch_id, class_id=class_id)
-        if not configs:
-            return []
 
         overview: List[Dict[str, Any]] = []
         seen_overview_codes: set[str] = set()
+
+        # Retrieve uploaded template headers for this batch if available
+        from app.models.excel_template import ExcelBatchTemplate
+        clean_cls = class_id.strip() if class_id and class_id.strip().lower() not in ("none", "null", "undefined", "") else None
+        tmpl = None
+        if clean_cls:
+            tmpl = await ExcelBatchTemplate.find_one({"batch_id": batch_id, "class_id": clean_cls})
+        if not tmpl:
+            tmpl = await ExcelBatchTemplate.find_one({"batch_id": batch_id, "class_id": None})
+
+        template_headers: List[str] = tmpl.headers if tmpl else []
         for config in configs:
             doc_code = config.document_type.upper().strip()
             if doc_code in seen_overview_codes:
@@ -567,7 +733,60 @@ class WantedFieldService:
                 "fields": [f.model_dump() for f in config.fields],
                 "available_fields": av_fields,
                 "template_headers": template_headers,
+                "class_id": config.class_id,
+                "scope": "SECTION" if config.class_id else "BATCH",
             })
+
+        # Check DocumentConfigurationVersion if there are additional document requirements defined for this batch
+        try:
+            from app.models.doc_config_version import DocumentConfigurationVersion
+            doc_ver = await DocumentConfigurationVersion.find_one(
+                DocumentConfigurationVersion.batch_id == batch_id,
+                DocumentConfigurationVersion.is_current == True,
+            )
+            if not doc_ver:
+                doc_ver = await DocumentConfigurationVersion.find(
+                    DocumentConfigurationVersion.batch_id == batch_id
+                ).sort("-version").first_or_none()
+
+            if doc_ver and doc_ver.documents:
+                for d in doc_ver.documents:
+                    req_type = (d.type or ("MANDATORY" if d.required else "OPTIONAL")).upper()
+                    if req_type == "DISABLED":
+                        continue
+                    norm_code = normalize_document_code(d.id or d.name) or normalize_document_type(d.name)
+                    if norm_code in seen_overview_codes:
+                        continue
+                    seen_overview_codes.add(norm_code)
+
+                    disp_name = d.name or DOCUMENT_DISPLAY_NAMES.get(norm_code, norm_code)
+                    catalog_fields = DOCUMENT_AVAILABLE_FIELDS_CATALOG.get(norm_code, [disp_name])
+                    initial_fields = [
+                        WantedFieldItem(field=f, enabled=False, excel_header=None).model_dump()
+                        for f in catalog_fields
+                    ]
+                    is_req = d.required if d.required is not None else (req_type == "MANDATORY")
+
+                    overview.append({
+                        "document_type": norm_code,
+                        "display_name": disp_name,
+                        "description": d.description,
+                        "wanted_count": 0,
+                        "mapped_count": 0,
+                        "unmapped_count": 0,
+                        "status": "NO_WANTED_FIELDS",
+                        "requirement_status": "REQUIRED" if is_req else "OPTIONAL",
+                        "allowed_types": d.allowed_types or ["PDF", "JPG", "PNG"],
+                        "max_size_mb": d.max_size_mb or 5.0,
+                        "version": 1,
+                        "fields": initial_fields,
+                        "available_fields": catalog_fields,
+                        "template_headers": template_headers,
+                        "class_id": class_id,
+                        "scope": "SECTION" if class_id else "BATCH",
+                    })
+        except Exception:
+            pass
 
         return overview
 
@@ -581,7 +800,7 @@ class WantedFieldService:
         Returns list of document requirement dicts suitable for the student checklist.
         Defensively guarantees that each document type appears at most once.
         """
-        configs = await self.repository.list_by_batch(batch_id, class_id=class_id)
+        configs = await self.repository.list_by_batch(batch_id, class_id=class_id, exact_scope_only=bool(class_id))
         if not configs and class_id:
             # Fallback to batch-level config if class-level config has no documents
             configs = await self.repository.list_by_batch(batch_id, class_id=None)
@@ -627,5 +846,43 @@ class WantedFieldService:
                 "extraction_fields": wanted_fields,
             })
 
-        return results
+        if not results:
+            # Fallback to DocumentConfigurationVersion if configured there
+            from app.models.doc_config_version import DocumentConfigurationVersion
+            doc_ver = await DocumentConfigurationVersion.find_one(
+                DocumentConfigurationVersion.batch_id == batch_id,
+                DocumentConfigurationVersion.is_current == True,
+            )
+            if not doc_ver:
+                doc_ver = await DocumentConfigurationVersion.find(
+                    DocumentConfigurationVersion.batch_id == batch_id
+                ).sort("-version").first_or_none()
 
+            if doc_ver and doc_ver.documents:
+                for d in doc_ver.documents:
+                    req_type = (d.type or ("MANDATORY" if d.required else "OPTIONAL")).upper()
+                    if req_type == "DISABLED":
+                        continue
+                    doc_code = (d.id or d.name).upper().strip()
+                    if doc_code in seen_req_codes:
+                        continue
+                    seen_req_codes.add(doc_code)
+                    is_mandatory = d.required if d.required is not None else (req_type == "MANDATORY")
+                    results.append({
+                        "id": d.id or d.name,
+                        "name": d.name,
+                        "code": doc_code,
+                        "document_type": doc_code,
+                        "document_name": d.name,
+                        "document_code": doc_code,
+                        "requirement_status": "REQUIRED" if is_mandatory else "OPTIONAL",
+                        "required": is_mandatory,
+                        "type": "MANDATORY" if is_mandatory else "OPTIONAL",
+                        "allowed_types": d.allowed_types or ["PDF", "JPG", "PNG"],
+                        "max_size_mb": d.max_size_mb or 5.0,
+                        "description": d.description or "",
+                        "wanted_fields": d.extraction_fields or [],
+                        "extraction_fields": d.extraction_fields or [],
+                    })
+
+        return results

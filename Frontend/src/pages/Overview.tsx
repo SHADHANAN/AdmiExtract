@@ -110,68 +110,68 @@ export const Overview: React.FC = () => {
       />
 
       {/* Dynamic Summary Cards */}
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Submissions Volume */}
-        <div className="group relative rounded-2xl bg-[#111827]/80 backdrop-blur-xl border border-white/[0.08] p-5 shadow-xl hover:border-white/[0.15] transition-all duration-200">
+        <div className="group relative rounded-xl bg-card border border-border/80 p-5 shadow-xs hover:border-primary/40 transition-all duration-200">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400 tracking-wider uppercase">Total Submissions</span>
-            <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+            <span className="text-xs font-bold text-muted-foreground tracking-wider uppercase">Total Submissions</span>
+            <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
               <Users2 className="h-4 w-4" />
             </div>
           </div>
-          <div className="mt-4">
-            <span className="text-3xl font-extrabold text-white tracking-tight">
+          <div className="mt-3.5">
+            <span className="text-3xl font-extrabold text-foreground tracking-tight font-mono">
               {isSubmissionsLoading ? '...' : totalSubmissions}
             </span>
-            <p className="mt-1 text-xs text-slate-400">Total student admission dossiers</p>
+            <p className="mt-1 text-xs text-muted-foreground">Total student admission dossiers</p>
           </div>
         </div>
 
         {/* Verification Rate */}
-        <div className="group relative rounded-2xl bg-[#111827]/80 backdrop-blur-xl border border-white/[0.08] p-5 shadow-xl hover:border-white/[0.15] transition-all duration-200">
+        <div className="group relative rounded-xl bg-card border border-border/80 p-5 shadow-xs hover:border-primary/40 transition-all duration-200">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400 tracking-wider uppercase">Verification Rate</span>
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <span className="text-xs font-bold text-muted-foreground tracking-wider uppercase">Verification Rate</span>
+            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
               <ShieldCheck className="h-4 w-4" />
             </div>
           </div>
-          <div className="mt-4">
-            <span className="text-3xl font-extrabold text-emerald-400 tracking-tight">
+          <div className="mt-3.5">
+            <span className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 tracking-tight font-mono">
               {isSubmissionsLoading ? '...' : `${verificationPercentage}%`}
             </span>
-            <p className="mt-1 text-xs text-slate-400">{verifiedCount} approved dossiers</p>
+            <p className="mt-1 text-xs text-muted-foreground">{verifiedCount} approved dossiers</p>
           </div>
         </div>
 
         {/* Under Review */}
-        <div className="group relative rounded-2xl bg-[#111827]/80 backdrop-blur-xl border border-white/[0.08] p-5 shadow-xl hover:border-white/[0.15] transition-all duration-200">
+        <div className="group relative rounded-xl bg-card border border-border/80 p-5 shadow-xs hover:border-primary/40 transition-all duration-200">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400 tracking-wider uppercase">Under Review</span>
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <span className="text-xs font-bold text-muted-foreground tracking-wider uppercase">Under Review</span>
+            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
               <Clock className="h-4 w-4" />
             </div>
           </div>
-          <div className="mt-4">
-            <span className="text-3xl font-extrabold text-amber-400 tracking-tight">
+          <div className="mt-3.5">
+            <span className="text-3xl font-extrabold text-amber-600 dark:text-amber-400 tracking-tight font-mono">
               {isSubmissionsLoading ? '...' : pendingCount}
             </span>
-            <p className="mt-1 text-xs text-slate-400">{pendingCount} awaiting verification</p>
+            <p className="mt-1 text-xs text-muted-foreground">{pendingCount} awaiting verification</p>
           </div>
         </div>
 
         {/* Rejection Rate */}
-        <div className="group relative rounded-2xl bg-[#111827]/80 backdrop-blur-xl border border-white/[0.08] p-5 shadow-xl hover:border-white/[0.15] transition-all duration-200">
+        <div className="group relative rounded-xl bg-card border border-border/80 p-5 shadow-xs hover:border-primary/40 transition-all duration-200">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400 tracking-wider uppercase">Rejection Rate</span>
-            <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
+            <span className="text-xs font-bold text-muted-foreground tracking-wider uppercase">Rejection Rate</span>
+            <div className="p-2 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
               <Activity className="h-4 w-4" />
             </div>
           </div>
-          <div className="mt-4">
-            <span className="text-3xl font-extrabold text-rose-400 tracking-tight">
+          <div className="mt-3.5">
+            <span className="text-3xl font-extrabold text-rose-600 dark:text-rose-400 tracking-tight font-mono">
               {isSubmissionsLoading ? '...' : `${rejectionPercentage}%`}
             </span>
-            <p className="mt-1 text-xs text-slate-400">{rejectedCount} dossiers rejected</p>
+            <p className="mt-1 text-xs text-muted-foreground">{rejectedCount} dossiers rejected</p>
           </div>
         </div>
       </div>
@@ -179,36 +179,36 @@ export const Overview: React.FC = () => {
       {/* Real Pipeline Telemetry & Architecture Grid */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Document Pipeline Metrics */}
-        <div className="rounded-2xl bg-[#111827]/80 backdrop-blur-xl border border-white/[0.08] p-6 shadow-xl">
-          <div className="flex items-center justify-between mb-6">
+        <div className="rounded-xl bg-card border border-border p-5 sm:p-6 shadow-xs">
+          <div className="flex items-center justify-between mb-5">
             <div>
-              <h3 className="text-base font-semibold text-white">Document Pipeline Telemetry</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Real-time statistics from active student submissions</p>
+              <h3 className="text-base font-bold text-foreground">Document Pipeline Telemetry</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Real-time statistics from active student submissions</p>
             </div>
-            <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+            <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
               <Cpu className="h-4 w-4" />
             </div>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             {liveExtractionMetrics.map((stat, idx) => {
               const Icon = stat.icon
               return (
                 <div 
                   key={idx} 
-                  className="flex items-center justify-between p-4 rounded-xl bg-[#0F172A]/80 border border-white/[0.06] hover:border-white/[0.12] transition-colors"
+                  className="flex items-center justify-between p-3.5 rounded-xl bg-secondary/40 border border-border/60 hover:border-border transition-colors"
                 >
-                  <div className="flex items-center gap-3.5">
-                    <div className={`p-2.5 rounded-xl ${stat.color}`}>
-                      <Icon className="h-5 w-5" />
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-secondary text-foreground border border-border">
+                      <Icon className="h-4 w-4 text-primary" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-semibold text-white">{stat.title}</h4>
-                      <p className="text-xs text-slate-400">{stat.description}</p>
+                      <h4 className="text-sm font-semibold text-foreground">{stat.title}</h4>
+                      <p className="text-xs text-muted-foreground">{stat.description}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-xl font-bold text-white tracking-tight">{stat.value}</span>
+                    <span className="text-lg font-extrabold text-foreground font-mono tracking-tight">{stat.value}</span>
                   </div>
                 </div>
               )
@@ -217,33 +217,33 @@ export const Overview: React.FC = () => {
         </div>
 
         {/* Server & DB Health */}
-        <div className="rounded-2xl bg-[#111827]/80 backdrop-blur-xl border border-white/[0.08] p-6 shadow-xl">
-          <div className="flex items-center justify-between mb-6">
+        <div className="rounded-xl bg-card border border-border p-5 sm:p-6 shadow-xs">
+          <div className="flex items-center justify-between mb-5">
             <div>
-              <h3 className="text-base font-semibold text-white">Infrastructure & Engine Status</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Backend services, database, and extraction model operational status</p>
+              <h3 className="text-base font-bold text-foreground">Infrastructure & Engine Status</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Backend services, database, and extraction model operational status</p>
             </div>
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
               <Activity className="h-4 w-4" />
             </div>
           </div>
 
-          <div className="divide-y divide-white/[0.06]">
+          <div className="divide-y divide-border/60">
             {liveServiceNodes.map((service, idx) => (
-              <div key={idx} className="flex items-center justify-between py-4 first:pt-0 last:pb-0">
-                <div className="flex items-center gap-3.5">
+              <div key={idx} className="flex items-center justify-between py-3.5 first:pt-0 last:pb-0">
+                <div className="flex items-center gap-3">
                   <div className="relative">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
-                    <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-400 animate-ping opacity-75" />
+                    <CheckCircle2 className="h-4.5 w-4.5 text-emerald-500 shrink-0" />
+                    <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping opacity-75" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-semibold text-white">{service.name}</h4>
-                    <p className="text-xs text-slate-400">{service.engine}</p>
+                    <h4 className="text-sm font-semibold text-foreground">{service.name}</h4>
+                    <p className="text-xs text-muted-foreground">{service.engine}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-semibold tracking-wide bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                     {service.status}
                   </span>
                 </div>
@@ -251,12 +251,12 @@ export const Overview: React.FC = () => {
             ))}
           </div>
           
-          <div className="mt-6 pt-4 border-t border-white/[0.06] flex items-center justify-between text-xs text-slate-400">
-            <span className="flex items-center gap-1.5">
-              <Database className="h-3.5 w-3.5 text-indigo-400" /> Storage Engine: MongoDB Async
+          <div className="mt-5 pt-4 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5 font-medium">
+              <Database className="h-3.5 w-3.5 text-primary" /> Storage Engine: MongoDB Async
             </span>
-            <span className="flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-purple-400" /> Multimodal AI: Active
+            <span className="flex items-center gap-1.5 font-medium">
+              <Sparkles className="h-3.5 w-3.5 text-emerald-500" /> Multimodal AI: Active
             </span>
           </div>
         </div>

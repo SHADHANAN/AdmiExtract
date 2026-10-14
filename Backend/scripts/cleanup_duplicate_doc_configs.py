@@ -28,7 +28,6 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from app.core.config import settings
 from app.models.user import User
 from app.models.wanted_field_config import DocumentFieldConfiguration, WantedFieldItem
-from app.models.excel_template import ExcelBatchTemplate
 from app.models.student_submission import StudentSubmission
 from app.models.doc_config_version import DocumentConfigurationVersion
 
@@ -41,7 +40,6 @@ async def init_db():
         document_models=[
             User,
             DocumentFieldConfiguration,
-            ExcelBatchTemplate,
             StudentSubmission,
             DocumentConfigurationVersion,
         ],

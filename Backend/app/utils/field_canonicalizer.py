@@ -182,11 +182,6 @@ PROFILE_FIELDS = {
     "reg no",
     "registration number",
     "roll number",
-    "mobile number",
-    "mobile_number",
-    "phone number",
-    "mobile",
-    "phone",
     "email",
     "email id",
     "email_id",
@@ -195,7 +190,7 @@ PROFILE_FIELDS = {
 
 def is_profile_field(field_name: str) -> bool:
     """
-    Check if a field is a student account login profile field (Student Name, Register Number, Mobile Number, Email).
+    Check if a field is a student account login profile field (Student Name, Register Number, Email).
     These fields must be sourced exclusively from authenticated login session context, never OCR/AI.
     """
     if not field_name:
@@ -223,7 +218,7 @@ def normalize_and_merge_extracted_data(extracted_dict: Dict[str, Any]) -> Dict[s
        - Keep non-null value over null value.
        - If both non-null, keep the value with the higher confidence score.
        - Discard the rest.
-    3. Ensure ONLY ONE entry per canonical field exists in the returned dictionary.
+       3. Ensure ONLY ONE entry per canonical field exists in the returned dictionary.
     """
     if not isinstance(extracted_dict, dict):
         return {}
@@ -263,7 +258,6 @@ def normalize_and_merge_extracted_data(extracted_dict: Dict[str, Any]) -> Dict[s
 PROFILE_FIELD_ALIASES: set[str] = {
     "student name", "student_name", "candidate name", "applicant name", "name",
     "register number", "register_number", "register no", "reg no",
-    "mobile number", "mobile_number", "mobile", "phone", "phone number",
     "email", "email address"
 }
 
@@ -276,7 +270,7 @@ def is_profile_field(name: str) -> bool:
     if n_clean in PROFILE_FIELD_ALIASES:
         return True
     canon = get_canonical_field_name(name).strip().lower()
-    return canon in ["student name", "register number", "mobile number"] or canon in PROFILE_FIELD_ALIASES
+    return canon in ["student name", "register number"] or canon in PROFILE_FIELD_ALIASES
 
 
 ADDRESS_FIELD_ALIASES: set[str] = {
@@ -315,6 +309,9 @@ def is_yes_no_question_field(name: str) -> bool:
     """
     if not name:
         return False
+    from app.utils.evidence_yes_no import is_yes_no_field
+    if is_yes_no_field(name):
+        return True
     n_lower = name.strip().lower()
     if any(tag in n_lower for tag in ["yes/no", "(yes/no)", "yes / no", "yes/no"]):
         return True
@@ -322,7 +319,7 @@ def is_yes_no_question_field(name: str) -> bool:
         return True
     if re.search(r"\b(is|did|does|whether|has)\b", n_lower):
         return True
-    if any(phrase in n_lower for phrase in ["same as", "first graduate", "special admission", "differently abled", "orphan"]):
+    if any(phrase in n_lower for phrase in ["same as", "first graduate", "special admission", "differently abled", "orphan", "disability"]):
         return True
     if n_lower.endswith("?"):
         return True
@@ -1068,9 +1065,10 @@ FIELD_SOURCE_RULES: Dict[str, list[str]] = {
     # Personal Details
     "Gender": ["AADHAAR", "TRANSFER_CERTIFICATE", "SSLC", "HSC", "COMMUNITY", "NATIVITY"],
     "Sex": ["AADHAAR", "TRANSFER_CERTIFICATE", "SSLC", "HSC", "COMMUNITY", "NATIVITY"],
-    "Salutation": ["AADHAAR", "TRANSFER_CERTIFICATE", "SSLC", "HSC", "COMMUNITY"],
+    "Salutation": ["TRANSFER_CERTIFICATE", "AADHAAR", "SSLC", "HSC", "COMMUNITY"],
     "Blood Group": ["TRANSFER_CERTIFICATE", "AADHAAR"],
-    "Nationality": ["AADHAAR", "COMMUNITY", "NATIVITY", "TRANSFER_CERTIFICATE"],
+    "Nationality": ["TRANSFER_CERTIFICATE", "AADHAAR", "COMMUNITY", "NATIVITY"],
+    "Country": ["TRANSFER_CERTIFICATE", "AADHAAR", "PASSPORT"],
     "Religion": ["COMMUNITY", "TRANSFER_CERTIFICATE", "NATIVITY"],
 
     # Community & Caste (Strict to COMMUNITY)
@@ -1096,6 +1094,11 @@ FIELD_SOURCE_RULES: Dict[str, list[str]] = {
     "Guardian's / Spouse's Name": ["AADHAAR", "COMMUNITY", "TRANSFER_CERTIFICATE", "INCOME"],
     "Guardian Name": ["AADHAAR", "COMMUNITY", "TRANSFER_CERTIFICATE", "INCOME"],
     "Parent / spouse / Guardian Mobile Number": ["AADHAAR", "TRANSFER_CERTIFICATE"],
+    "Mobile Number": ["AADHAAR", "TRANSFER_CERTIFICATE"],
+    "Student Mobile Number": ["AADHAAR", "TRANSFER_CERTIFICATE"],
+    "Mobile": ["AADHAAR", "TRANSFER_CERTIFICATE"],
+    "Phone Number": ["AADHAAR", "TRANSFER_CERTIFICATE"],
+    "Phone": ["AADHAAR", "TRANSFER_CERTIFICATE"],
 
     # Academic & TC & EMIS
     "EMIS ID": ["TRANSFER_CERTIFICATE"],
@@ -1109,9 +1112,9 @@ FIELD_SOURCE_RULES: Dict[str, list[str]] = {
     "School Name": ["TRANSFER_CERTIFICATE", "SSLC", "HSC"],
     "Issue Date": ["TRANSFER_CERTIFICATE"],
     "Leaving Date": ["TRANSFER_CERTIFICATE"],
-    "TC Issue Date": ["TRANSFER_CERTIFICATE"],
-    "Academic Year of Joining": ["TRANSFER_CERTIFICATE", "SSLC", "HSC", "BONAFIDE"],
-    "Stream Type": ["TRANSFER_CERTIFICATE", "SSLC", "HSC", "BONAFIDE"],
+    "Academic Year of Joining": ["STUDENT_PROFILE", "TRANSFER_CERTIFICATE", "BONAFIDE", "ALLOTMENT_ORDER", "SSLC", "HSC"],
+    "Academic Year": ["STUDENT_PROFILE", "TRANSFER_CERTIFICATE", "BONAFIDE", "ALLOTMENT_ORDER", "SSLC", "HSC"],
+    "Year of Joining": ["STUDENT_PROFILE", "TRANSFER_CERTIFICATE", "BONAFIDE", "ALLOTMENT_ORDER", "SSLC", "HSC"],
     "Course Type": ["TRANSFER_CERTIFICATE", "SSLC", "HSC", "BONAFIDE"],
     "COURSE": ["TRANSFER_CERTIFICATE", "SSLC", "HSC", "BONAFIDE"],
     "Branch / Specialization": ["TRANSFER_CERTIFICATE", "SSLC", "HSC", "BONAFIDE"],
@@ -1734,12 +1737,3 @@ def infer_gender_from_salutation(
                 }
 
     return None
-
-
-
-
-
-
-
-
-

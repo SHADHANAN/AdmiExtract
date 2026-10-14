@@ -52,6 +52,43 @@ class StudentSubmissionRepository:
         await submission.save()
         return submission
 
+    async def get_by_normalized_register_number(self, normalized_reg: str) -> StudentSubmission | None:
+        """Find a student submission by globally unique normalized register number."""
+        clean_reg = (normalized_reg or "").strip().upper()
+        if not clean_reg:
+            return None
+        return await StudentSubmission.find_one(StudentSubmission.normalized_register_number == clean_reg)
+
+    async def get_by_register_number_global(self, reg_num: str) -> StudentSubmission | None:
+        """Find a student submission globally across all batches by register number."""
+        from app.utils.normalization import normalize_register_number
+        norm = normalize_register_number(reg_num)
+        if not norm:
+            return None
+        # First query by normalized_register_number
+        sub = await StudentSubmission.find_one(StudentSubmission.normalized_register_number == norm)
+        if sub:
+            return sub
+        # Fallback for legacy documents where normalized_register_number was not populated yet
+        import re
+        return await StudentSubmission.find_one({
+            "register_number": {"$regex": f"^{re.escape(str(reg_num).strip())}$", "$options": "i"}
+        })
+
+    async def get_other_by_normalized_register_number(
+        self,
+        normalized_reg: str,
+        exclude_id: PydanticObjectId,
+    ) -> StudentSubmission | None:
+        """Find another student submission with the same normalized register number excluding a specific submission ID."""
+        clean_reg = (normalized_reg or "").strip().upper()
+        if not clean_reg:
+            return None
+        return await StudentSubmission.find_one(
+            StudentSubmission.normalized_register_number == clean_reg,
+            StudentSubmission.id != exclude_id,
+        )
+
     async def delete_submission(self, submission_id: PydanticObjectId) -> bool:
         """Delete a student submission record from MongoDB."""
         submission = await StudentSubmission.get(submission_id)

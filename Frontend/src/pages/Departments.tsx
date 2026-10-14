@@ -155,53 +155,52 @@ export const Departments: React.FC = () => {
           {filteredDepts.length > 0 ? (
             <div className="grid gap-6 md:grid-cols-3">
               {filteredDepts.map((dept) => (
-                <Card key={dept.id} className="relative hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-300 flex flex-col justify-between overflow-hidden border border-white/[0.08] bg-[#111827]">
-                  <div className="h-1.5 w-full bg-gradient-to-r from-indigo-500 via-indigo-600 to-purple-600" />
-                  
-                  <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 mt-2">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-400 border border-indigo-500/25 shadow-xs">
-                      <Building2 className="h-5 w-5" />
+                <Card key={dept.id} className="relative hover:border-primary/50 hover:shadow-xs transition-all duration-200 flex flex-col justify-between overflow-hidden border-border/80">
+                  <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
+                      <Building2 className="h-4.5 w-4.5" />
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                        dept.is_active ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
+                        dept.is_active ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20' : 'bg-secondary text-muted-foreground border border-border'
                       }`}>
+                        <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${dept.is_active ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
                         {dept.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="space-y-4 pt-1 flex-1 flex flex-col justify-between">
                     <div>
-                      <CardTitle className="text-lg font-bold text-white">{dept.name} ({dept.code})</CardTitle>
-                      <CardDescription className="mt-1.5 line-clamp-2 text-slate-400">
+                      <CardTitle className="text-base font-bold text-foreground">{dept.name} ({dept.code})</CardTitle>
+                      <CardDescription className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
                         {dept.description || 'No description provided.'}
                       </CardDescription>
                     </div>
 
-                    <div className="border-t border-white/[0.08] pt-4 flex flex-col gap-2 text-xs text-slate-400">
-                      <div className="flex items-center gap-1.5">
-                        <ShieldCheck className="h-3.5 w-3.5 text-indigo-400" /> Created by: {dept.created_by}
+                    <div className="border-t border-border/60 pt-3 flex flex-col gap-1.5 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1.5 text-[11px]">
+                        <ShieldCheck className="h-3.5 w-3.5 text-primary" /> Created by: {dept.created_by}
                       </div>
-                      <div className="flex items-center gap-1.5 justify-between">
-                        <span className="flex items-center gap-1.5">
-                          <Calendar className="h-3.5 w-3.5 text-indigo-400" /> Date: {new Date(dept.created_at).toLocaleDateString()}
+                      <div className="flex items-center gap-1.5 justify-between text-[11px]">
+                        <span className="flex items-center gap-1.5 font-mono">
+                          <Calendar className="h-3.5 w-3.5 text-muted-foreground" /> Date: {new Date(dept.created_at).toLocaleDateString()}
                         </span>
                         
                         {/* Action buttons */}
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => handleEditClick(dept)}
-                            className="p-1 hover:bg-white/[0.08] rounded text-slate-400 hover:text-white cursor-pointer transition-colors"
+                            className="p-1 hover:bg-secondary rounded text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
                             title="Edit"
                           >
-                            <Edit2 className="h-4 w-4" />
+                            <Edit2 className="h-3.5 w-3.5" />
                           </button>
                           <button
                             onClick={() => handleDeleteClick(dept.id)}
-                            className="p-1 hover:bg-red-500/10 rounded text-slate-400 hover:text-red-400 cursor-pointer transition-colors"
+                            className="p-1 hover:bg-rose-500/10 rounded text-muted-foreground hover:text-rose-500 cursor-pointer transition-colors"
                             title="Delete"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
                       </div>

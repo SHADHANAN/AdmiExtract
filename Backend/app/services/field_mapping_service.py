@@ -18,6 +18,11 @@ Strategies:
 import re
 import logging
 from typing import Any, Dict, List, Optional, Tuple
+from app.utils.evidence_yes_no import (
+    is_yes_no_field,
+    evaluate_evidence_based_yes_no,
+    normalize_yes_no_not_found,
+)
 
 logger = logging.getLogger("app.services.field_mapping_service")
 
@@ -359,39 +364,33 @@ class FieldMappingService:
                         if validated is not None:
                             return validated, conf, f"Canonical Match ({canonical_target})"
 
-        # Step 4: Boolean / Yes-No question check
-        if self._is_boolean_question(header_clean):
-            h_low = header_clean.lower()
-            # Requirement 2: "Is EMIS ID Available" must be Yes only when a valid EMIS ID is actually accepted
-            if "emis" in h_low:
-                from app.utils.normalization import validate_and_normalize_emis
-                has_valid_emis = False
-                for k, v in extracted_data_pool.items():
-                    if "emis" in k.lower() and not self._is_boolean_question(k):
-                        c_val, _ = self._extract_value_and_confidence(v)
-                        if c_val and validate_and_normalize_emis(c_val):
-                            has_valid_emis = True
-                            break
-                return ("Yes", 95, "Valid EMIS Verified") if has_valid_emis else ("No", 95, "No Valid EMIS")
+        # Step 4: Boolean / Yes-No question check (Document Evidence Grounded)
+        if is_yes_no_field(header_clean) or self._is_boolean_question(header_clean):
+            pool_unpacked = {}
+            for k, v in extracted_data_pool.items():
+                val_u, _ = self._extract_value_and_confidence(v)
+                pool_unpacked[k] = val_u
 
-            # Requirement 7: Communication Address Same boolean only Yes/No
-            if "same as" in h_low or "communication address same" in h_low:
-                from app.utils.normalization import validate_boolean_yes_no
-                for k, v in extracted_data_pool.items():
-                    if "same as" in k.lower():
-                        c_val, conf = self._extract_value_and_confidence(v)
-                        b_val = validate_boolean_yes_no(c_val)
-                        if b_val:
-                            return b_val, max(90, conf), "Document Inferred"
-                return "Yes", 80, "Default Same Address"
+            raw_c_val = None
+            raw_conf = 85
+            for test_key in [canonical_target, header_clean]:
+                if test_key and test_key in extracted_data_pool:
+                    raw_c_val, raw_conf = self._extract_value_and_confidence(extracted_data_pool[test_key])
+                    break
 
-            # If an affirmative value exists for other boolean questions
-            if canonical_target:
-                for k, v in extracted_data_pool.items():
-                    if canonical_target.lower() in k.lower():
-                        val, conf = self._extract_value_and_confidence(v)
-                        if self._is_valid_value(val):
-                            return "Yes", 95, "Inferred Boolean"
+            ev_res = evaluate_evidence_based_yes_no(
+                field_key=canonical_target or header_clean,
+                raw_val=raw_c_val,
+                all_extracted_fields=pool_unpacked,
+            )
+            ev_val = ev_res.get("value", "NOT_FOUND")
+            ev_conf = int(ev_res.get("confidence", 0.0) * 100)
+            ev_snippet = ev_res.get("evidence")
+
+            if ev_val in ("YES", "NO"):
+                return ev_val, max(85, ev_conf), f"Evidence Verified ({ev_snippet or ev_val})"
+            else:
+                return "NOT_FOUND", 0, "No Evidence Found"
 
         # Fallback for Communication Address: if not separately specified, inherit validated Permanent Address
         if ("communication address" in header_clean.lower() or "address for communication" in header_clean.lower()) and not self._is_boolean_question(header_clean):
@@ -438,8 +437,8 @@ class FieldMappingService:
         h_lower = header.lower().strip()
 
         # 1. Boolean Questions
-        if self._is_boolean_question(header):
-            return validate_boolean_yes_no(val)
+        if self._is_boolean_question(header) or is_yes_no_field(header):
+            return normalize_yes_no_not_found(val)
 
         # Rejection of boolean values for non-boolean columns
         val_str_lower = str(val).strip().lower()
@@ -584,18 +583,20 @@ class FieldMappingService:
         write_dict: Dict[str, Any] = {}
         for h in excel_headers:
             item = mapped_fields.get(h)
+            if is_yes_no_field(h) or self._is_boolean_question(h):
+                raw_v = item.get("value") if item else None
+                write_dict[h] = normalize_yes_no_not_found(raw_v)
+                continue
             if item and item.get("value") is not None:
                 val = item["value"]
                 # Re-run semantic validation to guarantee zero wrong-column contamination
                 valid_val = self.validate_resolved_candidate(h, val)
                 if valid_val is not None:
                     write_dict[h] = valid_val
-                elif self._is_boolean_question(h):
-                    write_dict[h] = "No"
                 else:
                     write_dict[h] = None
             else:
-                write_dict[h] = "No" if self._is_boolean_question(h) else None
+                write_dict[h] = None
         return write_dict
 
 
@@ -676,11 +677,18 @@ def validate_resolved_candidate(header: str, val: Any) -> Optional[Any]:
 
 
 def format_for_excel_write(header: str, val: Any) -> Any:
+    if is_yes_no_field(header) or _default_service._is_boolean_question(header):
+        if "communication address same" in header.lower() or "same as" in header.lower():
+            from app.utils.normalization import validate_boolean_yes_no
+            b_val = validate_boolean_yes_no(val)
+            if b_val is not None:
+                return b_val
+            if val is not None and str(val).strip() and str(val).strip().lower() not in ("none", "null", "not_found", "not available", "n/a", "not detected"):
+                return "No"
+        return normalize_yes_no_not_found(val)
     valid_val = _default_service.validate_resolved_candidate(header, val)
     if valid_val is not None:
         return valid_val
-    if _default_service._is_boolean_question(header):
-        return "No"
     return None
 
 
@@ -1020,4 +1028,3 @@ def validate_mapping_payload(
         cleaned[field] = target
 
     return True, None, cleaned
-

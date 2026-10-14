@@ -36,13 +36,14 @@ class MistralOCRException(Exception):
     pass
 
 
-SUPPORTED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg"}
+SUPPORTED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
 
 MIME_TYPES = {
     ".pdf": "application/pdf",
     ".png": "image/png",
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
 }
 
 
@@ -170,6 +171,19 @@ def extract_ocr_text(ocr_response: Any, client: Optional[Any] = None) -> Dict[st
     }
 
 
+def _is_mistral_rate_limit(err: Exception) -> bool:
+    """Check if exception represents HTTP 429 rate limiting or quota exhaustion."""
+    msg = str(err).lower()
+    raw = getattr(err, "raw_response", None)
+    if raw is not None and getattr(raw, "status_code", None) == 429:
+        return True
+    if getattr(err, "status_code", None) == 429 or getattr(err, "code", None) == 429:
+        return True
+    if "429" in msg or "rate limit" in msg or "rate_limited" in msg or "1300" in msg:
+        return True
+    return False
+
+
 def perform_mistral_ocr(file_path: str) -> Dict[str, Any]:
     """
     Single Reusable Function to Execute Mistral OCR on a File (SDK v2.9.1).
@@ -178,13 +192,14 @@ def perform_mistral_ocr(file_path: str) -> Dict[str, Any]:
     - Validate file existence & extension
     - Upload document via Files API (or base64 fallback)
     - Call client.ocr.process(model="mistral-ocr-latest", include_image_base64=True)
-    - Emit diagnostic logs (SDK VERSION, UPLOAD RESPONSE, OCR REQUEST, RAW OCR RESPONSE, PARSED OCR TEXT, OCR COMPLETE)
+    - Emit diagnostic logs
+    - If rate limited (HTTP 429 / 1300), raise MistralOCRException immediately without retry
     - Raise MistralOCRException if response contains no text
     """
     path = Path(file_path)
 
     # 1. SDK VERSION
-    sdk_ver = "2.9.1"
+    sdk_ver = "2.10.0"
     _log("=" * 24)
     _log("SDK VERSION")
     _log("=" * 24)
@@ -246,6 +261,12 @@ def perform_mistral_ocr(file_path: str) -> Dict[str, Any]:
             include_image_base64=True,
         )
     except Exception as upload_err:
+        if _is_mistral_rate_limit(upload_err):
+            _log(f"[OCR Notice] Mistral Files upload rate limited (429 code 1300): {upload_err}. Immediately skipping retry.")
+            mex = MistralOCRException(f"Mistral OCR rate limited (HTTP 429 code 1300): {upload_err}")
+            setattr(mex, "status", "OCR_RATE_LIMITED")
+            raise mex
+
         _log(f"[INFO] Files API upload notice: {upload_err}. Using base64 document URL...")
         with open(path, "rb") as f:
             b64_content = base64.b64encode(f.read()).decode("utf-8")
@@ -268,14 +289,22 @@ def perform_mistral_ocr(file_path: str) -> Dict[str, Any]:
         _log("include_image_base64: True")
         _log("=" * 24 + "\n")
 
-        ocr_response = client.ocr.process(
-            model="mistral-ocr-latest",
-            document={
-                "type": "document_url",
-                "document_url": data_url,
-            },
-            include_image_base64=True,
-        )
+        try:
+            ocr_response = client.ocr.process(
+                model="mistral-ocr-latest",
+                document={
+                    "type": "document_url",
+                    "document_url": data_url,
+                },
+                include_image_base64=True,
+            )
+        except Exception as ocr_proc_err:
+            if _is_mistral_rate_limit(ocr_proc_err):
+                _log(f"[OCR Notice] Mistral OCR process rate limited (429 code 1300): {ocr_proc_err}. Immediately skipping retry.")
+                mex = MistralOCRException(f"Mistral OCR rate limited (HTTP 429 code 1300): {ocr_proc_err}")
+                setattr(mex, "status", "OCR_RATE_LIMITED")
+                raise mex
+            raise
 
     # 4. RAW OCR RESPONSE LOG
     try:
@@ -314,120 +343,414 @@ def perform_mistral_ocr(file_path: str) -> Dict[str, Any]:
 
     return {
         "success": True,
+        "status": "OCR_SUCCESS",
         "text": full_ocr_text,
         "pages": pages_data,
-        "confidence": None,
+        "confidence": 98.0,
+        "provider": "MISTRAL",
+    }
+
+
+_rapid_ocr_engine = None
+
+
+def get_rapidocr_engine():
+    """Lazily instantiate and cache RapidOCR engine singleton."""
+    global _rapid_ocr_engine
+    if _rapid_ocr_engine is None:
+        try:
+            from rapidocr_onnxruntime import RapidOCR
+            _rapid_ocr_engine = RapidOCR()
+        except Exception as e:
+            _log(f"[OCR] RapidOCR engine initialization failed: {e}")
+            return None
+    return _rapid_ocr_engine
+
+
+def perform_local_ocr(file_path: str) -> Dict[str, Any]:
+    """
+    Execute high-accuracy local OCR on a file (Free-First).
+    Supports PDF, JPG, JPEG, PNG, WEBP.
+    Returns:
+    {
+        "success": bool,
+        "status": "OCR_SUCCESS" | "OCR_FAILED" | "OCR_UNAVAILABLE" | "OCR_RATE_LIMITED",
+        "text": str,
+        "pages": List[Dict[str, Any]],
+        "confidence": float,
+        "provider": "LOCAL_RAPIDOCR",
+        "message": Optional[str],
+    }
+    """
+    path = Path(file_path)
+    if not path.exists() or not path.is_file():
+        return {
+            "success": False,
+            "status": "OCR_FAILED",
+            "text": "",
+            "pages": [],
+            "confidence": 0.0,
+            "provider": "LOCAL_RAPIDOCR",
+            "message": f"File not found: {file_path}",
+        }
+
+    ext = path.suffix.lower()
+    if ext not in SUPPORTED_EXTENSIONS:
+        return {
+            "success": False,
+            "status": "OCR_FAILED",
+            "text": "",
+            "pages": [],
+            "confidence": 0.0,
+            "provider": "LOCAL_RAPIDOCR",
+            "message": f"Unsupported file extension: {ext}",
+        }
+
+    engine = get_rapidocr_engine()
+
+    # 1. PDF Handling
+    if ext == ".pdf":
+        try:
+            import io
+            import pypdf
+            from PIL import Image
+
+            reader = pypdf.PdfReader(str(path))
+            if getattr(reader, "is_encrypted", False):
+                passwords_to_try = ["", "123456", "password"]
+                for p_try in passwords_to_try:
+                    try:
+                        if reader.decrypt(p_try) != 0:
+                            break
+                    except Exception:
+                        pass
+
+            pages_data: List[Dict[str, Any]] = []
+            combined_texts: List[str] = []
+
+            def _is_digital_signature_metadata(text: str) -> bool:
+                if not text:
+                    return False
+                t_lower = text.lower()
+                sig_phrases = ["digitally signed", "signature not verified", "signature valid", "valid signature", "docusign"]
+                if not any(p in t_lower for p in sig_phrases):
+                    return False
+                lines = [l.strip() for l in text.splitlines() if l.strip()]
+                non_sig = [
+                    l for l in lines
+                    if not any(p in l.lower() for p in sig_phrases)
+                    and not re.search(r'\b(date|time|ist|gmt|reason|location|ds\s*certificate)\b', l.lower())
+                ]
+                return len(" ".join(non_sig)) < 60
+
+            for idx, page in enumerate(reader.pages):
+                embedded_text = (page.extract_text() or "").strip()
+                page_imgs = getattr(page, "images", []) or []
+                sig_only = _is_digital_signature_metadata(embedded_text)
+
+                page_img_text = ""
+                if engine and page_imgs and (not embedded_text or sig_only or len(embedded_text) < 120):
+                    page_img_lines = []
+                    for img_obj in page_imgs:
+                        try:
+                            img = Image.open(io.BytesIO(img_obj.data))
+                            if img.mode not in ("RGB", "L"):
+                                img = img.convert("RGB")
+                            ocr_res, _ = engine(img)
+                            if ocr_res:
+                                lines = [r[1] for r in ocr_res if len(r) > 1 and r[1]]
+                                if lines:
+                                    page_img_lines.append("\n".join(lines))
+                        except Exception as img_sub_err:
+                            _log(f"[OCR] Sub-image scan notice: {img_sub_err}")
+                    if page_img_lines:
+                        page_img_text = "\n\n".join(page_img_lines).strip()
+
+                # Preserve page boundaries explicitly
+                page_tag = f"--- [Page {idx + 1}] ---"
+                if page_img_text and sig_only:
+                    effective_page_text = f"{page_tag}\n{page_img_text}"
+                elif page_img_text and embedded_text:
+                    effective_page_text = f"{page_tag}\n{embedded_text}\n\n{page_img_text}"
+                elif embedded_text:
+                    effective_page_text = f"{page_tag}\n{embedded_text}"
+                elif page_img_text:
+                    effective_page_text = f"{page_tag}\n{page_img_text}"
+                else:
+                    effective_page_text = ""
+
+                if effective_page_text:
+                    combined_texts.append(effective_page_text)
+                    pages_data.append({"page_number": idx + 1, "text": effective_page_text})
+
+            if combined_texts:
+                full_text = "\n\n".join(combined_texts).strip()
+                if _is_digital_signature_metadata(full_text):
+                    _log(f"[OCR] Extracted text is purely digital signature metadata ({len(full_text)} chars). Marking OCR_LOW_QUALITY.")
+                    return {
+                        "success": False,
+                        "status": "OCR_LOW_QUALITY",
+                        "text": full_text,
+                        "pages": pages_data,
+                        "confidence": 30.0,
+                        "provider": "LOCAL_RAPIDOCR",
+                        "message": "Extracted text contains only digital-signature metadata. Multimodal fallback recommended.",
+                    }
+                if len(full_text) < 100:
+                    _log(f"[OCR] Extracted PDF text length={len(full_text)} chars (< 100 chars). Marking OCR_LOW_QUALITY.")
+                    return {
+                        "success": False,
+                        "status": "OCR_LOW_QUALITY",
+                        "text": full_text,
+                        "pages": pages_data,
+                        "confidence": 40.0,
+                        "provider": "LOCAL_RAPIDOCR",
+                        "message": f"Extracted text too short ({len(full_text)} chars). Marked OCR_LOW_QUALITY.",
+                    }
+                return {
+                    "success": True,
+                    "status": "OCR_SUCCESS",
+                    "text": full_text,
+                    "pages": pages_data,
+                    "confidence": 95.0,
+                    "provider": "LOCAL_RAPIDOCR",
+                    "message": None,
+                }
+            else:
+                return {
+                    "success": False,
+                    "status": "OCR_FAILED",
+                    "text": "",
+                    "pages": [],
+                    "confidence": 0.0,
+                    "provider": "LOCAL_RAPIDOCR",
+                    "message": "No text detected in PDF document",
+                }
+        except Exception as pdf_err:
+            _log(f"[OCR] Local PDF extraction error: {pdf_err}")
+            try:
+                raw_txt = path.read_text(encoding="utf-8", errors="ignore").strip()
+                if raw_txt and len(raw_txt) >= 100:
+                    return {
+                        "success": True,
+                        "status": "OCR_SUCCESS",
+                        "text": raw_txt,
+                        "pages": [{"page_number": 1, "text": raw_txt}],
+                        "confidence": 95.0,
+                        "provider": "LOCAL_RAPIDOCR",
+                        "message": None,
+                    }
+                elif raw_txt and len(raw_txt) > 5:
+                    return {
+                        "success": False,
+                        "status": "OCR_LOW_QUALITY",
+                        "text": raw_txt,
+                        "pages": [{"page_number": 1, "text": raw_txt}],
+                        "confidence": 40.0,
+                        "provider": "LOCAL_RAPIDOCR",
+                        "message": f"Extracted text too short ({len(raw_txt)} chars). Marked OCR_LOW_QUALITY.",
+                    }
+            except Exception:
+                pass
+            return {
+                "success": False,
+                "status": "OCR_FAILED",
+                "text": "",
+                "pages": [],
+                "confidence": 0.0,
+                "provider": "LOCAL_RAPIDOCR",
+                "message": f"PDF extraction error: {pdf_err}",
+            }
+
+    # 2. Image Handling (JPG, JPEG, PNG, WEBP)
+    if ext in {".jpg", ".jpeg", ".png", ".webp"}:
+        if not engine:
+            return {
+                "success": False,
+                "status": "OCR_UNAVAILABLE",
+                "text": "",
+                "pages": [],
+                "confidence": 0.0,
+                "provider": "LOCAL_RAPIDOCR",
+                "message": "Local OCR engine (RapidOCR) is unavailable",
+            }
+        try:
+            from PIL import Image
+            img = Image.open(str(path))
+            if img.mode not in ("RGB", "L"):
+                img = img.convert("RGB")
+            ocr_res, _ = engine(img)
+            if ocr_res:
+                lines = [r[1] for r in ocr_res if len(r) > 1 and r[1]]
+                scores = [float(r[2]) for r in ocr_res if len(r) > 2 and r[2] is not None]
+                text = "\n".join(lines).strip()
+                conf = (sum(scores) / len(scores) * 100.0) if scores else 95.0
+                if text:
+                    if len(text) < 100:
+                        return {
+                            "success": False,
+                            "status": "OCR_LOW_QUALITY",
+                            "text": text,
+                            "pages": [{"page_number": 1, "text": text}],
+                            "confidence": 40.0,
+                            "provider": "LOCAL_RAPIDOCR",
+                            "message": f"Extracted text too short ({len(text)} chars). Marked OCR_LOW_QUALITY.",
+                        }
+                    return {
+                        "success": True,
+                        "status": "OCR_SUCCESS",
+                        "text": text,
+                        "pages": [{"page_number": 1, "text": text}],
+                        "confidence": conf,
+                        "provider": "LOCAL_RAPIDOCR",
+                        "message": None,
+                    }
+
+            return {
+                "success": False,
+                "status": "OCR_FAILED",
+                "text": "",
+                "pages": [],
+                "confidence": 0.0,
+                "provider": "LOCAL_RAPIDOCR",
+                "message": "No text detected in image",
+            }
+        except Exception as img_err:
+            _log(f"[OCR] Local image OCR failed: {img_err}")
+            return {
+                "success": False,
+                "status": "OCR_FAILED",
+                "text": "",
+                "pages": [],
+                "confidence": 0.0,
+                "provider": "LOCAL_RAPIDOCR",
+                "message": f"Image processing error: {img_err}",
+            }
+
+    return {
+        "success": False,
+        "status": "OCR_FAILED",
+        "text": "",
+        "pages": [],
+        "confidence": 0.0,
+        "provider": "LOCAL_RAPIDOCR",
+        "message": f"Unsupported format '{ext}'",
     }
 
 
 class OCRService:
     """
-    OCR Service wrapper around perform_mistral_ocr with embedded PDF fallback and production banners.
+    Production OCR Service implementing Free-First local OCR with optional Mistral OCR.
     """
+    def __init__(self):
+        self._mistral_cooldown_until = 0.0
 
-    def extract_text(self, file_path: str) -> Dict[str, Any]:
+    def extract_text(self, file_path: str, prefer_local: bool = True) -> Dict[str, Any]:
         """
-        Extract text from a file using Mistral OCR API, with embedded PDF fallback.
+        Extract text from a document using local OCR first (Free-First).
+        If local OCR fails or yields no text, optionally checks Mistral if configured,
+        handling 429 without aggressive retries.
         """
-        filename = Path(file_path).name
+        import time
+        path_obj = Path(file_path)
+        filename = path_obj.name
         print("\n========== OCR ==========", flush=True)
-        print(f"OCR Started: {filename}", flush=True)
+        print(f"OCR Started: {filename} (Free-First: {prefer_local})", flush=True)
 
-        try:
-            res = perform_mistral_ocr(file_path)
-            txt = res.get("text") or ""
-            print(f"OCR Success: True", flush=True)
-            print(f"OCR Text Length: {len(txt)} chars", flush=True)
-            print("==========================\n", flush=True)
-            return res
-        except Exception as exc:
-            msg = str(exc)
-            _log(f"[OCR Notice] {msg}. Checking for local OCR and embedded PDF fallback...")
+        if prefer_local:
+            # 1. Free-First: Try Local OCR
+            local_res = perform_local_ocr(file_path)
+            txt = local_res.get("text") or ""
+            status_code = local_res.get("status") or ("OCR_SUCCESS" if local_res.get("success") else "OCR_FAILED")
+            pages = local_res.get("pages") or []
+            page_count = len(pages) if pages else 1
+            conf = local_res.get("confidence", 0.0)
 
-            path = Path(file_path)
-            if path.exists():
-                combined_text = ""
-                pages_data: list[dict[str, Any]] = []
+            # Log structured OCR Quality diagnostic
+            preview_str = (txt[:100].replace("\n", " ").strip()) if txt else ""
+            try:
+                print(
+                    f"[OCR_QUALITY] document={filename} page_count={page_count} ocr_provider={local_res.get('provider')} "
+                    f"ocr_status={status_code} ocr_text_length={len(txt)} ocr_text_preview={repr(preview_str)} ocr_confidence={conf:.1f}",
+                    flush=True
+                )
+            except Exception:
+                pass
 
-                if path.suffix.lower() == ".pdf":
-                    try:
-                        import io
-                        import pypdf
-                        from PIL import Image  # type: ignore
+            if local_res.get("success") and status_code == "OCR_SUCCESS" and len(txt.strip()) >= 100:
+                print(f"OCR Success: True (Local RapidOCR/PDF)", flush=True)
+                print(f"OCR Text Length: {len(txt)} chars", flush=True)
+                print("==========================\n", flush=True)
+                return local_res
 
-                        reader = pypdf.PdfReader(str(path))
-                        if getattr(reader, "is_encrypted", False):
-                            # Attempt decryption with common patterns
-                            passwords_to_try = ["", "SHAD2007", "SRUT2007", "123456", "password"]
-                            for p_try in passwords_to_try:
-                                try:
-                                    if reader.decrypt(p_try) != 0:
-                                        break
-                                except Exception:
-                                    pass
+            if status_code == "OCR_LOW_QUALITY":
+                print(f"OCR Success: False (OCR_LOW_QUALITY: {len(txt)} chars < 100)", flush=True)
+                print("==========================\n", flush=True)
+                return local_res
 
-                        pdf_texts = []
-                        for idx, page in enumerate(reader.pages):
-                            t = (page.extract_text() or "").strip()
-                            if t:
-                                pdf_texts.append(t)
-                            else:
-                                # Scanned page: extract images and perform RapidOCR if available
-                                try:
-                                    from rapidocr_onnxruntime import RapidOCR  # type: ignore
-                                    engine = RapidOCR()
-                                    for img_obj in page.images:
-                                        img = Image.open(io.BytesIO(img_obj.data))
-                                        ocr_res, _ = engine(img)
-                                        if ocr_res:
-                                            page_img_text = "\n".join([r[1] for r in ocr_res]).strip()
-                                            if page_img_text:
-                                                pdf_texts.append(page_img_text)
-                                except Exception:
-                                    pass
+            # 2. Optional fallback to Mistral OCR if configured and not rate-limited
+            mistral_key = getattr(settings, "MISTRAL_API_KEY", None) or os.getenv("MISTRAL_API_KEY")
+            now = time.time()
+            if mistral_key and self._mistral_cooldown_until <= now:
+                try:
+                    mistral_res = perform_mistral_ocr(file_path)
+                    if mistral_res.get("success") and (mistral_res.get("text") or "").strip():
+                        print(f"OCR Success: True (Mistral OCR)", flush=True)
+                        print(f"OCR Text Length: {len(mistral_res['text'])} chars", flush=True)
+                        print("==========================\n", flush=True)
+                        mistral_res["status"] = "OCR_SUCCESS"
+                        mistral_res["provider"] = "MISTRAL"
+                        return mistral_res
+                except MistralOCRException as mex:
+                    mex_status = getattr(mex, "status", None) or ("OCR_RATE_LIMITED" if "429" in str(mex) else "OCR_FAILED")
+                    if mex_status == "OCR_RATE_LIMITED" or "429" in str(mex):
+                        self._mistral_cooldown_until = now + 300.0
+                        _log("[OCR Notice] Mistral OCR rate limited (429). Continuing without retry.")
+                        print(f"OCR Success: False (OCR_RATE_LIMITED)", flush=True)
+                        print("==========================\n", flush=True)
+                        return {
+                            "success": False,
+                            "status": "OCR_RATE_LIMITED",
+                            "text": "",
+                            "pages": [],
+                            "confidence": 0.0,
+                            "provider": "MISTRAL",
+                            "message": str(mex),
+                        }
+                except Exception as mex:
+                    _log(f"[OCR Notice] Mistral OCR notice: {mex}. Continuing pipeline.")
 
-                        if pdf_texts:
-                            combined_text = "\n\n".join(pdf_texts).strip()
-                            pages_data = [{"page_number": i + 1, "text": t} for i, t in enumerate(pdf_texts)]
-
-                    except Exception as pdf_err:
-                        _log(f"[PDF Extraction Error] {pdf_err}")
-
-                elif path.suffix.lower() in [".jpg", ".jpeg", ".png"]:
-                    try:
-                        from PIL import Image  # type: ignore
-                        from rapidocr_onnxruntime import RapidOCR  # type: ignore
-                        engine = RapidOCR()
-                        img = Image.open(str(path))
-                        ocr_res, _ = engine(img)
-                        if ocr_res:
-                            combined_text = "\n".join([r[1] for r in ocr_res]).strip()
-                            pages_data = [{"page_number": 1, "text": combined_text}]
-                    except Exception as img_err:
-                        _log(f"[Image OCR Error] {img_err}")
-
-                if combined_text:
-                    print(f"OCR Success: True (Local High-Accuracy OCR Fallback)", flush=True)
-                    print(f"OCR Text Length: {len(combined_text)} chars", flush=True)
-                    print("==========================\n", flush=True)
-                    return {
-                        "success": True,
-                        "text": combined_text,
-                        "pages": pages_data,
-                        "confidence": 95,
-                    }
-
-            print(f"OCR Success: False ({msg})", flush=True)
+            # Return local OCR outcome
+            status_code = local_res.get("status") or "OCR_FAILED"
+            msg = local_res.get("message") or "Local OCR produced no text"
+            print(f"OCR Success: False ({status_code}: {msg})", flush=True)
             print(f"OCR Text Length: 0 chars", flush=True)
             print("==========================\n", flush=True)
-            return {
-                "success": False,
-                "text": None,
-                "pages": [],
-                "confidence": None,
-                "message": msg,
-            }
+            return local_res
+        else:
+            # Mistral first if explicitly requested
+            try:
+                res = perform_mistral_ocr(file_path)
+                txt = res.get("text") or ""
+                print(f"OCR Success: True", flush=True)
+                print(f"OCR Text Length: {len(txt)} chars", flush=True)
+                print("==========================\n", flush=True)
+                return res
+            except Exception as exc:
+                msg = str(exc)
+                _log(f"[OCR Notice] {msg}. Checking for local OCR fallback...")
+                local_res = perform_local_ocr(file_path)
+                if local_res.get("success"):
+                    return local_res
+                return {
+                    "success": False,
+                    "status": "OCR_FAILED",
+                    "text": "",
+                    "pages": [],
+                    "confidence": 0.0,
+                    "message": msg,
+                    "provider": "MISTRAL",
+                }
 
 
 ocr_service = OCRService()
-

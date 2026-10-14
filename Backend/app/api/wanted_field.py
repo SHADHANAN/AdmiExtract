@@ -4,11 +4,11 @@ from app.models.user import User, UserRole
 from app.core.dependencies import get_current_user, RoleChecker
 from app.services.batch_service import BatchService
 from app.services.wanted_field_service import WantedFieldService
-from app.services.excel_template_service import ExcelTemplateService
 from app.models.wanted_field_config import DocumentFieldConfiguration, WantedFieldItem
 from app.schemas.wanted_field import (
     CreateDocumentTypePayload,
     AddFieldPayload,
+    UpdateDocumentRequirementPayload,
     SaveDocumentWantedFieldsPayload,
     DocumentFieldConfigurationResponse,
     DocumentTypeOverviewItem,
@@ -22,7 +22,6 @@ router = APIRouter(
 
 wanted_field_service = WantedFieldService()
 batch_service = BatchService()
-excel_service = ExcelTemplateService()
 
 
 async def _verify_batch_access(batch_id: str, user: User):
@@ -170,6 +169,7 @@ async def add_field_to_document_type(
     return _to_config_response(updated)
 
 
+@router.post("/{batchId}/{documentType}", response_model=DocumentFieldConfigurationResponse)
 @router.put("/{batchId}/{documentType}", response_model=DocumentFieldConfigurationResponse)
 async def save_document_wanted_fields(
     batchId: str,
@@ -186,9 +186,7 @@ async def save_document_wanted_fields(
     await _verify_batch_access(batchId, current_user)
     target_class = classId or class_id
 
-    # Get allowed headers from template if template exists
-    template = await excel_service.get_template_by_batch(batchId, class_id=target_class)
-    allowed_headers = template.headers if (template and template.headers) else None
+    allowed_headers = None
 
     # Convert payload items to model items
     field_items = [
@@ -222,6 +220,40 @@ async def save_document_wanted_fields(
     return _to_config_response(saved)
 
 
+@router.patch("/{batchId}/{documentType}/requirement", response_model=DocumentFieldConfigurationResponse)
+async def update_document_requirement(
+    batchId: str,
+    documentType: str,
+    payload: UpdateDocumentRequirementPayload,
+    classId: Optional[str] = None,
+    class_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update document requirement settings (requirement status, display name, description, limits)
+    without managing extraction fields.
+    """
+    await _verify_batch_access(batchId, current_user)
+    target_class = classId or class_id
+    try:
+        updated = await wanted_field_service.update_document_requirement(
+            batch_id=batchId,
+            doc_type=documentType,
+            class_id=target_class,
+            requirement_status=payload.requirement_status,
+            display_name=payload.display_name,
+            description=payload.description,
+            allowed_types=payload.allowed_types,
+            max_size_mb=payload.max_size_mb,
+        )
+        return _to_config_response(updated)
+    except ValueError as err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(err),
+        )
+
+
 @router.delete("/{batchId}/{documentType}")
 async def delete_document_type(
     batchId: str,
@@ -248,4 +280,3 @@ async def delete_document_type(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(err),
         )
-

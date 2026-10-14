@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
+import { Badge } from '../components/ui/Badge'
 import { EmptyState } from '../components/ui/EmptyState'
 import { departmentService } from '../services/department'
 import { userService } from '../services/user'
@@ -17,6 +18,8 @@ import {
   Layers,
   Calendar,
   Plus,
+  ShieldCheck,
+  FileSpreadsheet,
 } from 'lucide-react'
 
 export const Dashboard: React.FC = () => {
@@ -52,6 +55,7 @@ export const Dashboard: React.FC = () => {
   const totalStudents = submissions.length
   const totalBatches = batches.length
   const totalSections = batches.reduce((acc, b) => acc + (b.classes?.length || 0), 0)
+  const verifiedStudents = submissions.filter((s) => s.status === 'Verified').length
 
   const statsCards = [
     {
@@ -59,51 +63,63 @@ export const Dashboard: React.FC = () => {
       value: totalStudents.toString(),
       isLoading: isSubmissionsLoading,
       icon: Users,
-      color: 'text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
       badge: 'All Cohorts',
+      description: `${verifiedStudents} verified submissions`,
     },
     {
       title: 'Admission Batches',
       value: totalBatches.toString(),
       isLoading: false,
       icon: FolderOpen,
-      color: 'text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-      badge: 'Active Cohorts',
+      badge: 'Active Batches',
+      description: 'Configured academic cohorts',
     },
     {
       title: 'Total Sections',
       value: totalSections.toString(),
       isLoading: false,
       icon: Layers,
-      color: 'text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
       badge: 'Allocated',
+      description: 'Class divisions across cohorts',
     },
   ]
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300">
       {/* SaaS Dashboard Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-border pb-5">
-        <div>
-          <div className="flex items-center gap-2">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
               Welcome back, {user?.name || user?.username || 'Admin'}
             </h1>
+            <Badge variant="success" size="sm" dot>
+              {user?.role === 'super_admin' ? 'Super Admin' : 'Admissions Portal'}
+            </Badge>
           </div>
-          <p className="text-sm text-muted-foreground mt-1">
-            Manage student admissions, documents and verification from one place.
+          <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+            Manage student admissions, document verification, and batch extractions from one unified dashboard.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap self-start md:self-center">
           <Button
             variant="outline"
             size="sm"
             onClick={() => navigate('/students')}
             className="text-xs font-semibold"
           >
-            <Users className="h-4 w-4 mr-1.5 text-muted-foreground" />
-            View All Students
+            <Users className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+            View Students
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/data-extraction')}
+            className="text-xs font-semibold"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+            Data Extraction
           </Button>
           <Button
             variant="primary"
@@ -111,7 +127,7 @@ export const Dashboard: React.FC = () => {
             onClick={() => navigate('/batches')}
             className="text-xs font-semibold"
           >
-            <FolderOpen className="h-4 w-4 mr-1.5" />
+            <Plus className="h-3.5 w-3.5 mr-1" />
             Manage Batches
           </Button>
         </div>
@@ -124,29 +140,32 @@ export const Dashboard: React.FC = () => {
           return (
             <Card
               key={idx}
-              className="hover:border-border/90 hover:shadow-sm transition-all duration-150 relative overflow-hidden"
+              className="border-border/80 hover:border-primary/40 hover:shadow-xs transition-all duration-200 relative overflow-hidden"
             >
               <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
                 <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                   {stat.title}
                 </span>
-                <div className={`p-2 rounded-lg border ${stat.color} shrink-0`}>
+                <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
                   <Icon className="h-4 w-4" />
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-1">
                 {stat.isLoading ? (
-                  <div className="h-9 w-20 bg-secondary animate-pulse rounded-md mt-1" />
+                  <div className="h-9 w-24 bg-secondary animate-pulse rounded-md my-1" />
                 ) : (
-                  <div className="flex items-baseline justify-between mt-1">
+                  <div className="flex items-baseline justify-between">
                     <span className="text-3xl font-extrabold tracking-tight text-foreground font-mono">
                       {stat.value}
                     </span>
-                    <span className="text-[11px] font-medium text-muted-foreground">
+                    <Badge variant="default" size="sm">
                       {stat.badge}
-                    </span>
+                    </Badge>
                   </div>
                 )}
+                <p className="text-[11px] text-muted-foreground leading-normal">
+                  {stat.description}
+                </p>
               </CardContent>
             </Card>
           )
@@ -155,51 +174,65 @@ export const Dashboard: React.FC = () => {
 
       {/* Super Admin Institutional Overview (if applicable) */}
       {isSuperAdmin && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Departments</span>
-              <Building2 className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-extrabold text-foreground font-mono">
-                {isDeptsLoading ? '...' : departments.length}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Registered academic departments</p>
-            </CardContent>
-          </Card>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+              Institutional Administration
+            </h2>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Card className="border-border/80 hover:border-border transition-colors">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Departments</span>
+                <div className="p-2 rounded-lg bg-secondary text-foreground shrink-0 border border-border">
+                  <Building2 className="h-4 w-4" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-extrabold text-foreground font-mono">
+                  {isDeptsLoading ? '...' : departments.length}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Registered academic departments</p>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">System Users</span>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-extrabold text-foreground font-mono">
-                {isUsersLoading ? '...' : users.length}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Staff and administrator accounts</p>
-            </CardContent>
-          </Card>
+            <Card className="border-border/80 hover:border-border transition-colors">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">System Users</span>
+                <div className="p-2 rounded-lg bg-secondary text-foreground shrink-0 border border-border">
+                  <Users className="h-4 w-4" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-extrabold text-foreground font-mono">
+                  {isUsersLoading ? '...' : users.length}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Staff and administrator accounts</p>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Total Batches</span>
-              <FolderOpen className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-extrabold text-foreground font-mono">
-                {batches.length}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Active admission cohorts configured</p>
-            </CardContent>
-          </Card>
+            <Card className="border-border/80 hover:border-border transition-colors">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Total Batches</span>
+                <div className="p-2 rounded-lg bg-secondary text-foreground shrink-0 border border-border">
+                  <FolderOpen className="h-4 w-4" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-extrabold text-foreground font-mono">
+                  {batches.length}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Active admission cohorts configured</p>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
 
       {/* Admission Batches Section */}
       <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
               <FolderOpen className="h-5 w-5 text-primary" />
@@ -223,8 +256,8 @@ export const Dashboard: React.FC = () => {
         {batches.length === 0 ? (
           <EmptyState
             title="No Admission Batches"
-            description="Create your first batch to start managing admissions."
-            icon={<FolderOpen className="h-8 w-8 text-emerald-700" />}
+            description="Create your first batch cohort to start managing student applications and document verification."
+            icon={<FolderOpen className="h-7 w-7 text-primary" />}
             action={
               <Button variant="primary" size="md" onClick={() => navigate('/batches')}>
                 <Plus className="h-4 w-4 mr-1.5" />
@@ -233,43 +266,42 @@ export const Dashboard: React.FC = () => {
             }
           />
         ) : (
-          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {batches.map((batch) => {
-              // Extract classes/sections for this batch
               const batchClasses = batch.classes || []
-              
-              // Filter submissions belonging to this batch
+
               const batchSubs = submissions.filter(
                 (s) => s.batchId === batch.id || s.batchName === batch.name
               )
               const batchStudentCount = batchSubs.length
+              const batchVerifiedCount = batchSubs.filter((s) => s.status === 'Verified').length
 
               return (
                 <Card
                   key={batch.id}
-                  className="border-border hover:border-primary/50 hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+                  className="border-border/80 hover:border-primary/50 hover:shadow-xs transition-all duration-200 flex flex-col justify-between"
                 >
                   <CardHeader className="pb-3 border-b border-border/60">
                     <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 inline-block mb-1">
+                      <div className="min-w-0 flex-1">
+                        <Badge variant="success" size="sm" className="mb-1.5">
                           {batch.department || 'General'}
-                        </span>
-                        <CardTitle className="text-base font-bold text-foreground">
+                        </Badge>
+                        <CardTitle className="text-base font-bold text-foreground truncate">
                           {batch.name}
                         </CardTitle>
                       </div>
-                      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-secondary text-foreground/80 border border-border shrink-0">
+                      <Badge variant="default" size="sm" className="shrink-0 gap-1 font-mono">
                         <Calendar className="h-3 w-3 text-muted-foreground" />
-                        {batch.academicYear || 'Academic Cohort'}
-                      </span>
+                        {batch.academicYear || 'Cohort'}
+                      </Badge>
                     </div>
                   </CardHeader>
 
                   <CardContent className="py-4 space-y-4 flex-1">
                     {/* Sections Pill Container */}
                     <div>
-                      <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
+                      <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
                         <Layers className="h-3.5 w-3.5 text-primary" />
                         <span>Sections</span>
                       </div>
@@ -280,9 +312,9 @@ export const Dashboard: React.FC = () => {
                           {batchClasses.map((cls) => (
                             <span
                               key={cls.id}
-                              className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-secondary text-foreground border border-border"
+                              className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-secondary text-foreground border border-border"
                             >
-                              Section {cls.section || cls.class_name || 'A'}
+                              Sec {cls.section || cls.class_name || 'A'}
                             </span>
                           ))}
                         </div>
@@ -299,9 +331,9 @@ export const Dashboard: React.FC = () => {
                       </div>
 
                       <div className="p-2 rounded-lg bg-secondary/40 border border-border/60">
-                        <div className="text-[10px] font-bold text-muted-foreground uppercase">Sections</div>
-                        <div className="text-sm font-extrabold text-foreground font-mono mt-0.5">
-                          {batchClasses.length}
+                        <div className="text-[10px] font-bold text-muted-foreground uppercase">Verified</div>
+                        <div className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400 font-mono mt-0.5">
+                          {batchVerifiedCount}
                         </div>
                       </div>
                     </div>
@@ -313,7 +345,7 @@ export const Dashboard: React.FC = () => {
                       variant="primary"
                       size="sm"
                       onClick={() => navigate(`/batches/${batch.id}`)}
-                      className="w-full justify-center text-xs font-semibold gap-2 h-9"
+                      className="w-full justify-center text-xs font-semibold gap-1.5 h-9"
                     >
                       <span>Open Batch</span>
                       <ArrowRight className="h-3.5 w-3.5" />

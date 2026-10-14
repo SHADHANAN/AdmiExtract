@@ -13,11 +13,8 @@ import {
   User,
   Lock,
   ArrowRight,
-  FileCheck2,
-  Sparkles,
-  Layers,
-  FileSpreadsheet,
-  CheckCircle2,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 import { authService } from '../services/auth'
 
@@ -30,6 +27,7 @@ type LoginForm = z.infer<typeof loginSchema>
 
 export const Login: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const navigate = useNavigate()
   const { login } = useAuthStore()
   const { addToast } = useToastStore()
@@ -48,12 +46,9 @@ export const Login: React.FC = () => {
 
   const onSubmit = async (data: LoginForm) => {
     setIsLoading(true)
-    console.log('[Auth Diagnostics] login request started')
     try {
       // 1. Perform login
       const loginRes = await authService.login(data.username, data.password)
-      console.log('[Auth Diagnostics] HTTP status: 200 OK')
-      console.log('[Auth Diagnostics] response payload keys:', Object.keys(loginRes))
 
       const token = loginRes.access_token || loginRes.token || loginRes.accessToken
       if (!token) {
@@ -68,7 +63,6 @@ export const Login: React.FC = () => {
         role: 'department_admin',
       }
       useAuthStore.getState().login(token, fallbackUser)
-      console.log('[Auth Diagnostics] token successfully stored')
 
       // 3. Fetch authenticated user profile details
       let userProfile: AuthUser = fallbackUser
@@ -83,12 +77,9 @@ export const Login: React.FC = () => {
 
       // 4. Save credentials & update auth state
       login(token, userProfile)
-      console.log('[Auth Diagnostics] auth state updated')
-
       addToast(`Welcome back, ${userProfile.name || userProfile.username}!`, 'success')
 
       // 5. Navigate to dashboard
-      console.log('[Auth Diagnostics] navigation started')
       navigate('/dashboard', { replace: true })
     } catch (err: any) {
       console.error('[Auth Diagnostics] Login error:', err)
@@ -103,220 +94,121 @@ export const Login: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen w-full flex bg-background text-foreground overflow-hidden">
-      {/* LEFT PANEL: Institutional Branding & Overview (Visible on lg+) */}
-      <div className="hidden lg:flex lg:w-1/2 bg-[#064e3b] text-white flex-col justify-between p-12 relative overflow-hidden">
-        {/* Subtle geometric pattern overlay */}
-        <div className="absolute inset-0 opacity-5 pointer-events-none">
-          <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="1" />
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#grid)" />
-          </svg>
-        </div>
+    <div className="min-h-screen w-full flex flex-col justify-center items-center p-4 sm:p-6 bg-background text-foreground relative overflow-hidden">
+      {/* Subtle emerald radial glow background */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden"
+      >
+        <div className="w-[520px] sm:w-[640px] h-[520px] sm:h-[640px] rounded-full bg-emerald-500/[0.06] dark:bg-emerald-500/[0.08] blur-[110px] sm:blur-[140px] -translate-y-6" />
+      </div>
 
-        {/* Ambient accent glow */}
-        <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-emerald-500/20 blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 right-0 w-80 h-80 rounded-full bg-lime-400/10 blur-3xl pointer-events-none" />
+      {/* Top right theme toggle */}
+      <div className="absolute top-4 right-4 sm:top-6 sm:right-6 z-10">
+        <ThemeToggle />
+      </div>
 
-        {/* Brand Header */}
-        <div className="relative z-10">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/10 text-lime-300 border border-white/15 shadow-sm">
-              <ShieldCheck className="h-6 w-6" />
-            </div>
-            <div>
-              <span className="text-xl font-extrabold tracking-tight text-white block">
-                ADMIEXTRACT
-              </span>
-              <span className="text-xs text-emerald-200/90 font-medium">
-                Student Admission &amp; Verification Platform
-              </span>
-            </div>
+      <div className="w-full max-w-[440px] sm:max-w-[460px] relative z-10">
+        {/* ADMIEXTRACT Logo, Application Name, and Subtitle */}
+        <div className="flex flex-col items-center mb-7 sm:mb-8 text-center">
+          <div className="flex h-12 w-12 sm:h-13 sm:w-13 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-700/25 ring-1 ring-white/20 mb-3.5 transition-transform duration-200 hover:scale-[1.03]">
+            <ShieldCheck className="h-6 w-6 sm:h-7 sm:w-7" />
           </div>
+          <h1 className="text-2xl sm:text-[26px] font-extrabold tracking-tight text-foreground">
+            ADMIEXTRACT
+          </h1>
+          <p className="text-xs sm:text-[13px] font-medium text-muted-foreground mt-1">
+            Student Admission &amp; Verification Platform
+          </p>
         </div>
 
-        {/* Central Abstract Feature Showcase */}
-        <div className="relative z-10 my-auto py-8 space-y-8 max-w-lg">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-700/80 border border-emerald-600 text-lime-300 text-xs font-semibold uppercase tracking-wider mb-4">
-              <Sparkles className="h-3.5 w-3.5 text-lime-400" />
-              <span>AI-Powered Extraction</span>
-            </div>
-            <h1 className="text-3xl xl:text-4xl font-extrabold tracking-tight text-white leading-tight">
-              Streamlined Student Admissions &amp; Verification
-            </h1>
-            <p className="text-sm xl:text-base text-emerald-100/80 mt-3 leading-relaxed">
-              Automate multi-document ingestion, cross-validate identity fields, and maintain seamless section isolation for every admission batch.
+        {/* Staff Login Card */}
+        <div className="bg-card dark:bg-[#121e19] rounded-2xl border border-border/80 dark:border-emerald-950/80 shadow-xl shadow-black/5 dark:shadow-black/30 p-7 sm:p-9 backdrop-blur-xs">
+          <div className="mb-6">
+            <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
+              Staff Login
+            </h2>
+            <p className="text-xs sm:text-[13px] text-muted-foreground mt-1">
+              Enter your institutional credentials to access your account.
             </p>
           </div>
 
-          {/* Key Feature Cards */}
-          <div className="space-y-3.5">
-            <div className="flex items-start gap-3.5 p-3.5 rounded-xl bg-white/[0.07] border border-white/10 backdrop-blur-xs">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-700 text-lime-300 shrink-0">
-                <FileCheck2 className="h-4.5 w-4.5" />
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            {/* Username or Institutional ID Input */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground/90 block">
+                Username or Institutional ID
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-muted-foreground/80">
+                  <User className="h-4 w-4" />
+                </div>
+                <input
+                  type="text"
+                  autoComplete="username"
+                  placeholder="Enter your username or ID"
+                  className={`flex h-11 sm:h-11.5 w-full rounded-xl border border-input/90 dark:border-emerald-900/40 bg-card dark:bg-[#101b16] pl-10 pr-3.5 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 dark:focus:border-emerald-400 shadow-2xs ${
+                    errors.username ? 'border-destructive focus:ring-destructive/20 focus:border-destructive' : ''
+                  }`}
+                  {...register('username')}
+                />
               </div>
-              <div>
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                  Automated OCR &amp; Extraction
-                </h4>
-                <p className="text-xs text-emerald-100/70 mt-0.5">
-                  High-accuracy extraction across certificates, identity cards, and allotment orders.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3.5 p-3.5 rounded-xl bg-white/[0.07] border border-white/10 backdrop-blur-xs">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-700 text-lime-300 shrink-0">
-                <Layers className="h-4.5 w-4.5" />
-              </div>
-              <div>
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                  Multi-Document Reconciliation
-                </h4>
-                <p className="text-xs text-emerald-100/70 mt-0.5">
-                  Cross-document candidate validation with clear field-source provenance tracking.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3.5 p-3.5 rounded-xl bg-white/[0.07] border border-white/10 backdrop-blur-xs">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-700 text-lime-300 shrink-0">
-                <FileSpreadsheet className="h-4.5 w-4.5" />
-              </div>
-              <div>
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider">
-                  Master Excel Integration
-                </h4>
-                <p className="text-xs text-emerald-100/70 mt-0.5">
-                  Instant population of institutional admission spreadsheets with zero data loss.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer info */}
-        <div className="relative z-10 pt-4 border-t border-white/10 flex items-center justify-between text-xs text-emerald-200/70">
-          <span>Institutional Access Only</span>
-          <span>Version 2.0</span>
-        </div>
-      </div>
-
-      {/* RIGHT PANEL: Staff Login Form */}
-      <div className="w-full lg:w-1/2 flex flex-col justify-center items-center p-6 sm:p-10 lg:p-14 bg-background">
-        <div className="w-full max-w-md space-y-6">
-          {/* Top bar with ThemeToggle */}
-          <div className="flex items-center justify-between">
-            {/* Mobile Header Brand (Visible only when left hero is hidden) */}
-            <div className="lg:hidden flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-xs">
-                <ShieldCheck className="h-5 w-5" />
-              </div>
-              <div>
-                <span className="text-lg font-extrabold tracking-tight text-foreground block">
-                  ADMIEXTRACT
+              {errors.username && (
+                <span className="text-xs text-destructive font-medium block mt-1">
+                  {errors.username.message}
                 </span>
-                <span className="text-xs text-muted-foreground">
-                  Student Admission &amp; Verification
-                </span>
-              </div>
-            </div>
-            <div className="hidden lg:block" />
-            <ThemeToggle />
-          </div>
-
-          {/* Login Card */}
-          <div className="bg-card rounded-2xl border border-border shadow-sm p-7 sm:p-9">
-            <div className="mb-6">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20 text-[11px] font-semibold uppercase tracking-wider mb-2.5">
-                Staff Portal
-              </div>
-              <h2 className="text-2xl font-bold tracking-tight text-foreground">
-                Staff Login
-              </h2>
-              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                Enter your institutional credentials to access your admissions console.
-              </p>
+              )}
             </div>
 
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4.5">
-              {/* Username Input */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">
-                  Username or Institutional ID
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-muted-foreground">
-                    <User className="h-4 w-4" />
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Enter your username"
-                    className={`flex h-10.5 w-full rounded-lg border border-input bg-card pl-10 pr-3.5 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary shadow-2xs ${
-                      errors.username ? 'border-destructive focus:ring-destructive/20 focus:border-destructive' : ''
-                    }`}
-                    {...register('username')}
-                  />
+            {/* Password Input */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground/90 block">
+                Password
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-muted-foreground/80">
+                  <Lock className="h-4 w-4" />
                 </div>
-                {errors.username && (
-                  <span className="text-xs text-destructive font-medium block mt-0.5">
-                    {errors.username.message}
-                  </span>
-                )}
-              </div>
-
-              {/* Password Input */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-foreground">
-                    Password
-                  </label>
-                </div>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-muted-foreground">
-                    <Lock className="h-4 w-4" />
-                  </div>
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    className={`flex h-10.5 w-full rounded-lg border border-input bg-card pl-10 pr-3.5 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary shadow-2xs ${
-                      errors.password ? 'border-destructive focus:ring-destructive/20 focus:border-destructive' : ''
-                    }`}
-                    {...register('password')}
-                  />
-                </div>
-                {errors.password && (
-                  <span className="text-xs text-destructive font-medium block mt-0.5">
-                    {errors.password.message}
-                  </span>
-                )}
-              </div>
-
-              {/* Sign In Button */}
-              <div className="pt-2">
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="lg"
-                  isLoading={isLoading}
-                  className="w-full justify-center text-sm font-semibold h-11 rounded-lg gap-2"
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  className={`flex h-11 sm:h-11.5 w-full rounded-xl border border-input/90 dark:border-emerald-900/40 bg-card dark:bg-[#101b16] pl-10 pr-10 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 dark:focus:border-emerald-400 shadow-2xs ${
+                    errors.password ? 'border-destructive focus:ring-destructive/20 focus:border-destructive' : ''
+                  }`}
+                  {...register('password')}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-muted-foreground/80 hover:text-foreground transition-colors focus:outline-none cursor-pointer"
+                  tabIndex={-1}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
-                  <span>Sign In to Platform</span>
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
-            </form>
-
-            <div className="mt-6 pt-5 border-t border-border flex items-center justify-center gap-2 text-xs text-muted-foreground">
-              <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-              <span>Protected by role-based institutional authentication</span>
+              {errors.password && (
+                <span className="text-xs text-destructive font-medium block mt-1">
+                  {errors.password.message}
+                </span>
+              )}
             </div>
-          </div>
+
+            {/* Sign In Button */}
+            <div className="pt-2">
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                isLoading={isLoading}
+                className="w-full justify-center text-sm font-semibold h-11 sm:h-11.5 rounded-xl gap-2 shadow-md shadow-emerald-700/15 hover:shadow-lg hover:shadow-emerald-700/25 transition-all duration-150 cursor-pointer"
+              >
+                <span>Sign In</span>
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </form>
         </div>
       </div>
     </div>

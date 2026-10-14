@@ -35,15 +35,77 @@ async def _verify_batch_department_access(batch_id: str, user: User, batch_servi
             )
 
 
+from app.models.student_document import StudentDocument
+from app.models.upload_link import UploadLink
+
+
+async def sync_batch_section_students(batch_id: str) -> list[BatchClass]:
+    """
+    Ensures authoritative student-to-section relationship for a batch:
+    If a batch has exactly one section, any students in that batch without section_id
+    are automatically assigned to that single section.
+    """
+    classes = await BatchClass.find(BatchClass.batch_id == batch_id).to_list()
+    if len(classes) == 1:
+        single_cls = classes[0]
+        # Heal StudentSubmission
+        all_subs = await StudentSubmission.find(StudentSubmission.batch_id == batch_id).to_list()
+        for s in all_subs:
+            if not s.class_id or s.class_id != single_cls.id or not s.class_name:
+                s.class_id = single_cls.id
+                s.class_name = single_cls.class_name
+                await s.save()
+
+        # Heal StudentDocument
+        all_docs = await StudentDocument.find(StudentDocument.batch_id == batch_id).to_list()
+        for d in all_docs:
+            if not d.class_id or d.class_id != single_cls.id or not d.section_id:
+                d.class_id = single_cls.id
+                d.section_id = single_cls.id
+                await d.save()
+
+        # Heal UploadLink
+        all_links = await UploadLink.find(UploadLink.batch_id == batch_id).to_list()
+        for l in all_links:
+            if not l.class_id or l.class_id != single_cls.id:
+                l.class_id = single_cls.id
+                await l.save()
+    return classes
+
+
+async def _get_canonical_class_submissions(cls: BatchClass) -> list[StudentSubmission]:
+    """Retrieve distinct canonical student submissions belonging to this section."""
+    all_classes = await sync_batch_section_students(cls.batch_id)
+    if len(all_classes) == 1 and all_classes[0].id == cls.id:
+        submissions = await StudentSubmission.find(StudentSubmission.batch_id == cls.batch_id).to_list()
+    else:
+        submissions = await StudentSubmission.find(
+            StudentSubmission.batch_id == cls.batch_id,
+            {"$or": [
+                {"class_id": cls.id},
+                {"class_name": cls.class_name},
+            ]},
+        ).to_list()
+
+    # Deduplicate canonical students by register number (or id)
+    distinct_students: dict[str, StudentSubmission] = {}
+    for s in submissions:
+        canon_key = (s.register_number or str(s.id)).strip().upper()
+        if canon_key not in distinct_students:
+            distinct_students[canon_key] = s
+        else:
+            if s.submission_status == "Verified" or len(s.documents or []) > len(distinct_students[canon_key].documents or []):
+                distinct_students[canon_key] = s
+
+    return list(distinct_students.values())
+
+
 async def _build_class_response(cls: BatchClass) -> ClassResponse:
     """Build ClassResponse with section-isolated student statistics strictly from MongoDB."""
-    submissions = await StudentSubmission.find(
-        StudentSubmission.batch_id == cls.batch_id,
-        StudentSubmission.class_id == cls.id,
-    ).to_list()
-    total = len(submissions)
-    verified = sum(1 for s in submissions if s.submission_status == "Verified")
-    rejected = sum(1 for s in submissions if s.submission_status == "Rejected")
+    canonical_subs = await _get_canonical_class_submissions(cls)
+    total = len(canonical_subs)
+    verified = sum(1 for s in canonical_subs if s.submission_status == "Verified")
+    rejected = sum(1 for s in canonical_subs if s.submission_status == "Rejected")
     pending = total - verified - rejected
     return ClassResponse(
         id=cls.id,
@@ -129,13 +191,10 @@ async def get_class_stats(
     """
     class_doc = await service.get_class_by_id(class_id)
     await _verify_batch_department_access(class_doc.batch_id, current_user, batch_service)
-    submissions = await StudentSubmission.find(
-        StudentSubmission.batch_id == class_doc.batch_id,
-        StudentSubmission.class_id == class_id,
-    ).to_list()
-    total = len(submissions)
-    verified = sum(1 for s in submissions if s.submission_status == "Verified")
-    rejected = sum(1 for s in submissions if s.submission_status == "Rejected")
+    canonical_subs = await _get_canonical_class_submissions(class_doc)
+    total = len(canonical_subs)
+    verified = sum(1 for s in canonical_subs if s.submission_status == "Verified")
+    rejected = sum(1 for s in canonical_subs if s.submission_status == "Rejected")
     pending = total - verified - rejected
     return ClassStats(
         students=total,
@@ -201,11 +260,9 @@ from app.models.upload_link import UploadLink
 from app.schemas.upload_link import UploadLinkCreate, UploadLinkResponse
 from app.schemas.student_submission import StudentSubmissionResponse
 from app.api.student_submission import _to_response
-from app.services.excel_template_service import ExcelTemplateService
 from app.services.doc_config_version_service import DocConfigVersionService
 from fastapi import UploadFile, File, Form
 
-excel_template_service = ExcelTemplateService()
 doc_config_service = DocConfigVersionService()
 
 
@@ -221,11 +278,8 @@ async def get_class_students(
     """
     class_doc = await service.get_class_by_id(class_id)
     await _verify_batch_department_access(class_doc.batch_id, current_user, batch_service)
-    submissions = await StudentSubmission.find(
-        StudentSubmission.batch_id == class_doc.batch_id,
-        StudentSubmission.class_id == class_id
-    ).to_list()
-    return [_to_response(s) for s in submissions]
+    canonical_subs = await _get_canonical_class_submissions(class_doc)
+    return [_to_response(s) for s in canonical_subs]
 
 
 @router.get("/classes/{class_id}/verification", response_model=list[StudentSubmissionResponse])
@@ -240,11 +294,8 @@ async def get_class_verification_queue(
     """
     class_doc = await service.get_class_by_id(class_id)
     await _verify_batch_department_access(class_doc.batch_id, current_user, batch_service)
-    submissions = await StudentSubmission.find(
-        StudentSubmission.batch_id == class_doc.batch_id,
-        StudentSubmission.class_id == class_id
-    ).to_list()
-    return [_to_response(s) for s in submissions]
+    canonical_subs = await _get_canonical_class_submissions(class_doc)
+    return [_to_response(s) for s in canonical_subs]
 
 
 @router.get("/classes/{class_id}/export")
@@ -259,24 +310,13 @@ async def get_class_export_data(
     """
     class_doc = await service.get_class_by_id(class_id)
     await _verify_batch_department_access(class_doc.batch_id, current_user, batch_service)
-    submissions = await StudentSubmission.find(StudentSubmission.class_id == class_id).to_list()
-    template = await excel_template_service.get_template_by_batch(class_doc.batch_id, class_id=class_id)
+    canonical_subs = await _get_canonical_class_submissions(class_doc)
     return {
         "class_id": class_id,
         "class_name": class_doc.class_name,
         "batch_id": class_doc.batch_id,
-        "total_students": len(submissions),
-        "verified_students": len([s for s in submissions if s.submission_status == "Verified"]),
-        "excel_template": {
-            "id": str(template.id),
-            "batch_id": template.batch_id,
-            "class_id": template.class_id,
-            "template_filename": template.template_filename,
-            "total_rows": template.total_rows,
-            "updated_count": template.updated_count,
-            "headers": template.headers,
-            "field_mappings": template.field_mappings,
-        } if template else None,
+        "total_students": len(canonical_subs),
+        "verified_students": len([s for s in canonical_subs if s.submission_status == "Verified"]),
     }
 
 
@@ -365,20 +405,3 @@ async def get_class_document_config(
     await _verify_batch_department_access(class_doc.batch_id, current_user, batch_service)
     ver = await doc_config_service.get_or_create_current_version(class_doc.batch_id)
     return ver
-
-
-@router.post("/classes/{class_id}/excel-template")
-async def upload_class_excel_template(
-    class_id: str,
-    file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    service: BatchClassService = Depends(get_class_service),
-    batch_service: BatchService = Depends(get_batch_service),
-):
-    """
-    Upload and register an Excel template scoped to a specific class.
-    """
-    class_doc = await service.get_class_by_id(class_id)
-    await _verify_batch_department_access(class_doc.batch_id, current_user, batch_service)
-    return await excel_template_service.upload_template(class_doc.batch_id, file, class_id=class_id)
-

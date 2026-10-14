@@ -10,7 +10,6 @@ sys.path.insert(0, os.path.dirname(__file__))
 from app.core.config import settings
 from app.db.database import init_db
 from app.models.batch import AdmissionBatch
-from app.models.excel_template import ExcelBatchTemplate
 from app.services.document_processing_pipeline import DocumentProcessingPipeline
 
 async def run_benchmark():
@@ -22,7 +21,7 @@ async def run_benchmark():
     await init_db()
 
     batch_id = "test-perf-benchmark-batch"
-    
+
     # Ensure Batch exists
     batch = await AdmissionBatch.find_one({"_id": batch_id})
     if not batch:
@@ -35,40 +34,6 @@ async def run_benchmark():
             created_by="admin"
         )
         await batch.insert()
-
-    # Required Excel Headers
-    excel_headers = [
-        "Student Name",
-        "Register Number",
-        "Mobile Number",
-        "Student Date of Birth(DD.MM.YYYY)",
-        "Gender",
-        "Nationality",
-        "Community Category",
-        "Community Name",
-        "Aadhaar Number (without space)",
-        "Father's Name",
-        "Mother's Name",
-        "Permanent Address",
-        "Communication address",
-        "Is Communication Address Same as Permanent Address",
-        "EMIS ID",
-        "Is EMIS ID Available"
-    ]
-
-    # Ensure ExcelBatchTemplate exists
-    template = await ExcelBatchTemplate.find_one({"batch_id": batch_id})
-    if not template:
-        template = ExcelBatchTemplate(
-            batch_id=batch_id,
-            headers=excel_headers,
-            template_filename="test_template.xlsx",
-            file_path="uploads/excel_templates/test_template.xlsx"
-        )
-        await template.insert()
-    else:
-        template.headers = excel_headers
-        await template.save()
 
     # Load 4 real files from uploads
     uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")

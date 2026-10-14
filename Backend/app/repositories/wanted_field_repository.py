@@ -1,12 +1,71 @@
+import re
 from datetime import datetime, timezone
 from typing import List, Optional
 from app.models.wanted_field_config import DocumentFieldConfiguration, WantedFieldItem
+
+CANONICAL_DOC_CODE_MAP = {
+    "AADHAAR": "AADHAAR",
+    "AADHAAR_CARD": "AADHAAR",
+    "AADHAR": "AADHAAR",
+    "AADHAR_CARD": "AADHAAR",
+    "BANK_PASSBOOK": "BANK_PASSBOOK",
+    "PASSBOOK": "BANK_PASSBOOK",
+    "BANK_STATEMENT": "BANK_PASSBOOK",
+    "BANK_ACCOUNT": "BANK_PASSBOOK",
+    "COMMUNITY": "COMMUNITY",
+    "COMMUNITY_CERTIFICATE": "COMMUNITY",
+    "CASTE": "COMMUNITY",
+    "CASTE_CERTIFICATE": "COMMUNITY",
+    "INCOME": "INCOME",
+    "INCOME_CERTIFICATE": "INCOME",
+    "TRANSFER_CERTIFICATE": "TRANSFER_CERTIFICATE",
+    "TRANSFER_CERTIFICATE_TC": "TRANSFER_CERTIFICATE",
+    "SSLC": "SSLC",
+    "SSLC_MARKSHEET": "SSLC",
+    "10TH": "SSLC",
+    "10TH_MARKSHEET": "SSLC",
+    "HSC": "HSC",
+    "HSC_MARKSHEET": "HSC",
+    "12TH": "HSC",
+    "12TH_MARKSHEET": "HSC",
+    "BIRTH_CERTIFICATE": "BIRTH_CERTIFICATE",
+    "BIRTH": "BIRTH_CERTIFICATE",
+    "NATIVITY": "NATIVITY",
+    "NATIVITY_CERTIFICATE": "NATIVITY",
+    "PASSPORT": "PASSPORT",
+    "ALLOTMENT_ORDER": "ALLOTMENT_ORDER",
+}
+
+
+def _normalize_doc_code(code: str) -> str:
+    cleaned = re.sub(r'[\s\-]+', '_', str(code).strip().upper())
+    cleaned = re.sub(r'[^A-Z0-9_]', '', cleaned)
+    cleaned = re.sub(r'_+', '_', cleaned).strip('_')
+    return CANONICAL_DOC_CODE_MAP.get(cleaned, cleaned)
+
+
+async def _get_matching_batch_ids(batch_id: str) -> List[str]:
+    """Resolve batch_id aliases (id, name, _id) for robust MongoDB lookups."""
+    b_ids = [str(batch_id)]
+    try:
+        from app.models.batch import AdmissionBatch
+        batch = await AdmissionBatch.get(batch_id)
+        if not batch:
+            batch = await AdmissionBatch.find_one({"$or": [{"id": batch_id}, {"_id": batch_id}, {"name": batch_id}]})
+        if batch:
+            if batch.id and str(batch.id) not in b_ids:
+                b_ids.append(str(batch.id))
+            if batch.name and str(batch.name) not in b_ids:
+                b_ids.append(str(batch.name))
+    except Exception:
+        pass
+    return b_ids
 
 
 class WantedFieldRepository:
     """
     Repository for managing DocumentFieldConfiguration documents in MongoDB.
-    Provides batch/class and document-type scoped operations.
+    Provides batch/class and document-type scoped operations with automatic inheritance.
     """
 
     async def get_by_batch_and_doc_type(
@@ -21,30 +80,27 @@ class WantedFieldRepository:
         Retrieve document field configuration for a specific batch/class and document type.
         If exact_scope_only is False and class_id is provided, falls back to batch-level config.
         """
-        doc_type_upper = document_type.upper().strip()
+        doc_type_upper = _normalize_doc_code(document_type)
+
+        b_ids = await _get_matching_batch_ids(batch_id)
         config: Optional[DocumentFieldConfiguration] = None
+
         if class_id:
             config = await DocumentFieldConfiguration.find_one(
-                DocumentFieldConfiguration.batch_id == batch_id,
-                DocumentFieldConfiguration.class_id == class_id,
-                DocumentFieldConfiguration.document_type == doc_type_upper,
+                {"batch_id": {"$in": b_ids}, "class_id": class_id, "document_type": doc_type_upper}
             )
 
         if not config and not exact_scope_only:
             config = await DocumentFieldConfiguration.find_one(
-                DocumentFieldConfiguration.batch_id == batch_id,
-                DocumentFieldConfiguration.class_id == None,  # noqa: E711
-                DocumentFieldConfiguration.document_type == doc_type_upper,
+                {"batch_id": {"$in": b_ids}, "class_id": None, "document_type": doc_type_upper}
             )
 
         if not config and not class_id and exact_scope_only:
             config = await DocumentFieldConfiguration.find_one(
-                DocumentFieldConfiguration.batch_id == batch_id,
-                DocumentFieldConfiguration.class_id == None,  # noqa: E711
-                DocumentFieldConfiguration.document_type == doc_type_upper,
+                {"batch_id": {"$in": b_ids}, "class_id": None, "document_type": doc_type_upper}
             )
 
-        if config and not include_archived and config.is_archived:
+        if config and not include_archived and getattr(config, "is_archived", False):
             return None
 
         return config
@@ -54,25 +110,43 @@ class WantedFieldRepository:
         batch_id: str,
         class_id: Optional[str] = None,
         include_archived: bool = False,
+        exact_scope_only: bool = False,
     ) -> List[DocumentFieldConfiguration]:
         """
         List all document field configurations for an Admission Batch.
-        Ensures strict scope isolation: when class_id is None, returns only batch-level documents.
-        When class_id is provided, returns class-level documents (or empty if none configured).
-        Only returns non-archived configurations unless include_archived is True.
-        Defensively deduplicates by document_type.
+        If class_id is provided and exact_scope_only is False:
+          - Starts with Batch-level configurations
+          - Overrides with Section-specific configurations
+          - Any document type configured only at Batch level is inherited
+        If exact_scope_only is True:
+          - Returns strictly the configurations saved at that exact scope.
         """
-        configs: List[DocumentFieldConfiguration] = []
+        b_ids = await _get_matching_batch_ids(batch_id)
+
+        batch_configs = await DocumentFieldConfiguration.find(
+            {"batch_id": {"$in": b_ids}, "class_id": None}
+        ).to_list()
+
+        class_configs = []
         if class_id:
-            configs = await DocumentFieldConfiguration.find(
-                DocumentFieldConfiguration.batch_id == batch_id,
-                DocumentFieldConfiguration.class_id == class_id,
+            class_configs = await DocumentFieldConfiguration.find(
+                {"batch_id": {"$in": b_ids}, "class_id": class_id}
             ).to_list()
+
+        if exact_scope_only:
+            configs = class_configs if class_id else batch_configs
         else:
-            configs = await DocumentFieldConfiguration.find(
-                DocumentFieldConfiguration.batch_id == batch_id,
-                DocumentFieldConfiguration.class_id == None,  # noqa: E711
-            ).to_list()
+            merged_dict: dict[str, DocumentFieldConfiguration] = {}
+            for c in batch_configs:
+                canon_dt = _normalize_doc_code(c.document_type)
+                merged_dict[canon_dt] = c
+
+            for c in class_configs:
+                canon_dt = _normalize_doc_code(c.document_type)
+                # Section-specific configuration overrides Batch-level configuration
+                merged_dict[canon_dt] = c
+
+            configs = list(merged_dict.values())
 
         if not include_archived:
             configs = [c for c in configs if not getattr(c, "is_archived", False)]
@@ -80,7 +154,7 @@ class WantedFieldRepository:
         # Defensive deduplication by document_type within the returned list
         deduped: dict[str, DocumentFieldConfiguration] = {}
         for c in configs:
-            dt = c.document_type.upper().strip()
+            dt = _normalize_doc_code(c.document_type)
             if dt not in deduped:
                 deduped[dt] = c
             else:
@@ -107,7 +181,8 @@ class WantedFieldRepository:
         Create or idempotently update a document configuration entry for a batch.
         Guarantees that a document type exists only once in the given scope.
         """
-        doc_type_upper = document_type.upper().strip()
+        doc_type_upper = _normalize_doc_code(document_type)
+
         now = datetime.now(timezone.utc)
         av_fields = available_fields or []
         f_items = fields or [WantedFieldItem(field=f, enabled=False, excel_header=None) for f in av_fields]
@@ -172,7 +247,8 @@ class WantedFieldRepository:
         Create or update a document field configuration.
         Preserves isolation: updating Aadhaar never alters TC or Community configurations.
         """
-        doc_type_upper = document_type.upper().strip()
+        doc_type_upper = _normalize_doc_code(document_type)
+
         existing = await self.get_by_batch_and_doc_type(
             batch_id, doc_type_upper, class_id=class_id, include_archived=True, exact_scope_only=True
         )
@@ -226,7 +302,8 @@ class WantedFieldRepository:
         """
         Soft-archive a document configuration so that uploaded student documents remain readable.
         """
-        doc_type_upper = document_type.upper().strip()
+        doc_type_upper = _normalize_doc_code(document_type)
+
         config = await self.get_by_batch_and_doc_type(
             batch_id, doc_type_upper, class_id=class_id, include_archived=True, exact_scope_only=True
         )
@@ -246,7 +323,8 @@ class WantedFieldRepository:
         """
         Hard-delete document configuration if safe.
         """
-        doc_type_upper = document_type.upper().strip()
+        doc_type_upper = _normalize_doc_code(document_type)
+
         config = await self.get_by_batch_and_doc_type(
             batch_id, doc_type_upper, class_id=class_id, include_archived=True, exact_scope_only=True
         )
@@ -254,4 +332,3 @@ class WantedFieldRepository:
             return False
         await config.delete()
         return True
-

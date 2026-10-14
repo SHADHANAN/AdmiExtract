@@ -30,7 +30,6 @@ from app.services.field_mapping_service import (
     classify_field_domain,
     get_canonical_source_field,
 )
-from app.services.excel_template_service import ExcelTemplateService, _find_best_worksheet_and_headers
 
 
 # 1. Aadhaar Number -> Aadhaar Number = PASS
@@ -215,59 +214,3 @@ def test_15_mapping_isolation_between_batches():
     # Modifying batch 1 does not contaminate batch 2
     batch1_mappings["Student Name"] = "Candidate Name"
     assert "Student Name" not in batch2_mappings
-
-
-# 16. Final Excel receives values only in their configured target columns
-def test_16_final_excel_receives_values_only_in_configured_columns():
-    service = ExcelTemplateService()
-    student_data = {
-        "Aadhaar Number": "987654321098",
-        "Taluk": "Tambaram",
-        "Student Name": "John Doe",
-        "Register Number": "REG12345",
-    }
-    custom_mappings = {
-        "Aadhaar Number": "Aadhaar Number",
-        "Student Name": "Student Name",
-    }
-
-    # Aadhaar Number header should resolve to "9876 5432 1098" (or 987654321098)
-    val_aadhaar = service._resolve_header_value("Aadhaar Number", student_data, custom_mappings=custom_mappings)
-    assert val_aadhaar is not None
-    assert "9876" in str(val_aadhaar)
-
-    # Taluk is NOT in custom_mappings -> should resolve to None (no misplaced data)
-    val_taluk = service._resolve_header_value("Taluk", student_data, custom_mappings=custom_mappings)
-    assert val_taluk is None
-
-    # Even if an unrelated field has data, it cannot write to Taluk when custom_mappings is configured
-    val_district = service._resolve_header_value("District", student_data, custom_mappings=custom_mappings)
-    assert val_district is None
-
-
-# 17. Mapping order does not affect final result
-def test_17_mapping_order_invariance():
-    service = ExcelTemplateService()
-    student_data = {
-        "Aadhaar Number": "123456789012",
-        "Annual Family Income": "150000",
-        "Community Category": "BC",
-        "Register Number": "REG999",
-    }
-
-    mappings_order_1 = {
-        "Aadhaar Number": "Aadhaar Number",
-        "Annual Family Income": "Annual Family Income",
-        "Community Category": "Community",
-    }
-    mappings_order_2 = {
-        "Community Category": "Community",
-        "Annual Family Income": "Annual Family Income",
-        "Aadhaar Number": "Aadhaar Number",
-    }
-
-    # Check each column resolution across both dictionary insertion orders
-    for header in ["Aadhaar Number", "Annual Family Income", "Community"]:
-        res1 = service._resolve_header_value(header, student_data, custom_mappings=mappings_order_1)
-        res2 = service._resolve_header_value(header, student_data, custom_mappings=mappings_order_2)
-        assert res1 == res2, f"Mismatch for header {header}: {res1} vs {res2}"

@@ -76,7 +76,7 @@ class Settings(BaseSettings):
 
     # 5. AI & OCR Service Settings (Gemini AI & Mistral AI)
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-3.6-flash"
+    GEMINI_MODEL: str = "gemini-flash-lite-latest"
     MISTRAL_API_KEY: str = ""
     EXTRACTION_BYPASS_CACHE: bool = False
 
@@ -88,6 +88,29 @@ class Settings(BaseSettings):
     EXTRACTION_WORKER_CONCURRENCY: int = 4
     GEMINI_CONCURRENCY_LIMIT: int = 3
     JOB_TIMEOUT_SECONDS: int = 300
+
+    # 8. Automated Communication & Notification Settings (Email, SMS, WhatsApp)
+    EMAIL_PROVIDER_ENABLED: bool = False
+    EMAIL_PROVIDER_TYPE: str = "mock"  # "mock", "smtp", "sendgrid", "resend"
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    EMAIL_FROM: str = "admissions@admiextract.edu"
+
+    SMS_PROVIDER_ENABLED: bool = False
+    SMS_PROVIDER_TYPE: str = "mock"  # "mock", "twilio", "sns"
+    SMS_ACCOUNT_SID: str = ""
+    SMS_AUTH_TOKEN: str = ""
+    SMS_FROM_NUMBER: str = ""
+
+    WHATSAPP_PROVIDER_ENABLED: bool = False
+    WHATSAPP_PROVIDER_TYPE: str = "mock"  # "mock", "twilio", "meta"
+    WHATSAPP_ACCOUNT_SID: str = ""
+    WHATSAPP_AUTH_TOKEN: str = ""
+    WHATSAPP_FROM_NUMBER: str = ""
+
+    INSTITUTION_NAME: str = "Admissions Office"
 
     def __init__(self, **values: Any):
         # On Render / cloud production, explicitly bypass loading any local .env file.
@@ -168,6 +191,21 @@ class Settings(BaseSettings):
     def validate_access_token_expire(cls, v: int) -> int:
         if v <= 0:
             raise ValueError(f"ACCESS_TOKEN_EXPIRE_MINUTES must be positive, received: {v}")
+        return v
+
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        env_secret = os.getenv("SECRET_KEY")
+        is_prod = os.getenv("APP_ENV") in ("production", "staging")
+        if env_secret is not None and is_prod:
+            clean_secret = env_secret.strip()
+            if not clean_secret or clean_secret == "dev-insecure-secret-key-change-in-production-admiextract-2026" or len(clean_secret) < 32:
+                raise ValueError(
+                    "[FATAL CONFIG ERROR] Running in Production environment, but SECRET_KEY is using "
+                    "the insecure default development key or is shorter than 32 characters. "
+                    "A secure, random 256-bit SECRET_KEY must be configured in your production environment."
+                )
         return v
 
 

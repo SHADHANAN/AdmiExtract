@@ -33,7 +33,6 @@ from app.services.document_classifier_service import DocumentClassifierService
 from app.services.smart_lookup_service import SmartLookupEngine
 from app.services.field_mapping_service import FieldMappingService
 from app.services.doc_config_version_service import DocConfigVersionService
-from app.services.excel_template_service import ExcelTemplateService
 from app.services.wanted_field_service import WantedFieldService
 from app.utils.performance_profiler import PipelineProfiler, DocumentTimer
 
@@ -66,7 +65,6 @@ class DocumentProcessingPipeline:
         self.lookup_engine = SmartLookupEngine()
         self.field_mapper = FieldMappingService()
         self.doc_config_service = DocConfigVersionService()
-        self.excel_service = ExcelTemplateService()
         self.wanted_field_service = WantedFieldService()
 
     def _filter_fields_to_wanted(
@@ -527,19 +525,11 @@ class DocumentProcessingPipeline:
         uploads_dir = Path(__file__).resolve().parent.parent.parent / "uploads"
         uploads_dir.mkdir(parents=True, exist_ok=True)
 
-        # 1. Retrieve Excel Column Headers (Single Source of Truth)
+        # 1. Retrieve Configured Document Extraction Fields
         try:
-            excel_template = await self.excel_service.get_template_by_batch(batch_id)
-            excel_headers = excel_template.headers if (excel_template and excel_template.headers) else []
+            excel_headers = await self.doc_config_service.get_batch_extraction_fields(batch_id)
         except Exception:
             excel_headers = []
-
-        # Fallback to configured document requirement fields if template not uploaded yet
-        if not excel_headers:
-            try:
-                excel_headers = await self.doc_config_service.get_batch_extraction_fields(batch_id)
-            except Exception:
-                excel_headers = []
 
         if not excel_headers:
             excel_headers = [
@@ -1364,4 +1354,3 @@ class DocumentProcessingPipeline:
                     }
 
         return verification_fields
-

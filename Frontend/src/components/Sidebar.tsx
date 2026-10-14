@@ -11,6 +11,7 @@ import {
   LogOut,
   BarChart3,
   Sparkles,
+  FileSpreadsheet,
   X,
 } from 'lucide-react'
 
@@ -33,6 +34,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
   const links = isSuperAdmin
     ? [
         { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { to: '/data-extraction', label: 'Data Extraction', icon: FileSpreadsheet },
         { to: '/departments', label: 'Departments', icon: FolderOpen },
         { to: '/users', label: 'Users', icon: Users },
         { to: '/overview', label: 'Overview', icon: BarChart3 },
@@ -40,6 +42,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => 
       ]
     : [
         { to: '/dashboard', label: 'Home', icon: LayoutDashboard },
+        { to: '/data-extraction', label: 'Data Extraction', icon: FileSpreadsheet },
         { to: '/batches', label: 'Admission Batches', icon: FolderOpen },
         { to: '/students', label: 'Students', icon: Users },
         { to: '/settings', label: 'Settings', icon: Settings },

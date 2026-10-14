@@ -21,6 +21,7 @@ pycparser==3.0
 pydantic==2.13.4
 pydantic-settings==2.14.2
 pydantic_core==2.46.4
+pydantic[email]>=2.0.0
 pymongo==4.17.0
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
@@ -37,8 +38,10 @@ email-validator>=2.0.0
 openpyxl==3.1.5
 types-openpyxl
 types-python-jose
-mistralai>=2.9.4
+mistralai>=2.9.1
 google-generativeai>=0.8.0
+google-genai>=1.0.0
 rapidfuzz>=3.6.0
 pypdf>=4.0.0
 pillow>=10.0.0
+rapidocr_onnxruntime>=1.4.0

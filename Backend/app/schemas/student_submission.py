@@ -4,20 +4,25 @@ from pydantic import BaseModel, Field
 
 class StudentDocumentMetaCreate(BaseModel):
     document_name: str
+    document_type: str | None = None
     status: str = "Pending"
     file_path: str | None = None
     file_size_mb: float | None = None
     file_type: str | None = None
+    version: int = 1
     uploaded_at: datetime | None = None
 
 
 class StudentDocumentMetaResponse(BaseModel):
     document_name: str
+    document_type: str | None = None
     status: str
     file_path: str | None = None
     file_size_mb: float | None = None
     file_type: str | None = None
+    version: int = 1
     uploaded_at: datetime | None = None
+
 
 
 class StudentSubmissionCreate(BaseModel):
@@ -38,6 +43,11 @@ class StudentSubmissionCreate(BaseModel):
 
 class StudentSubmissionStatusUpdate(BaseModel):
     submission_status: str
+
+
+class StudentSectionAssignRequest(BaseModel):
+    class_id: str
+    class_name: str | None = None
 
 
 class StudentSubmissionResponse(BaseModel):
@@ -63,4 +73,3 @@ class StudentSubmissionResponse(BaseModel):
 
     class Config:
         from_attributes = True
-

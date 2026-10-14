@@ -15,7 +15,7 @@ class StudentIdentityVerifyRequest(BaseModel):
 
 class StudentIdentityVerifyResponse(BaseModel):
     """
-    Returned to the frontend after successful identity verification.
+    Returned to the frontend after successful student details submission.
     Contains enough context to build the document upload session.
     No JWT or authentication token is issued.
     """
@@ -25,3 +25,6 @@ class StudentIdentityVerifyResponse(BaseModel):
     class_name: str | None = None
     upload_link_id: str | None = None
     token: str | None = None
+    submission_id: str | None = None
+    submission_status: str | None = None
+    uploaded_documents: list[dict] | None = None
