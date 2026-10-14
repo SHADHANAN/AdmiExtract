@@ -74,6 +74,7 @@ export const AppRoutes: React.FC = () => {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="data-extraction" element={<DataExtraction />} />
+        <Route path="data-extractions" element={<Navigate to="/data-extraction" replace />} />
         <Route
           path="data-extraction/:batchId"
           element={
@@ -82,6 +83,7 @@ export const AppRoutes: React.FC = () => {
             </ErrorBoundary>
           }
         />
+        <Route path="data-extractions/:batchId" element={<Navigate to="/data-extraction/:batchId" replace />} />
         <Route path="departments" element={<Departments />} />
         <Route path="users" element={<Users />} />
         <Route path="overview" element={<Overview />} />

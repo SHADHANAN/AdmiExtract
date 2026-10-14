@@ -703,7 +703,7 @@ export const ClassDetails: React.FC = () => {
                     Generate and download a dynamic Excel (.xlsx) workbook containing verified student submissions for {classDoc.class_name}.
                   </p>
                 </div>
-                <Button variant="primary" onClick={() => navigate(`/data-extractions/${classDoc.batch_id}`)} className="cursor-pointer gap-2 shrink-0">
+                <Button variant="primary" onClick={() => navigate(`/data-extraction/${classDoc.batch_id}`)} className="cursor-pointer gap-2 shrink-0">
                   <Download className="h-4 w-4" />
                   Data Extraction & Export
                 </Button>
